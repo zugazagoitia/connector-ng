@@ -43,6 +43,12 @@ jobs:
                 run: ./gradlew :connector-documentation:asciidoctorAll --no-configuration-cache
                 shell: bash
 
+            -   name: List generated documentation
+                run: |
+                    files=$(cd connector-documentation/build/docs/asciidoc && find . -type f \( -name '*.html' -o -name '*.pdf' -o -name '*.png' \) -not -path '*/.asciidoctor/*' | sort)
+                    { echo '### Generated documentation'; echo '```'; echo "$files"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+                    echo "::notice title=Generated documentation::$(echo $files)"
+
             -   name: Upload documentation
                 uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
                 with:
