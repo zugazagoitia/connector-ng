@@ -1,0 +1,112 @@
+ifndef::header[]
+include::{basepath}/header.adoc[]
+endif::header[]
+
+[[prerequisites]]
+= Prerequisites
+
+This chapter lists everything that must be in place before the **Connector** is started for the first time.
+It applies to both installation options (<<docker-install,containerized>> and <<jar-install,executable JAR>>).
+Requirements specific to one option are described in the corresponding chapter.
+
+== Overview
+
+[cols="2,2,4", options="header"]
+|===
+| Component | Supported versions | Notes
+
+| Java runtime (JRE)
+| 21
+| Only needed for the <<jar-install,executable JAR>> option. The container image already ships with Eclipse Temurin 21.
+
+| Docker Engine / Docker Compose
+| Engine 24+, Compose 2.x+
+| Only needed for the <<docker-install,containerized>> option.
+
+| Relational database
+| See <<database-versions>>
+| MySQL, MariaDB, PostgreSQL or Oracle. An empty schema and a dedicated user with XA privileges are required.
+
+| Apache ActiveMQ Classic
+| 6.x (tested with 6.2.0 and 6.2.7)
+| Shared JMS broker used by both the Connector and the Domibus gateway (OpenWire, default port `61616`).
+
+| S3-compatible object storage
+| Amazon S3, MinIO or any S3-compatible service
+| A dedicated bucket must exist before the Connector starts.
+
+| e-CODEX gateway (Domibus)
+| 5.1.x (tested with 5.1.9)
+| Must be configured to use the same external ActiveMQ broker as the Connector (see the gateway JMS broker chapter of the configuration guide).
+
+| Keystores and truststores
+| JKS or PKCS12
+| Signing key for evidences and ASiC-S containers, backend WS-Security keys, and the truststores listed in <<certificates>>.
+|===
+
+== Network ports
+
+The following ports are used by default. Adapt firewall rules accordingly.
+
+[cols="2,1,4", options="header"]
+|===
+| Service | Default port | Purpose
+
+| Connector HTTP (REST API, SOAP API, Swagger UI, Actuator)
+| `30000`
+| Set with `server.port`. Expose it only through a TLS-terminating reverse proxy (see <<https-transport-security>>).
+
+| ActiveMQ OpenWire
+| `61616`
+| Must be reachable from both the Connector and the gateway.
+
+| Database
+| vendor specific
+| Reachable from the Connector only.
+
+| S3 endpoint
+| vendor specific (MinIO: `9000`)
+| Reachable from the Connector only.
+|===
+
+The Connector also needs outbound HTTP(S) access (directly or through the proxy described in the DSS configuration chapter) to download Trusted Lists and to check CRL/OCSP revocation data when trusted lists are configured.
+
+[[certificates]]
+== Certificates and key material
+
+Prepare the following key material before the installation.
+File names are free; the paths are referenced in `application.properties`.
+
+[cols="2,4", options="header"]
+|===
+| File (sample name) | Content and usage
+
+| `connector-keystore.jks`
+| Private key used to sign REM evidences (`+connector.evidences.signature.*+`) and ASiC-S containers (`+connector.container.signature.*+`).
+
+| `connector-truststore.jks`
+| Trusted certificates used to validate business document signatures (`+connector.business-document.signature.validation.truststore.*+`).
+
+| `backend-keystore.jks`
+| Private key used for WS-Security signing/decryption on the SOAP backend link (`+connector.link.backend[n].link-config.properties.endpoint.keystore.*+`).
+
+| `backend-truststore.jks`
+| Certificates of the backend clients, used for WS-Security signature verification and encryption (`+connector.link.backend[n].link-config.properties.endpoint.truststore.*+`).
+
+| P-Mode truststore
+| Certificates of the gateways declared in the processing mode (`connector.business-domains.defaults[n].pmode.truststore`).
+|===
+
+WARNING: The distribution package and the container image contain *sample* keystores protected with the password `12345`.
+They are intended for local testing only and must be replaced with your own key material before connecting to any partner.
+
+== Installation order
+
+The recommended order is:
+
+. Provision the database schema and user (see <<database-configuration>>).
+. Provision the ActiveMQ broker and the S3 bucket.
+. Install and configure the gateway against the shared broker.
+. Prepare key material and the P-Mode file.
+. Install the Connector (<<docker-install,containerized>> or <<jar-install,JAR>>).
+. Apply the <<security-guidance,security checklist>> before connecting any partner.

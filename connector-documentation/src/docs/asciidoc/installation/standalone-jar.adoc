@@ -7,91 +7,110 @@ ifndef::distributiondir[]
 endif::distributiondir[]
 
 [[jar-install]]
-= Standalone Deployment — JAR Execution
+= Standalone Deployment — Executable JAR
 
-Use this installation option when hosting the connector natively outside any container runtime engine.
+Use this installation option to run the Connector natively on a host, without a container runtime.
 
 == Prerequisites
 
-[cols="1,1,3", options="header"]
-|===
-| Software | Version | Notes
-| Java (JRE) | 21 or later | Only the runtime environment is needed, not the full JDK distribution
-| Database | MySQL 8, MariaDB | An empty database schema and a dedicated user role are required
-| Apache ActiveMQ Classic | 6.x | Required for message queuing workflows with the e-CODEX Gateway
-| Amazon S3 or MinIO File storage |  | Required to store message attachments
-|===
+In addition to the common <<prerequisites>>, this option requires a Java **21** runtime (JRE) on the host. A full JDK is only needed to build from source.
 
-To check your target server Java version:
+To check the Java version of the target server:
 [source,bash]
 ----
 java -version
 ----
-The console runtime execution output must yield version `21.x.x` or higher.
+The output must report version `21.x.x` or higher.
 
 == Steps
 
-=== Step 1 — Obtain the Runnable Artifact
+=== Step 1 — Obtain the distribution package
 
-* **Option A — Release Download:**
-    ** Pull down link:https://scm.ecodex.eu/ui/repos/tree/General/libs-snapshot/eu/ecodex/connector/connector-distribution/{project-version}-SNAPSHOT[a Snapshot distribution version] from the e-CODEX project artifactory.
-    ** Or pull down link:https://scm.ecodex.eu/ui/repos/tree/General/libs-release/eu/ecodex/connector/connector-distribution/{project-version}[a Release distribution version] from the e-CODEX project artifactory.
-* **Option B — Compilation From Source:** Run the following command locally:
+The distribution is published as a ZIP archive named `connector-distribution-<version>.zip`.
+
+* **Option A — Download from the e-CODEX Artifactory** (an account is required):
+** Release versions: `https://scm.ecodex.eu/artifactory/libs-release/eu/ecodex/connector/connector-distribution/<version>/`
+** Snapshot versions: `https://scm.ecodex.eu/artifactory/libs-snapshot/eu/ecodex/connector/connector-distribution/<version>-SNAPSHOT/`
+* **Option B — Build from source.** Requires JDK 21 and internet access to download the dependencies. Docker is additionally required to run the integration tests.
 +
 [source,bash]
 ----
-./gradlew build
+./gradlew clean build -x test -x integrationTest
 ----
-The output executable package will be generated inside `connector-distribution/build/connector-distribution/standalone`.
++
+The distribution is generated in `connector-distribution/build/`:
++
+** `connector-distribution-<version>.zip` — the complete package;
+** `connector-distribution/standalone/` — the unpacked runnable application.
 
-=== Step 2 — Create the Target Deployment Directory Structure
-By default, the following layout configuration is provided in the distribution package:
+=== Step 2 — Unpack the distribution
+
+The package has the following layout:
 
 ----
-bin/
-└── connector-ng.jar
-config/
-├── application.properties
-└── keystores/
-    ├── connector-keystore.jks
-    ├── connector-truststore.jks
-    ├── backend-keystore.jks
-    └── backend-truststore.jks
-lib/
-start.sh
+connector-distribution/
+├── standalone/
+│   ├── bin/
+│   │   └── connector-ng.jar
+│   ├── config/
+│   │   ├── application.properties
+│   │   ├── log4j2.xml
+│   │   ├── banner.txt
+│   │   └── keystores/           (sample keystores, password 12345)
+│   │       ├── connector-keystore.jks
+│   │       ├── connector-truststore.jks
+│   │       ├── backend-keystore.jks
+│   │       └── backend-truststore.jks
+│   ├── lib/                     (JDBC drivers)
+│   ├── start.sh
+│   └── start.bat
+├── dbscripts/
+│   └── initial/                 (mysql.sql, mariadb.sql, postgres.sql, oracle.sql)
+└── documentation/               (this documentation, HTML and PDF)
 ----
 
-=== Step 3 — Provision Spring Boot Configuration Properties
-Populate your configuration template directly inside `./config/application.properties`.
+The `standalone/` directory is the working directory of the application: all relative paths in `application.properties` (`./config/...`, `./data/...`) are resolved from it.
+The application creates `./data/` at runtime for the JTA transaction log and the DSS trusted list cache.
 
-[TIP]
-====
-A complete reference of all available enterprise business parameters can be found on the link:../configuration/index.adoc[configuration page,window=_self].
-====
+=== Step 3 — Configure the application
 
-.config/application.properties Sample
+Edit `standalone/config/application.properties`.
+
+* The sample configuration reads several values from environment variables (`DB_URL`, `BROKER_URL`, `S3_ENDPOINT`, `JWT_SECRET_KEY`, ...).
+Either export them in the shell or service definition that starts the Connector, or replace the placeholders with literal values.
+The complete list is given in the platform chapter of the configuration guide.
+* Replace the sample keystores with your own key material (see <<certificates>>).
+* Create `config/pmode/` and place your P-Mode file there, or remove the `+connector.business-domains.defaults[0].pmode.*+` properties and upload the P-Mode after startup.
+If `pmode.file` points to a file that does not exist, the Connector aborts the startup.
+* Create the temporary upload directory referenced by `TEMP_DIR_LOCATION`.
+
+.config/application.properties sample
 [source,properties]
 ----
 include::{distributiondir}/src/main/resources/config/application.properties[]
 ----
 
-=== Step 4 — Run the Standalone Native App
+TIP: For the meaning of every property, see the configuration guide, and apply the <<security-checklist,security checklist>> before going to production.
 
-Before launching the application, ensure `start.sh` has execute permission:
+=== Step 4 — Run the application
 
-[source,bash]
-----
-sudo chmod +x start.sh
-----
-
-Then start the application:
+On Linux, from the `standalone/` directory:
 
 [source,bash]
 ----
 ./start.sh
 ----
 
-=== Step 5 — Verify Runtime Status
+`start.sh` is shipped with execute permission. If the permission was lost while copying the files, restore it with `chmod +x start.sh`.
+
+On Windows, run `start.bat`.
+
+`start.sh` runs `java -Dloader.path=./lib -jar ./bin/connector-ng.jar --spring.config.location=./config/`; `start.bat` runs the same command without `-Dloader.path`.
+To pass JVM options (memory, proxy, ...), edit the script or set the `JAVA_TOOL_OPTIONS` environment variable.
+
+TIP: For production, run the Connector as a service (for example a `systemd` unit) under a dedicated, unprivileged user, with `standalone/` as working directory.
+
+=== Step 5 — Verify the runtime status
 
 Once running, the following endpoints are available:
 
@@ -99,7 +118,10 @@ Once running, the following endpoints are available:
 |===
 | Endpoint | URL
 | Root URL | `http://localhost:30000`
-| API Health | `http://localhost:30000/actuator/health`
-| App Info | `http://localhost:30000/actuator/info`
+| Health | `http://localhost:30000/actuator/health`
+| Application info | `http://localhost:30000/actuator/info`
 | Swagger UI | `http://localhost:30000/swagger-ui/index.html`
+| SOAP backend API (WSDL) | `http://localhost:30000/services/backend?wsdl`
 |===
+
+The health endpoint must report `"status":"UP"`.

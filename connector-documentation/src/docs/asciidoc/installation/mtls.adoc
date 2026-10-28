@@ -2,20 +2,46 @@ ifndef::header[]
 include::{basepath}/header.adoc[]
 endif::header[]
 
+[[https-transport-security]]
 = HTTPS and Transport Security
 
 The connector listens on plain HTTP and does not terminate TLS itself.
-A reverse proxy — Nginx, Apache httpd, Traefik, or equivalent — should be placed in front of it for any deployment beyond a local development setup.
+A reverse proxy — Nginx, Apache httpd, Traefik, or equivalent — must be placed in front of it for any deployment beyond a local development setup.
 
-Without HTTPS, the following are exposed to network interception:
-
-* All traffic to the connector, except SOAP API messages which are encrypted and signed at the application level by default.
+Without HTTPS, all traffic to the connector is exposed to network interception, including login credentials, JWT tokens, REST API requests and uploaded attachments.
 
 NOTE: The SOAP API used for message exchange with backend partners is an exception.
-Messages are encrypted and signed at the application level by default, so transport-layer encryption is not a strict requirement for that interface — though still recommended.
+Its messages are encrypted and signed at the application level (WS-Security) by default, so transport-layer encryption is not a strict requirement for that interface — though it is still recommended.
 
 IMPORTANT: Do not expose the connector directly on a network without TLS.
 Ensure a reverse proxy with a valid certificate is in place before connecting any backend or gateway partner.
 
 NOTE: Native mTLS support is under development and will be available in a future release.
 In the meantime, mTLS can be enforced at the reverse proxy layer independently of the connector.
+
+.Minimal Nginx example (TLS termination and optional client certificate check)
+[source,nginx]
+----
+server {
+    listen 443 ssl;
+    server_name connector.example.org;
+
+    ssl_certificate         /etc/nginx/tls/connector.crt;
+    ssl_certificate_key     /etc/nginx/tls/connector.key;
+
+    # Optional: require a client certificate (mTLS) from backend clients
+    # ssl_client_certificate /etc/nginx/tls/backend-ca.crt;
+    # ssl_verify_client      on;
+
+    client_max_body_size 210m;   # align with spring.servlet.multipart.max-request-size
+
+    location / {
+        proxy_pass         http://127.0.0.1:30000;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto https;
+    }
+}
+----
+
+See also <<security-guidance>> for the list of endpoints that should not be reachable from untrusted networks.

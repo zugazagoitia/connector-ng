@@ -6,33 +6,46 @@ endif::header[]
 
 This configuration defines the routing behavior used by the connector to determine to which backend system a message should be transported.
 
-Routing rules allow dynamic selection of backend destinations based on message metadata or content attributes.
+Routing rules allow dynamic selection of backend destinations based on the AS4 properties of the inbound message.
+
+The backend of an inbound message is resolved in this order:
+
+. If the message belongs to a conversation (AS4 `ConversationId`) already associated with a backend, it is delivered to that backend (e.g. replies and evidences).
+. Otherwise, if routing is enabled, the rules are evaluated in index order and the first matching rule determines the backend.
+. Otherwise, the message is delivered to `default-backend-name`.
+
+NOTE: Routing rules currently apply to the default business domain only.
 
 == Basic configuration
-Configuration is provided via `application.properties` under the `connector.routing.*` prefix.
+Configuration is provided via `application.properties` under the `+connector.routing.*+` prefix.
 
 .Backend Routing Configuration Properties
-[cols="35,40,10,15"]
+[cols="35,40,10,15", options="header"]
 |===
-| Property | Description| Optional | Example
+| Property | Description | Optional | Example
 
 | `connector.routing.enabled`
-| Master switch for message routing logic. When false, routing rules below are ignored and messages may fall back to a single static destination
-| No
-| `true/false`
+| Master switch for message routing logic. When `false`, the rules below are ignored and inbound messages are routed to `default-backend-name`.
+| Yes
+| `true/false`. By default, set to *false*
+
+| `connector.routing.default-backend-name`
+| Link partner that receives inbound messages when routing is disabled or no rule matches.
+| Yes
+| `backend_alice`. By default, set to `default_backend`
 
 | `connector.routing.backend-rules[*index*].link-name`
-| Routing name (must match a declared backend link partner name).
+| Name of the target link partner (must match `connector.link.backend[n].link-partners[m].name`). Declare at most one rule per link partner: a second rule with the same `link-name` replaces the first one. Combine conditions with `\|(...)` instead.
 | No
 | `backend_alice`
 
 | `connector.routing.backend-rules[*index*].description`
-| Routing description.
+| Free-text description of the rule.
 | Yes
-| `backend_alice`
+| `routing rule for backend_alice`
 
 | `connector.routing.backend-rules[*index*].match-clause`
-| Expression used to evaluate the message
+| Expression evaluated against the AS4 properties of the inbound message (see the grammar below). Rules are evaluated in index order; the first matching rule wins.
 | No
 | `equals(ServiceName, 'Test')`
 
@@ -51,7 +64,7 @@ connector.routing.backend-rules[1].link-name=backend_abc
 connector.routing.backend-rules[1].match-clause=|(equals(ServiceName, 'abc'),equals(ServiceType, 'type2'))
 ----
 
-.Routing Pattern Example
+.Match clause grammar
 [source]
 ----
 <ROUTING_RULE_PATTERN> ::= <BOOLEAN_EXPRESSION> | <COMPARE_EXPRESSION> | <NOT_EXPRESSION>
@@ -62,6 +75,7 @@ connector.routing.backend-rules[1].match-clause=|(equals(ServiceName, 'abc'),equ
 <AS4_TYPE> ::= ServiceType | ServiceName | FinalRecipient | Action | FromPartyId | FromPartyRole
 | FromPartyIdType
 <VALUE> ::= <VALUE><LETTER> | <LETTER>
-<LETTER> can be every letter [a-z][A-Z][0-9] other printable characters might work, but
-they untested! ['\|&)( will definitiv not work!]
 ----
+
+`<VALUE>` may contain letters `[a-zA-Z]` and digits `[0-9]`. Other printable characters are untested, and the characters `'`, `\`, `|`, `&`, `(` and `)` are not supported.
+Comparisons are case-sensitive.

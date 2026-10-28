@@ -7,8 +7,17 @@ endif::header[]
 The C2C test feature allows two connector instances to verify end-to-end AS4 connectivity without involving a real backend on either side.
 When enabled, any inbound message whose AS4 service/action pair matches the configured combination is intercepted and short-circuited: the connector generates synthetic REM evidence responses internally and never forwards the message to the backend.
 
+Test messages can be sent from the administration portal or with `POST /api/v1/admin/messages/outbound/test` (authenticated).
+
+[IMPORTANT]
+====
+* The C2C test mode is *enabled by default*. Set `connector.c2ctests.enabled=false` if you do not run connector-to-connector tests.
+* Inbound test messages are routed through the routing rules: `connector.routing.enabled` must be `true` for them to be intercepted.
+* The service and action must be declared in the P-Mode of both connectors and gateways.
+====
+
 == Basic configuration
-Configuration is provided via `application.properties` under the `connector.c2ctests.*` prefix.
+Configuration is provided via `application.properties` under the `+connector.c2ctests.*+` prefix.
 
 .Connector-to-Connector (C2C) Test Configuration
 [cols="35,40,10,15", options="header"]
@@ -18,22 +27,22 @@ Configuration is provided via `application.properties` under the `connector.c2ct
 | `connector.c2ctests.enabled`
 | Activates connector-to-connector test mode. When enabled, messages matching the configured service/action combination are intercepted and handled entirely within the connector.
 | Yes
-| By default, set to `*true*`
+| By default, set to `true`
 
 | `connector.c2ctests.action`
 | The AS4 action value that identifies a message as a C2C test message. Must match the action defined in the P-Mode used for test traffic.
 | Yes
-| By default, set to `*ConTest_Form*`
+| By default, set to `ConTest_Form`
 
 | `connector.c2ctests.service.name`
 | The AS4 service name used to identify C2C test messages, paired with `connector.c2ctests.action` to form the matching combination. Must match the service name in the P-Mode.
 | Yes
-| By default, set to `*Connector-TEST*`
+| By default, set to `Connector-TEST`
 
 | `connector.c2ctests.service.type`
 | The AS4 service type URI qualifying `connector.c2ctests.service.name`.
 | Yes
-| By default, set to `*urn:e-codex:services:*`
+| By default, set to `urn:e-codex:services:`
 
 |===
 

@@ -1,0 +1,156 @@
+ifndef::header[]
+include::{basepath}/header.adoc[]
+endif::header[]
+
+[[security-guidance]]
+= Security Guidance
+
+This chapter collects the security-relevant settings of the **Connector** and the actions required before a deployment is exposed to partners.
+Work through the <<security-checklist,checklist>> for every non-development environment.
+
+[[security-checklist]]
+== Hardening checklist
+
+[cols="1,5,3", options="header"]
+|===
+| # | Action | Related setting
+
+| 1
+| Replace the sample keystores and truststores shipped with the distribution and the image (password `12345`) with your own key material, and use strong, unique passwords.
+| `+connector.*.keystore.*+`, `+connector.*.truststore.*+`, `+connector.*.private-key.*+`
+
+| 2
+| Set a random JWT signing secret of at least 32 bytes and keep it out of version control.
+| `connector.auth.security.jwt.secret` (`JWT_SECRET_KEY`)
+
+| 3
+| Change the built-in admin password and e-mail. The sample configuration ships with `admin` / `123456`. The user is asked to change the password at first login, but the configured value is the one used until then.
+| `+connector.admin.*+`
+
+| 4
+| Place a TLS-terminating reverse proxy in front of the Connector and do not expose port `30000` directly (see <<https-transport-security>>).
+| `server.address`, `server.port`
+
+| 5
+| Restrict network access to the endpoints that do not require authentication (see <<public-endpoints>>).
+| reverse proxy / firewall
+
+| 6
+| Disable Swagger UI and the OpenAPI description in production.
+| `springdoc.swagger-ui.enabled=false`, `springdoc.api-docs.enabled=false`
+
+| 7
+| Limit Actuator exposure and do not publish health details to unauthenticated clients.
+| `management.endpoints.web.exposure.include`, `management.endpoint.health.show-details`
+
+| 8
+| Restrict CORS to the origin(s) of the administration portal. Without configuration, all origins are allowed with credentials.
+| `connector.cors.allowed-origins`
+
+| 9
+| Disable the connector-to-connector test mode unless you are actively running C2C tests. It is *enabled by default*.
+| `connector.c2ctests.enabled=false`
+
+| 10
+| Disable traffic logging on backend links in production; it writes full SOAP messages (including business payloads) to the log.
+| `connector.link.backend[n].link-config.properties.logging-enabled=false`
+
+| 11
+| Protect the ActiveMQ broker: strong credentials, TLS for OpenWire where possible, no unauthenticated JMX, and restrict the trusted packages for JMS object messages.
+| `+spring.activemq.*+`, broker configuration
+
+| 12
+| Use a dedicated database user limited to the Connector schema (plus the XA recovery privileges described in <<database-configuration>>).
+| `+spring.datasource.*+`
+
+| 13
+| Use a dedicated S3 bucket and credentials scoped to that bucket only; enable encryption at rest on the storage side.
+| `+connector.file.storage.s3.*+`
+
+| 14
+| Inject all secrets through environment variables or a secrets manager, never through files committed to version control.
+| all `+*password*+`, `*secret*`, `+*-key+` properties
+|===
+
+== Default credentials and sample material
+
+The following values are shipped as samples and must never be used in production:
+
+* Sample keystores in `config/keystores/` (password `12345`, key alias `connector_blue`).
+* Admin account `admin` / `123456` in the sample `application.properties`.
+* Docker Compose development stack credentials (`connector`/`connector` for the database, `admin`/`admin123` for MinIO, `admin`/`admin` for ActiveMQ, unauthenticated JMX on the broker).
+
+== Authentication and authorization
+
+The REST API is protected with JWT bearer tokens (see the admin user authentication chapter of the configuration guide).
+
+* Access tokens are signed with HMAC-SHA using `connector.auth.security.jwt.secret`. The value is used as-is (UTF-8 bytes); it is *not* Base64-decoded. Use at least 32 random bytes, e.g. the output of `openssl rand -base64 32`.
+* Rotating the secret invalidates all issued access tokens.
+* Refresh tokens are persisted in the database and purged according to `connector.auth.security.jwt.refresh-token.cleanup-cron`.
+* `+/api/v1/admin/users/**+` and the creation of business domains and processing modes require the `ADMIN` role. Every other `+/api/v1/admin/**+` endpoint requires an authenticated user.
+
+[[public-endpoints]]
+=== Endpoints that do not require authentication
+
+The following endpoints are reachable *without* a JWT token in the current version:
+
+[cols="3,4", options="header"]
+|===
+| Endpoint | Purpose
+
+| `/api/v1/auth/login`, `/api/v1/auth/refresh`
+| Authentication.
+
+| `/api/v1/messages/outbound`, `/api/v1/messages/evidence-trigger`, `/api/v1/attachments/upload`, `/api/v1/evidences/{uuid}/download`
+| REST backend API (message submission).
+
+| `/api/v1/services`, `/api/v1/link-partners`, `/api/v1/processing-modes/{identifier}/services`, `.../actions`, `.../parties`
+| Read-only lookups for backend clients.
+
+| `/services/backend`
+| SOAP backend API. Protected at the message level by WS-Security (signature and encryption).
+
+| `+/actuator/**+`
+| Spring Boot Actuator (by default `health` and `info` are exposed).
+
+| `+/swagger-ui/**+`, `+/v3/api-docs/**+`, `+/swagger-resources/**+`
+| API documentation.
+|===
+
+[IMPORTANT]
+====
+The REST backend API does not yet identify the calling backend from a client certificate:
+messages submitted through `/api/v1/messages/outbound` and `/api/v1/messages/evidence-trigger` are currently attributed to the link partner whose `certificate-dn` is `cn=alice`.
+Until native mTLS support is available, do not expose the REST backend API to untrusted networks; restrict it at the reverse proxy (for example with mTLS and an allow-list) or use the SOAP backend API instead.
+====
+
+NOTE: Only the SOAP path `/services/backend` is excluded from JWT authentication.
+If you change `connector.link.backend[n].link-config.properties.publish-address` to another value, SOAP calls to that address will be rejected with HTTP 401.
+
+== Transport security
+
+See <<https-transport-security>>. In summary:
+
+* The Connector does not terminate TLS; use a reverse proxy.
+* SOAP backend messages are signed and encrypted with WS-Security according to the configured WS-Policy (`classpath:/policy/backend.policy.xml` by default).
+* Connections to the database, the broker and S3 should use TLS where the provider supports it (e.g. `ssl://` broker URLs, `https://` S3 endpoints, JDBC TLS parameters).
+
+== Message and document validation
+
+* Business document signatures are validated with DSS against the truststore and, optionally, a trusted list source (see the business document and DSS configuration chapters).
+* Inbound and outbound messages are verified against the processing mode. `STRICT` is the default for outbound messages and `RELAXED` for inbound messages; consider `STRICT` for both once your partners are aligned.
+
+== Logging and data protection
+
+* Message payloads are stored in the S3 bucket; message metadata, evidences and transport history are stored in the database. Apply your organisation's retention and backup policies to both.
+* Avoid `DEBUG` logging and backend traffic logging in production, as they may write personal data to log files.
+* The JTA transaction log (`./data/jtalog` by default) must be kept on persistent storage; deleting it can leave in-doubt transactions unresolved.
+
+== Container runtime
+
+The official image runs as the unprivileged user `connector` (UID 1000) from `/app`.
+Mount configuration read-only where possible, and mount `/app/data` on a persistent volume.
+
+== Reporting vulnerabilities
+
+Report suspected vulnerabilities privately to the e-CODEX team at `e-codex@eulisa.europa.eu` rather than in a public issue.

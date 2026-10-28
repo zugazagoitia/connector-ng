@@ -22,10 +22,10 @@ skinparam linetype ortho
 queue gatewayReceptionQueue
 
 package connector-infrastructure {
-  component ConnectorGatewayMessageListener
+  component ConnectorJmsGatewayMessageListener
 }
 
-gatewayReceptionQueue --> ConnectorGatewayMessageListener : JMS MapMessage
+gatewayReceptionQueue --> ConnectorJmsGatewayMessageListener : JMS MapMessage
 
 @enduml
 ----
@@ -35,7 +35,7 @@ When the message has no business content but contains evidence payloads, it is t
 
 == Confirmation message processing
 
-Confirmation messages are handled by `ConnectorInboundEvidenceMessageProcessorService` (aligned with the legacy `EvidenceMessageProcessor`).
+Confirmation messages are handled by `ConnectorInboundEvidenceMessageProcessorService` (the 7.x counterpart of `EvidenceMessageProcessor` in connector 6.x).
 
 [plantuml,incoming_evidence_2,format=png, opts=inline]
 ----
@@ -48,11 +48,11 @@ skinparam linetype ortho
 queue gatewayReceptionQueue
 
 package connector-infrastructure {
-  component ConnectorGatewayMessageListener
+  component ConnectorJmsGatewayMessageListener
 }
 
 package connector-application {
-  component ConnectorGatewayConfirmationMessageProcessorService
+  component ConnectorInboundEvidenceMessageProcessorService
   component ConnectorMessageEvidenceVerifier
   component ConnectorLinkSubmitter
 }
@@ -60,12 +60,12 @@ package connector-application {
 database ConnectorMessageRepository
 database ConnectorMessageEvidenceRepository
 
-gatewayReceptionQueue --> ConnectorGatewayMessageListener
-ConnectorGatewayMessageListener --> ConnectorGatewayConfirmationMessageProcessorService : confirmation message
-ConnectorGatewayConfirmationMessageProcessorService --> ConnectorMessageRepository : find referenced business message (referenceToIdentifier)
-ConnectorGatewayConfirmationMessageProcessorService --> ConnectorMessageEvidenceVerifier : validate evidence priority
-ConnectorGatewayConfirmationMessageProcessorService --> ConnectorMessageEvidenceRepository : persist evidence
-ConnectorGatewayConfirmationMessageProcessorService --> ConnectorLinkSubmitter : forward to backend
+gatewayReceptionQueue --> ConnectorJmsGatewayMessageListener
+ConnectorJmsGatewayMessageListener --> ConnectorInboundEvidenceMessageProcessorService : confirmation message
+ConnectorInboundEvidenceMessageProcessorService --> ConnectorMessageRepository : find referenced business message (referenceToIdentifier)
+ConnectorInboundEvidenceMessageProcessorService --> ConnectorMessageEvidenceVerifier : validate evidence priority
+ConnectorInboundEvidenceMessageProcessorService --> ConnectorMessageEvidenceRepository : persist evidence
+ConnectorInboundEvidenceMessageProcessorService --> ConnectorLinkSubmitter : forward to backend
 
 @enduml
 ----
@@ -103,21 +103,18 @@ package connector-application {
 }
 
 package connector-infrastructure {
-  component ConnectorBackendLinkEventPublisher
-}
-
-package connector-infrastructure {
-  component ConnectorBackendMessageDeliveryListener
+  component ConnectorJmsBackendLinkPublisher
+  component ConnectorJmsBackendMessageDeliveryListener
 }
 
 interface DomibusConnectorBackendDeliveryWebService
 
 queue backendDeliveryQueue
 
-ConnectorLinkSubmitter --> ConnectorBackendLinkEventPublisher
-ConnectorBackendLinkEventPublisher --> backendDeliveryQueue : PUSH
-backendDeliveryQueue --> ConnectorBackendMessageDeliveryListener
-ConnectorBackendMessageDeliveryListener --> DomibusConnectorBackendDeliveryWebService
+ConnectorLinkSubmitter --> ConnectorJmsBackendLinkPublisher
+ConnectorJmsBackendLinkPublisher --> backendDeliveryQueue : PUSH
+backendDeliveryQueue --> ConnectorJmsBackendMessageDeliveryListener
+ConnectorJmsBackendMessageDeliveryListener --> DomibusConnectorBackendDeliveryWebService
 
 @enduml
 ----

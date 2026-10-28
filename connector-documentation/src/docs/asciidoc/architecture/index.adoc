@@ -4,6 +4,8 @@ endif::header[]
 
 = e-CODEX Connector Architecture
 
+include::{basepath}/architecture/overview.adoc[leveloffset=+1]
+
 include::{basepath}/architecture/evidence_schemas.adoc[leveloffset=+1]
 
 include::{basepath}/architecture/message_processing_incoming_evidence.adoc[leveloffset=+1]

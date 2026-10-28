@@ -23,14 +23,14 @@ interface DomibusConnectorBackendWebService
 
 package connector-infrastructure {
   component ConnectorBackendWebServiceController
-  component ConnectorOutboundEvidenceTriggerEventPublisher
+  component ConnectorJmsOutboundEvidenceTriggerPublisher
 }
 
 queue outboundEvidenceTriggerQueue
 
 DomibusConnectorBackendWebService --> ConnectorBackendWebServiceController : submitMessage (trigger)
-ConnectorBackendWebServiceController --> ConnectorOutboundEvidenceTriggerEventPublisher
-ConnectorOutboundEvidenceTriggerEventPublisher --> outboundEvidenceTriggerQueue
+ConnectorBackendWebServiceController --> ConnectorJmsOutboundEvidenceTriggerPublisher
+ConnectorJmsOutboundEvidenceTriggerPublisher --> outboundEvidenceTriggerQueue
 
 @enduml
 ----
@@ -39,7 +39,7 @@ The message is transformed from the SOAP transition model to the internal `Conne
 
 == Evidence trigger processing
 
-`ConnectorJmsOutboundEvidenceTriggerListener` consumes trigger messages from the outbound evidence trigger queue and delegates to `ConnectorEvidenceTriggerProcessorService` (aligned with the legacy `EvidenceMessageProcessor` and `EvidenceTriggerStep`).
+`ConnectorJmsOutboundEvidenceTriggerListener` consumes trigger messages from the outbound evidence trigger queue and delegates to `ConnectorOutboundEvidenceMessageProcessorService` (the 7.x counterpart of `EvidenceMessageProcessor` and `EvidenceTriggerStep` in connector 6.x).
 
 [plantuml,outgoing_evidence_2,format=png, opts=inline]
 ----
@@ -52,24 +52,24 @@ skinparam linetype ortho
 queue outboundEvidenceTriggerQueue
 
 package connector-infrastructure {
-  component ConnectorOutboundEvidenceTriggerListener
+  component ConnectorJmsOutboundEvidenceTriggerListener
 }
 
 package connector-application {
-  component ConnectorEvidenceTriggerProcessorService
+  component ConnectorOutboundEvidenceMessageProcessorService
   component ConnectorMessageEvidenceCreator
   component ConnectorEvidenceMessageCreator
   component ConnectorMessageEvidenceVerifier
   component ConnectorLinkSubmitter
 }
 
-outboundEvidenceTriggerQueue --> ConnectorOutboundEvidenceTriggerListener
-ConnectorOutboundEvidenceTriggerListener --> ConnectorEvidenceTriggerProcessorService
-ConnectorEvidenceTriggerProcessorService --> ConnectorMessageEvidenceCreator : build REM evidence XML
-ConnectorEvidenceTriggerProcessorService --> ConnectorMessageEvidenceVerifier : validate against business message
-ConnectorEvidenceTriggerProcessorService --> ConnectorEvidenceMessageCreator : wrap as confirmation message
-ConnectorEvidenceTriggerProcessorService --> ConnectorLinkSubmitter : submit to gateway
-ConnectorEvidenceTriggerProcessorService --> ConnectorLinkSubmitter : optionally submit to backend
+outboundEvidenceTriggerQueue --> ConnectorJmsOutboundEvidenceTriggerListener
+ConnectorJmsOutboundEvidenceTriggerListener --> ConnectorOutboundEvidenceMessageProcessorService
+ConnectorOutboundEvidenceMessageProcessorService --> ConnectorMessageEvidenceCreator : build REM evidence XML
+ConnectorOutboundEvidenceMessageProcessorService --> ConnectorMessageEvidenceVerifier : validate against business message
+ConnectorOutboundEvidenceMessageProcessorService --> ConnectorEvidenceMessageCreator : wrap as confirmation message
+ConnectorOutboundEvidenceMessageProcessorService --> ConnectorLinkSubmitter : submit to gateway
+ConnectorOutboundEvidenceMessageProcessorService --> ConnectorLinkSubmitter : optionally submit to backend
 
 @enduml
 ----
@@ -109,13 +109,13 @@ package connector-application {
 }
 
 package connector-infrastructure {
-  component ConnectorGatewayLinkEventPublisher
+  component ConnectorJmsGatewayLinkPublisher
 }
 
 queue gatewaySubmissionQueue
 
-ConnectorLinkSubmitter --> ConnectorGatewayLinkEventPublisher
-ConnectorGatewayLinkEventPublisher --> gatewaySubmissionQueue : submitMessage
+ConnectorLinkSubmitter --> ConnectorJmsGatewayLinkPublisher
+ConnectorJmsGatewayLinkPublisher --> gatewaySubmissionQueue : submitMessage
 
 @enduml
 ----

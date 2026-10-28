@@ -4,29 +4,30 @@ endif::header[]
 
 = Introduction
 
-== Scope and Objective of this document
-This document is a technical guide to install and configure the new e-Codex **Connector**. It can be used as a “go-through” installation guide. Readers should be able to install and configure the new **Connector** in their own environments without previously built know-how about the software.
+== Scope and objective of this document
+This document is a technical guide to install and configure the e-CODEX **Connector** (version {project-version}).
+It is written as a step-by-step installation guide: readers should be able to install and configure the **Connector** in their own environment without prior knowledge of the software.
 
-A detailed knowledge of your own environment is a precondition.
+A detailed knowledge of your own environment (network, database, certificates) is a precondition.
 
-The structure of this guide is built so that every part can be taken as listed in the document. That means all preconditions for a chapter should be given by the previous chapters.
+The chapters are ordered so that they can be followed from top to bottom: the preconditions of each chapter are covered by the previous chapters.
 
-As an Installation Guide, this document does not focus on features and functionalities on the usage of the new **Connector**.
+As an installation guide, this document does not describe the features or the day-to-day usage of the **Connector**.
+Configuration properties are described in the configuration guide, and changes between versions in the changelog.
 
 == e-CODEX building blocks
 
-The **Connector** is one building block provided to support the connectivity and functionality of e-CODEX.
-To be fully functional with an e-CODEX use case and to exchange messages with other e-CODEX partners,
-the proper installation of other building blocks is required.
+The **Connector** is one of the building blocks that provide the connectivity and functionality of e-CODEX.
+To exchange messages with other e-CODEX partners, the other building blocks (in particular the e-CODEX gateway, based on Domibus) must also be installed and configured.
 
-The description of the e-CODEX building blocks and additional information on the e-CODEX system can be found on the link:https://www.ecodex.eu/tech[e-CODEX website].
+A description of the e-CODEX building blocks and additional information on the e-CODEX system can be found on the link:https://www.ecodex.eu/tech[e-CODEX website].
 
-== Product Distribution
+== Product distribution
 
-At the moment this documentation is being edited, there is only one main distribution flavor available for installing the new **Connector**, depending on your infrastructure architecture:
+The **Connector** is distributed as a standalone application with an embedded *Tomcat* web server.
+It can be deployed in two ways:
 
-=== 1. Standalone Deployment
-The application runs as an autonomous service with an embedded *Tomcat* web server. It can be deployed in two ways:
+* <<docker-install,Containerized (Docker)>> – **recommended.** The container image can run on any OCI-compatible hosting platform.
+* <<jar-install,Native (executable JAR)>> – for restricted environments where containers are not an option. The runnable JAR is executed directly on the host with Java 21.
 
-* <<docker-install,Containerized – (Docker)>> – **Recommended.** The containerized service can be installed as an image on any suitable hosting platform.
-* <<jar-install,Native – (Executable JAR)>> – For restricted environments where containerization is not an option. The user executes the runnable JAR directly on the host machine using Java 21.
+Both options use the same configuration file (`config/application.properties`) and the same external services described in <<prerequisites>>.

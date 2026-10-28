@@ -4,25 +4,29 @@ endif::header[]
 
 = Testing Matrix
 
-NOTE: The following matrix may always be a little behind the current testing and installation because it is generated with the release. The release afterward is being tested. The result will then become part of the next release!
+NOTE: This matrix is updated with each release and may lag behind the latest tests: combinations tested after a release are added in the next release.
+The application server is the Tomcat server embedded in the Connector; no external application server is required.
 
 == The Connector has been tested on
 
 .Infrastructure Components
+[options="header"]
 |===
-| Connector Version | OS | Java | Application Server | JDBC Driver | Database | Database creation
+| Connector Version | OS | Java | Embedded Tomcat | JDBC Driver | Database | Database creation
+
+// 'App init' = spring.jpa.hibernate.ddl-auto=update, 'DB Scripts' = dbscripts/initial
 
 | {project-version}
 | Ubuntu 26.04 LTS
-| Adopt Open JDK 21.0.11
+| Eclipse Temurin 21.0.11
 | Tomcat 11.0.15
-| Mysql Connector 8.0.33
-| Mysql 8.4.9
+| MySQL Connector/J 8.0.33
+| MySQL 8.4.9
 | App init, DB Scripts
 
 | {project-version}
 | Ubuntu 26.04 LTS
-| Adopt Open JDK 21.0.11
+| Eclipse Temurin 21.0.11
 | Tomcat 11.0.15
 | MariaDB Connector 3.5.10
 | MariaDB 12.3.2
@@ -30,15 +34,15 @@ NOTE: The following matrix may always be a little behind the current testing and
 
 | {project-version}
 | Ubuntu 26.04 LTS
-| Adopt Open JDK 21.0.11
+| Eclipse Temurin 21.0.11
 | Tomcat 11.0.15
-| Postgres Connector 42.7.13
-| Postgresql 17.0
+| PostgreSQL JDBC 42.7.13
+| PostgreSQL 17.0
 | App init, DB Scripts
 
 | {project-version}
 | Ubuntu 26.04 LTS
-| Adopt Open JDK 21.0.11
+| Eclipse Temurin 21.0.11
 | Tomcat 11.0.15
 | Oracle Connector 23.26.2.0.0
 | Oracle 23
@@ -49,8 +53,9 @@ NOTE: The following matrix may always be a little behind the current testing and
 == The Connector has been tested with
 
 .Gateway Connection
+[options="header"]
 |===
-| Connector Version | Gateway Version | Active MQ Version | Minio Version
+| Connector Version | Gateway Version | ActiveMQ Classic Version | MinIO Version
 
 | {project-version}
 | 5.1.9

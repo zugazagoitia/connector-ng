@@ -17,6 +17,8 @@ The storage backend holds all connector-managed file types:
 * ASIC-S containers
 * Temporary file storage
 
+Uploads are buffered in the local directory set by `spring.servlet.multipart.location` (`TEMP_DIR_LOCATION`) before being stored in the bucket.
+
 The following S3-compatible providers are supported:
 
 * Amazon S3
@@ -26,10 +28,10 @@ The following S3-compatible providers are supported:
 == S3 Storage Configuration
 
 Configuration is provided via `application.properties` under the
-`connector.file.storage.s3.*` prefix.
+`+connector.file.storage.s3.*+` prefix.
 
 .S3 File Storage Configuration Properties
-[cols="35,40,10,15"]
+[cols="35,40,10,15", options="header"]
 |===
 | Property | Description | Optional | Example
 
@@ -57,21 +59,24 @@ The bucket must exist before starting the connector.
 
 | `connector.file.storage.s3.endpoint`
 | S3 endpoint URL. Required for non-AWS providers (MinIO, OVH Object Storage, etc.)
-or when targeting a specific regional/VPC endpoint.
+or when targeting a specific regional/VPC endpoint. Use `https://` outside local development.
 | No
 | `https://s3.eu-west-1.amazonaws.com`
 |===
+
+NOTE: There is no `connector.file.storage.s3.enable` switch: S3 storage is always used.
+The bucket is not created automatically. Create it beforehand and grant the access key read, write, list and delete permissions on it.
 
 WARNING: Never commit S3 credentials to version control.
 Inject `access-key` and
 `secret-key` at runtime via environment variables or a secrets manager.
 
-.Configuration example
+.Configuration example (local MinIO)
 [source,properties]
 ----
 connector.file.storage.s3.access-key=${S3_ACCESS_KEY}
 connector.file.storage.s3.secret-key=${S3_SECRET_KEY}
 connector.file.storage.s3.region=eu-west-1
 connector.file.storage.s3.bucket=attachments
-connector.file.storage.s3.endpoint=https://localhost:9000
+connector.file.storage.s3.endpoint=http://localhost:9000
 ----

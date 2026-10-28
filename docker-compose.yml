@@ -120,7 +120,7 @@ services:
         networks:
             ecodex:
         volumes:
-            # based on your DBMS, initial scripts can be found in connector-distribution/src/main/dbscripts/initial
+            # based on your DBMS, initial scripts can be found in connector-distribution/src/main/resources/dbscripts/initial
             # copy and place them in sql folder
             # - ./sql/:/docker-entrypoint-initdb.d/
             - ng-mysql-data:/var/lib/mysql

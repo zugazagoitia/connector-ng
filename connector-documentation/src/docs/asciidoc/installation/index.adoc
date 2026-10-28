@@ -6,10 +6,14 @@ endif::header[]
 
 include::{basepath}/installation/introduction.adoc[leveloffset=+1]
 
-include::{basepath}/installation/database.adoc[leveloffset=+1]
+include::{basepath}/installation/prerequisites.adoc[leveloffset=+1]
 
-include::{basepath}/installation/standalone-jar.adoc[leveloffset=+1]
+include::{basepath}/installation/database.adoc[leveloffset=+1]
 
 include::{basepath}/installation/standalone-containerized.adoc[leveloffset=+1]
 
+include::{basepath}/installation/standalone-jar.adoc[leveloffset=+1]
+
 include::{basepath}/installation/mtls.adoc[leveloffset=+1]
+
+include::{basepath}/installation/security-guidance.adoc[leveloffset=+1]

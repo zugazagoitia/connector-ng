@@ -7,26 +7,21 @@ endif::header[]
 The connector generates ETSI-REM evidence for message lifecycle events.
 Generated evidences are electronically signed (XAdES) and include mandatory issuer metadata.
 
-Configuration is provided via `application.properties` under the `connector.evidences.*` prefix.
+Configuration is provided via `application.properties` under the `+connector.evidences.*+` prefix.
 
 == Signature configuration
 
-Properties under `connector.evidences.signature.*` control how REM evidence XML is signed.
+Properties under `+connector.evidences.signature.*+` control how REM evidence XML is signed.
 
 .ETSI-REM Evidences Signature Configuration Properties
-[cols="35,40,10,15"]
+[cols="35,40,10,15", options="header"]
 |===
 | Property | Description | Optional | Example
-
-| `connector.evidences.signature.payload-digest-algorithm`
-| Digest algorithm used when hashing the business payload referenced by the evidence.
-| No
-| `SHA256`
 
 | `connector.evidences.signature.keystore.path`
 | Classpath or filesystem path to the keystore holding the signing private key.
 | No
-| `classpath:keystores/connector-keystore.jks`
+| `file:./config/keystores/connector-keystore.jks`
 
 | `connector.evidences.signature.keystore.password`
 | Password for the keystore.
@@ -50,23 +45,25 @@ Properties under `connector.evidences.signature.*` control how REM evidence XML 
 
 |===
 
+NOTE: The digest algorithm (SHA-256) and the signature algorithm (RSA) used for evidences are fixed in the current version.
+The `connector.evidences.signature.digest-algorithm` and `connector.evidences.signature.payload-digest-algorithm` properties found in earlier samples are not bound and have no effect.
+
 .Configuration Example
 [source,properties]
 ----
-connector.evidences.signature.keystore.path=classpath:keystores/connector-keystore.jks
+connector.evidences.signature.keystore.path=file:./config/keystores/connector-keystore.jks
 connector.evidences.signature.keystore.password=12345
 connector.evidences.signature.keystore.type=JKS
 connector.evidences.signature.private-key.alias=connector_blue
 connector.evidences.signature.private-key.password=12345
-connector.evidences.signature.digest-algorithm=SHA256
 ----
 
 == Issuer configuration
 
-Properties under `connector.evidences.issuer.*` are embedded into generated REM evidences.
+Properties under `+connector.evidences.issuer.*+` are embedded into generated REM evidences.
 
 .Issuer Configuration Properties
-[cols="35,40,10,15"]
+[cols="35,40,10,15", options="header"]
 |===
 | Property | Description | Optional | Example
 
@@ -86,7 +83,7 @@ Properties under `connector.evidences.issuer.*` are embedded into generated REM 
 | `0000`
 
 | `connector.evidences.issuer.postal-address.country`
-| Issuer country.
+| Issuer country (two-letter ISO 3166-1 code recommended).
 | No
 | `EU`
 
@@ -126,9 +123,11 @@ connector.evidences.issuer.postal-address.country=EU
 | Yes
 | `true`
 
-| `connector.queues.outbound-evidence-trigger-queue`
-| JMS queue for outbound evidence triggers messages received from the backend.
+| `connector.message-processing.auto-trigger-delivery-evidences`
+| When `true`, a `DELIVERY` evidence is generated automatically once the message has been delivered to the backend.
 | Yes
-| By default, set to `connector.queues.outbound-evidence-trigger-queue`
+| `false` (the sample configuration sets `true`)
 
 |===
+
+See also the message processing and connector queue configuration chapters.

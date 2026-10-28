@@ -17,7 +17,7 @@ If no default is configured and no business domain exists yet, the connector reg
 single built-in default domain so that it can start in a usable state.
 
 == Properties
-Configuration is provided via `application.properties` under the `connector.connector.business-domains.*` prefix.
+Configuration is provided via `application.properties` under the `+connector.business-domains.*+` prefix.
 
 .Business Domains Configuration
 [cols="35,40,10,15", options="header"]
@@ -30,7 +30,7 @@ Configuration is provided via `application.properties` under the `connector.conn
 | `default_business_domain`
 
 | `connector.business-domains.defaults[n].description`
-| Free-text description. Is shown in the administration UI.
+| Free-text description, shown in the administration UI. Must not be empty.
 | No
 | `Default business domain`
 
@@ -40,8 +40,8 @@ Configuration is provided via `application.properties` under the `connector.conn
 | `true`
 
 | `connector.business-domains.defaults[n].pmode.file`
-| Processing mode definition (XML) registered for the domain. When absent, no processing
-mode is registered and the remaining `pmode.*` properties are ignored.
+| Processing mode definition (XML, as exported from the gateway) registered for the domain. When absent, no processing
+mode is registered and the remaining `+pmode.*+` properties are ignored. If the file cannot be read, startup is aborted.
 | Yes
 | `file:./config/pmode/pmode-blue.xml`
 
@@ -100,8 +100,10 @@ connector.business-domains.defaults[0].description=Default business domain
 connector.business-domains.defaults[0].enabled=true
 connector.business-domains.defaults[0].pmode.file=file:./config/pmode/pmode-blue.xml
 connector.business-domains.defaults[0].pmode.truststore=file:./config/pmode/truststore-blue.jks
-connector.business-domains.defaults[0].pmode.truststore-password=12345
+connector.business-domains.defaults[0].pmode.truststore-password=${PMODE_TRUSTSTORE_PASSWORD}
 ----
+
+TIP: Additional domains can be declared by incrementing the index: `connector.business-domains.defaults[1]`, `connector.business-domains.defaults[2]`, etc.
 
 == Registering a processing mode after startup
 
@@ -121,8 +123,8 @@ image::load_pmode.png[Processing modes upload screen,align="center"]
 
 === Via the administration API
 
-IMPORTANT: All administration API endpoints require a valid JWT bearer token.
-Obtain a token by authenticating against the login endpoint first (see<<user-authentication>>), then
+IMPORTANT: All administration API endpoints require a valid JWT bearer token, and registering a processing mode requires the `ADMIN` role.
+Obtain a token by authenticating against the login endpoint first (see <<user-authentication>>), then
 include it in every subsequent request via the `Authorization` header.
 
 [source,http]
@@ -168,16 +170,20 @@ Must be a `.jks`, `.keystore`, `.p12` or `.pfx` file.
 .Step 1 — Obtain a bearer token
 [source,bash]
 ----
-TOKEN=$(curl -s -X POST http://localhost:<<port>>/api/v1/auth/login \
+TOKEN=$(curl -s -X POST http://localhost:30000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"<password>"}' \
   | jq -r '.accessToken')
 ----
 
+NOTE: The login response also contains `refreshToken`, `expiresIn`, `refreshExpiresIn` and `mustChangePassword`.
+When `mustChangePassword` is `true` (first login with the configured admin password), change the password with `POST /api/v1/auth/change-password` before using the administration API.
+The examples use the default port `30000`.
+
 .Step 2 — Register the processing mode
 [source,bash]
 ----
-curl -X POST http://localhost:<<port>>/api/v1/admin/processing-modes \
+curl -X POST http://localhost:30000/api/v1/admin/processing-modes \
   -H "Authorization: Bearer ${TOKEN}" \
   -F "businessDomainIdentifier=default_business_domain" \
   -F "description=Default processing mode for domain blue" \

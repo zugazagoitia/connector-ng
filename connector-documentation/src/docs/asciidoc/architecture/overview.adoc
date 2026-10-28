@@ -1,0 +1,72 @@
+ifndef::header[]
+include::{basepath}/header.adoc[]
+endif::header[]
+
+= Overview
+
+The **Connector** sits between national backend applications and the e-CODEX gateway (Domibus).
+It receives business messages from backends, packages and signs them (ASiC-S container, trust-ok token, REM evidences) and submits them to the gateway; in the other direction it validates messages received from the gateway and delivers them to the right backend.
+
+[plantuml, architecture_overview, format=png, opts=inline]
+----
+@startuml
+left to right direction
+skinparam monochrome false
+
+actor "Backend application" as backend
+node "Connector" as connector
+queue "ActiveMQ Classic\n(shared broker)" as broker
+node "Gateway (Domibus)" as gateway
+database "Database" as db
+storage "S3 bucket" as s3
+cloud "Trusted lists /\nCRL / OCSP" as dss
+
+backend --> connector : SOAP (WS-Security)\nor REST
+connector --> backend : SOAP push\n(push mode)
+connector <--> broker : internal queues
+broker <--> gateway : JMS plugin queues
+connector --> db
+connector --> s3
+connector --> dss : HTTP(S)
+@enduml
+----
+
+== Modules
+
+[cols="1,3", options="header"]
+|===
+| Module | Content
+
+| `connector-domain`
+| Domain model: messages, evidences, processing modes, business domains, routing expressions. No Spring dependency.
+
+| `connector-application`
+| Use cases (ports and services) of the hexagonal architecture: inbound and outbound message pipelines, evidence processing, routing, user management.
+
+| `connector-infrastructure`
+| Adapters: REST and SOAP controllers, JMS listeners and publishers, JPA persistence, S3 storage, DSS-based signature and container handling, configuration properties.
+
+| `connector-soap-api`
+| WSDL and XSD of the SOAP backend API (`DomibusConnectorBackendWebService`, `DomibusConnectorBackendDeliveryWebService`), compatible with connector 4.x/6.x backends.
+
+| `connector-bootstrapper`
+| Spring Boot entry point; produces `connector-ng.jar`.
+
+| `connector-distribution`
+| Packaging of the distribution ZIP (application, sample configuration, JDBC drivers, database scripts, documentation).
+
+| `connector-integrationtest`
+| End-to-end tests (Testcontainers).
+
+| `connector-documentation`
+| This documentation (AsciiDoc, built with `./gradlew :connector-documentation:build`).
+|===
+
+== Message processing
+
+Messages are processed asynchronously through JMS queues (see the connector queue configuration chapter):
+
+* *Outbound* (backend → gateway): staging queue → processing queue (validation, container and token creation, evidence `SUBMISSION_ACCEPTANCE`/`SUBMISSION_REJECTION`) → gateway submission queue.
+* *Inbound* (gateway → backend): gateway reception queue → staging queue → processing queue (P-Mode and container verification, evidence `RELAY_REMMD_ACCEPTANCE`/`NON_DELIVERY`, routing) → backend delivery queue → push to the backend, or "ready for download" in pull mode.
+
+The following chapters detail how evidences are processed.

@@ -14,54 +14,56 @@ The queues coordinate the processing lifecycle for:
 * Backend delivery
 * Message staging and transport
 
-These queues are typically implemented using a messaging system such as:
+The queues are JMS queues hosted on the shared Apache ActiveMQ Classic broker (see the platform configuration chapter).
 
-* JMS
-* ActiveMQ
-* Spring Messaging infrastructure
-
+[IMPORTANT]
+====
+* The listener of each queue resolves its name from these properties, so *all of them must be present* in `application.properties`; a missing property prevents the application from starting.
+* The queue names cannot be changed in the current version: the producers always use the default names listed below. Keep the default values.
+* Failed messages are redelivered up to 5 times (initial delay 60 seconds, multiplier 2) before being moved to the broker's dead letter queue.
+====
 == Basic configuration
-Configuration is provided via `application.properties` under the `connector.queues.*` prefix.
+Configuration is provided via `application.properties` under the `+connector.queues.*+` prefix.
 
 .Connector Queue Configuration Properties
-[cols="35,40,10,15"]
+[cols="35,40,10,15", options="header"]
 |===
-| Property | Description| Optional | Example
+| Property | Description | Optional | Value
 
 | `connector.queues.outbound-message-staging-queue`
 | JMS queue name where outbound messages are first staged/buffered before being picked up for further processing (e.g., signing, AS4 packaging) on their way out to the gateway.
-| Yes
-| By default, set to `connector.queues.outbound-message-staging-queue`
+| No
+| `connector.queues.outbound-message-staging-queue`
 
 | `connector.queues.outbound-message-processing-queue`
 | JMS queue name used for the main outbound message processing step — messages move here from the staging queue to be processed and sent toward the gateway partner.
-| Yes
-| By default, set to `connector.queues.outbound-message-processing-queue`
+| No
+| `connector.queues.outbound-message-processing-queue`
 
 | `connector.queues.outbound-evidence-trigger-queue`
 | JMS queue name that triggers generation of REM evidence (e.g., submission acceptance) for outbound messages.
-| Yes
-| By default, set to `connector.queues.outbound-evidence-trigger-queue`
+| No
+| `connector.queues.outbound-evidence-trigger-queue`
 
 | `connector.queues.inbound-message-staging-queue`
-| JMS queue name where inbound messages are first staged/buffered before being picked up for further processing (e.g., signing verification ...) on their way out to the backend.
-| Yes
-| By default, set to `connector.queues.inbound-message-staging-queue`
+| JMS queue name where inbound messages are first staged/buffered before being picked up for further processing (e.g., signature verification) on their way to the backend.
+| No
+| `connector.queues.inbound-message-staging-queue`
 
 | `connector.queues.inbound-message-processing-queue`
 | JMS queue name used to process incoming messages received from the gateway before delivery to the backend.
-| Yes
-| By default, set to `connector.queues.inbound-message-processing-queue`
+| No
+| `connector.queues.inbound-message-processing-queue`
 
 | `connector.queues.inbound-evidence-trigger-queue`
 | JMS queue name that triggers generation of REM evidence (e.g., delivery/non-delivery) for inbound messages.
-| Yes
-| By default, set to `connector.queues.inbound-evidence-trigger-queue`
+| No
+| `connector.queues.inbound-evidence-trigger-queue`
 
 | `connector.queues.backend-delivery-queue`
 | JMS queue name used for the final delivery hop — pushing processed inbound messages onward to the backend partner's endpoint.
-| Yes
-| By default, set to `connector.queues.backend-delivery-queue`
+| No
+| `connector.queues.backend-delivery-queue`
 
 |===
 

@@ -15,15 +15,17 @@ Link partner configurations specify:
 * Certificate validation rules
 * Push endpoint destinations
 
-A link bundles shared transport/security config; link partners under it represent individual counterparties using that link's config, each with their own routing identity.
+A *link* bundles the shared transport and security configuration of a SOAP endpoint; the *link partners* declared under it are the individual backend applications using that endpoint, each with its own routing identity and certificate.
+
+NOTE: Only SOAP backend links are supported in this version. Gateway links are no longer configured here: the gateway is reached through the shared JMS broker (see the gateway queue configuration chapter).
 
 == Basic configuration
-Configuration is provided via `application.properties` under the `connector.message-processing.*` prefix.
+Configuration is provided via `application.properties` under the `+connector.link.backend[n].*+` prefix. Several links can be declared by incrementing the index `n`, and several partners per link with `link-partners[m]`.
 
 .Link Partners Configuration Properties
-[cols="35,40,10,15"]
+[cols="35,40,10,15", options="header"]
 |===
-| Property | Description| Optional | Example
+| Property | Description | Optional | Example
 
 | `connector.link.backend[0].link-config.name`
 | Internal name for this backend link, used to reference the link's shared configuration.
@@ -39,6 +41,11 @@ Configuration is provided via `application.properties` under the `connector.mess
 | Password protecting the endpoint keystore.
 | No
 | `*secret*`
+
+| `connector.link.backend[0].link-config.properties.endpoint.keystore.type`
+| Keystore format: `JKS` or `PKCS12`.
+| Yes
+| By default, set to `JKS`
 
 | `connector.link.backend[0].link-config.properties.endpoint.private-key.alias`
 | Alias of the key entry within the keystore used for signing on this link.
@@ -60,28 +67,34 @@ Configuration is provided via `application.properties` under the `connector.mess
 | No
 | `*secret*`
 
+| `connector.link.backend[0].link-config.properties.endpoint.truststore.type`
+| Truststore format: `JKS` or `PKCS12`.
+| Yes
+| By default, set to `JKS`
+
 | `connector.link.backend[0].link-config.properties.endpoint.encrypt-alias`
 | Default certificate alias (from the truststore) used to encrypt outgoing messages, unless overridden per-partner.
 | No
 | `alice`
 
 | `connector.link.backend[0].link-config.properties.logging-enabled`
-| Enables detailed logging of traffic on this link. Consider verbosity/log level in production.
+| Enables logging of the full SOAP traffic on this link, including business payloads. Disable in production.
 | Yes
 | `true/false`. By default, set to *false*
 
 | `connector.link.backend[0].link-config.properties.ws-policy`
 | WS-SecurityPolicy XML file applied to this link's web service endpoint(s), defining the security requirements (e.g., signing, encryption, token types) enforced for messages exchanged over it.
 | Yes
-| `classpath:/policy/backend.policy.xml`. By default, set to *`classpath:/policy/backend.policy.xml`*
+| By default, set to `classpath:/policy/backend.policy.xml`
 
 | `connector.link.backend[0].link-config.properties.publish-address`
-| Relative path under which the connector exposes its own web service endpoint for this backend link (i.e., where backends call in to deliver/pull messages, as opposed to `push-address` which is where the connector calls out to).
-| No
-| `/backend_1`
+| Path, relative to `cxf.path` (`/services`), under which the connector exposes its own SOAP endpoint for this backend link (i.e., where backends call in to submit or pull messages, as opposed to `push-address`, where the connector calls out to).
+Only `/backend` (resulting in `/services/backend`) is currently excluded from JWT authentication; other values are rejected with HTTP 401.
+| Yes
+| By default, set to `/backend`
 
 | `connector.link.backend[0].link-partners[0].name`
-| Logical name of the partner. Must match `connector.routing.backend-rules[*].link-name` / `default-backend-name`.
+| Logical name of the partner. Referenced by `+connector.routing.backend-rules[*].link-name+` and `connector.routing.default-backend-name`, and stored with each message as its backend name.
 | No
 | `backend_alice`
 
@@ -96,8 +109,10 @@ Configuration is provided via `application.properties` under the `connector.mess
 | `true/false`
 
 | `connector.link.backend[0].link-partners[0].sender-mode`
-| Delivery mode for this partner: `push`
-means the connector actively delivers messages to the backend's endpoint.
+| Delivery mode for inbound messages to this partner:
+
+* `push` — the connector actively delivers messages to the partner's `push-address`;
+* `pull` (or `passive`) — the connector marks messages as ready for download and the backend retrieves them through the API.
 | No
 | `push`
 
@@ -107,14 +122,14 @@ means the connector actively delivers messages to the backend's endpoint.
 | `alice`
 
 | `connector.link.backend[0].link-partners[0].properties.certificate-dn`
-| Expected certificate Distinguished Name for this partner, matched case-insensitively, used to verify partner identity.
+| Expected certificate Distinguished Name of this partner, matched case-insensitively against the certificate used to sign the WS-Security header, used to identify the calling backend.
 | No
 | `cn=alice`
 
 | `connector.link.backend[0].link-partners[0].properties.push-address`
-| Endpoint URL the connector pushes messages to for this partner.
-| No
-| `http://localhost:port/services/domibusConnectorDeliveryWebservice`
+| Endpoint URL of the backend's delivery web service (`DomibusConnectorBackendDeliveryWebService`), to which the connector pushes messages for this partner.
+| Required for `push`
+| `https://backend.example.org/services/domibusConnectorDeliveryWebservice`
 
 |===
 
@@ -142,12 +157,12 @@ connector.link.backend[0].link-config.properties.endpoint.encrypt-alias=alice
 connector.link.backend[0].link-partners[0].name=backend_alice
 connector.link.backend[0].link-partners[0].description=backend alice
 connector.link.backend[0].link-partners[0].enabled=true
-#this linkPartner operates in push receiveMode (connector pushes new messages to backend)
+# this link partner operates in push mode (the connector pushes new messages to the backend)
 connector.link.backend[0].link-partners[0].sender-mode=push
 # this must match the certificate alias within the trust-store
 connector.link.backend[0].link-partners[0].properties.encryption-alias=alice
 # this must match the certificate DN (lower- or UPPERcase is ignored)
 connector.link.backend[0].link-partners[0].properties.certificate-dn=cn=alice
-connector.link.backend[0].link-partners[0].properties.push-address=http://localhost:port/services/domibusConnectorDeliveryWebservice
+connector.link.backend[0].link-partners[0].properties.push-address=https://backend.example.org/services/domibusConnectorDeliveryWebservice
 
 ----

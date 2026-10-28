@@ -1,61 +1,67 @@
+ifndef::header[]
+include::{basepath}/header.adoc[]
+endif::header[]
+
 [[user-authentication]]
 = Admin User Authentication Configuration
 
-The connector ships with a built-in web administration interface secured by JWT-based session management.
-These properties configure the JWT token lifecycle and the default admin account used to log in to the admin UI.
+The REST API and the administration portal are secured with JWT bearer tokens.
+These properties configure the JWT token lifecycle and the built-in admin account that is created at startup.
+
+* Obtain a token pair with `POST /api/v1/auth/login` (`{"username": "...", "password": "..."}`); the response contains `accessToken`, `refreshToken`, `expiresIn`, `refreshExpiresIn` and `mustChangePassword`.
+* Send the access token in the `Authorization: Bearer <token>` header.
+* Renew it with `POST /api/v1/auth/refresh`, and end the session with `POST /api/v1/auth/logout`.
+* At first login, `mustChangePassword` is `true`: change the password with `POST /api/v1/auth/change-password` before using the rest of the API.
+* Additional users and roles are managed through `/api/v1/admin/users` (requires the `ADMIN` role).
 
 IMPORTANT: Change `connector.admin.password` and `connector.auth.security.jwt.secret`
 before deploying to any non-development environment.
-The defaults shown here are insecure placeholders.
+The values of the sample configuration (`admin` / `123456`) are insecure placeholders.
 
-.Admin Authentication Properties (7.x)
+.Admin Authentication Properties
+[cols="35,40,10,15", options="header"]
 |===
 | Property | Description | Optional | Example
 
 | `connector.auth.security.jwt.secret`
-| Base64-encoded secret used to sign JWT session tokens for the admin UI.
-Minimum 256 bits (32 bytes). Never commit to version control.
+| Secret used to sign (HMAC-SHA) the JWT access tokens. The string is used as-is (its UTF-8 bytes, not Base64-decoded) and must be at least 32 bytes long. Never commit it to version control.
 | No
-| `TKfopYnLbi4lCospwYxzWv2Hf4JKv2JepfN7n5lYwcE=`
-Generate with: `openssl rand -base64 32`
+| `${JWT_SECRET_KEY}` — generate a value with `openssl rand -base64 32`
 
 | `connector.auth.security.jwt.expiration`
-| How long an admin UI session token remains valid before the user must
-re-authenticate.
+| How long an access token remains valid before it must be refreshed.
 | Yes
-| By default, set to **`60m`**
+| By default, set to `60m` (the sample configuration uses `15m`)
 
 | `connector.auth.security.jwt.issuer`
 | Issuer claim embedded in the JWT.
 | Yes
-| By default, set to **`connector.ecodex.eu`**
+| By default, set to `connector.ecodex.eu`
 
 | `connector.auth.security.jwt.refresh-token.expiration`
-| How long a refresh token remains valid, allowing the admin UI to silently
-renew a session without re-login.
+| How long a refresh token remains valid, allowing a client to renew its access token without logging in again.
 | No
 | `30d`
 
 | `connector.auth.security.jwt.refresh-token.cleanup-cron`
-| Cron expression controlling when expired refresh tokens are purged from
-the database.
-| Yes
-| By default, set to **`0 0 3 * * *`** (daily at 03:00)
+| Spring cron expression (six fields, starting with seconds) controlling when expired refresh tokens are purged from the database.
+| No
+| `+0 0 3 * * *+` (daily at 03:00)
 
 | `connector.admin.username`
-| Username of the built-in admin account.
+| Username of the built-in admin account, created at startup if it does not exist.
 | No
 | `admin`
 
 | `connector.admin.password`
-| Password for the built-in admin account.
+| Initial password of the built-in admin account. The user must change it at first login.
 | No
 | `${ADMIN_PASSWORD}`
 
 | `connector.admin.enabled`
 | Set to `false` to disable the built-in admin account.
 | Yes
-| By default, set to **`true`**
+| By default, set to `true`
 
 | `connector.admin.email`
 | Email address associated with the built-in admin account.
@@ -63,15 +69,14 @@ the database.
 | `admin@example.com`
 |===
 
-NOTE: Expired refresh tokens accumulate in the database over time.
-The cleanup cron runs at 03:00 by default.
+NOTE: Expired refresh tokens accumulate in the database until the cleanup job removes them.
 
-.Configuration example (7.x)
+.Configuration example
 [source,properties]
 ----
 # JWT session management
 connector.auth.security.jwt.secret=${JWT_SECRET_KEY}
-connector.auth.security.jwt.expiration=60m
+connector.auth.security.jwt.expiration=15m
 connector.auth.security.jwt.issuer=connector.ecodex.eu
 connector.auth.security.jwt.refresh-token.expiration=30d
 connector.auth.security.jwt.refresh-token.cleanup-cron=0 0 3 * * *

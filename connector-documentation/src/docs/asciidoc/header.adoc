@@ -1,7 +1,7 @@
 ifndef::header[]
 :header: header
 :toc: left
-:toc-title: Table of Content
+:toc-title: Table of Contents
 :toclevels: 4
 :sectnums:
 endif::header[]

@@ -11,8 +11,7 @@ endif::distributiondir[]
 
 == Prerequisites
 
-=== Docker Engine and Docker Compose
-The Connector runs as a Docker container, so Docker Engine and Docker Compose must be installed on the host machine.
+In addition to the common <<prerequisites>>, this option requires Docker Engine **24 or later** and Docker Compose **2.x or later** on the host.
 
 To verify your installation:
 [source,bash]
@@ -20,36 +19,50 @@ To verify your installation:
 docker --version
 docker compose version
 ----
-Supported versions: Docker Engine **24 or later**, Docker Compose **2.x or later**.
 
-=== Connector NG Image
-The Connector NG is distributed as a Docker image hosted on the e-CODEX repository. You must have access to the repository and pull the image before running the stack.
+=== Connector image
 
-* The Snapshot version of the connector is available at: link:https://scm.ecodex.eu/artifactory/ecodex-docker-snapshots/connector-ng/edge[https://scm.ecodex.eu/artifactory/ecodex-docker-snapshots/connector-ng/edge]
-* The Production version of the connector is available at: link:https://scm.ecodex.eu/artifactory/docker/connector-ng/latest[https://scm.ecodex.eu/artifactory/docker/connector-ng/latest]
+The Connector is distributed as a Docker image hosted in the e-CODEX registry (`scm.ecodex.eu`).
+You need an account with read access to the registry; log in before pulling:
 
-=== Database
-The Connector NG uses a relational database to store message state and processing history. An empty schema and a dedicated database user must be created before the first start — the Connector NG creates its own tables automatically.
+[source,bash]
+----
+docker login scm.ecodex.eu
+----
 
-Supported DBMS:
-* MySQL 8 or higher
-* MariaDB 10.6 or higher
+[cols="1,3", options="header"]
+|===
+| Channel | Image
 
-=== Message Broker — Apache ActiveMQ Classic
-The Connector NG exchanges messages with the Gateway through a JMS message broker. Apache ActiveMQ Classic **6.x** must be installed, running, and reachable on its TCP port (default: 61616).
+| Release
+| `scm.ecodex.eu/docker/connector-ng:<version>` (for example `{project-version}` once released, or `latest`)
 
-=== File Storage — S3-Compatible
-Message attachments are stored in an S3-compatible object store. A dedicated bucket must be created and credentials provided to the Connector NG. **MinIO** or any enterprise S3 compatible storage solution is supported.
+| Snapshot (built from the `develop` branch)
+| `scm.ecodex.eu/ecodex-docker-snapshots/connector-ng:edge`
+|===
 
-=== e-CODEX Gateway
-The Connector NG acts as a bridge between your backend and an e-CODEX Gateway. The Gateway must be installed, configured, and network-reachable before the Connector is started.
+Alternatively, build the image from the source repository with `docker build -t connector-ng:local .` (the build runs Gradle inside the container and needs internet access).
+
+=== Image layout
+
+[cols="1,3", options="header"]
+|===
+| Path in the container | Content
+
+| `/app/bin/connector-ng.jar` | Application
+| `/app/config/` | Configuration (`application.properties`, `log4j2.xml`, `banner.txt`, sample keystores). Mount your own configuration here.
+| `/app/data/` | Runtime data: JTA transaction log (`data/jtalog`) and DSS trusted list cache (`data/tlcache`). Mount a persistent volume here.
+| `/app/temp/` | Temporary directory for uploads (`TEMP_DIR_LOCATION`).
+|===
+
+The container runs as the unprivileged user `connector` (UID/GID `1000`) and listens on port `30000`.
+Mounted directories must be readable (and, for `data` and `temp`, writable) by that user.
 
 == Steps
 
-=== Step 1 — Pull the Connector Image
-Pull the Connector image from the e-CODEX repository:
+=== Step 1 — Pull the Connector image
 
-.Latest release image
+.Release image
 [source,bash]
 ----
 docker pull scm.ecodex.eu/docker/connector-ng:latest
@@ -58,25 +71,21 @@ docker pull scm.ecodex.eu/docker/connector-ng:latest
 .Snapshot image
 [source,bash]
 ----
-docker pull scm.ecodex.eu/artifactory/ecodex-docker-snapshots/connector-ng:edge
+docker pull scm.ecodex.eu/ecodex-docker-snapshots/connector-ng:edge
 ----
 
-To verify the image is available locally:
+To verify that the image is available locally:
 [source,bash]
 ----
-docker images | grep connector
+docker images | grep connector-ng
 ----
 
-=== Step 2 — Configure the Environment
+=== Step 2 — Configure the environment
 
-[TIP]
-====
-For more information about these variables, check the link:../configuration/index.adoc[configuration page,window=_self].
-====
+Create a file named `connector.env` in your working directory.
+It provides the values of the environment variables referenced by the sample `application.properties` (see the environment variables table in the platform chapter of the configuration guide).
 
-Create a file named `.env` in your working directory. This file provides the Connector with the connection details for each external service.
-
-..env
+.connector.env
 [source,properties]
 ----
 # Database
@@ -86,9 +95,10 @@ DB_URL=jdbc:mysql://<db-host>:<db-port>/connector
 DB_DRIVER_CLASSNAME=com.mysql.cj.jdbc.MysqlXADataSource
 DB_DIALECT=org.hibernate.dialect.MySQLDialect
 
-# JWT authentication
+# JWT authentication (at least 32 random bytes, e.g. `openssl rand -base64 32`)
 JWT_SECRET_KEY=<jwt_secret_key>
-ADMIN_PASSWORD=<admin_password>
+# Overrides connector.admin.password through relaxed binding
+CONNECTOR_ADMIN_PASSWORD=<admin_password>
 
 # File storage (S3 / MinIO)
 S3_ACCESS_KEY=<access_key>
@@ -100,55 +110,85 @@ S3_ENDPOINT=http://<s3-host>:<s3-port>
 # Temporary files
 TEMP_DIR_LOCATION=/app/temp
 
-# Message broker (ActiveMQ)
+# Message broker (ActiveMQ Classic)
 BROKER_URL=tcp://<activemq-host>:61616
 BROKER_USER=<broker_user>
 BROKER_PASSWORD=<broker_password>
 ----
 
-=== Step 3 — Set up the Certificates
-The Connector communicates with both the Gateway and the backend using mutual TLS. Create a `config/keystores/` folder and place the following files inside:
+IMPORTANT: Host names in this file are resolved from *inside* the container.
+`localhost` refers to the container itself, not to the Docker host. Use the service name (Docker Compose), the host name or the IP address of the target service.
 
-* `connector-keystore.jks` — connector private keys keystore
-* `connector-truststore.jks` — connector trusted certificates
-* `backend-keystore.jks` — backend private key keystore
-* `backend-truststore.jks` — trusted certificates of the backend
+=== Step 3 — Prepare the configuration directory
 
-NOTE: Feel free to name these files as you want.
+Create a local `config/` directory with the following content:
 
-Then create `config/application.properties` to reference the keystores and their passwords:
+----
+config/
+├── application.properties
+├── log4j2.xml
+├── banner.txt
+├── keystores/
+│   ├── connector-keystore.jks
+│   ├── connector-truststore.jks
+│   ├── backend-keystore.jks
+│   └── backend-truststore.jks
+└── pmode/
+    └── pmode-blue.xml
+----
 
-.config/application.properties Sample
+* Start from the sample files of the distribution package (`config/` folder), or copy them from the image: `docker run --rm --entrypoint cat scm.ecodex.eu/docker/connector-ng:latest /app/config/log4j2.xml > config/log4j2.xml`.
+* Replace the sample keystores with your own key material (see <<certificates>>). File names are free; they are referenced in `application.properties`.
+* Place the P-Mode file exported from your gateway in `config/pmode/`, or remove the `+connector.business-domains.defaults[0].pmode.*+` properties and upload the P-Mode after startup through the administration UI or API.
+
+WARNING: If `pmode.file` points to a file that does not exist, the Connector aborts the startup.
+
+Then edit `config/application.properties`. The sample below is the one shipped with the distribution:
+
+.config/application.properties sample
 [source,properties]
 ----
 include::{distributiondir}/src/main/resources/config/application.properties[]
 ----
 
-=== Step 4 — Run the Containerized Connector
-Run the Docker container by mounting your local configurations directory to the application container:
+TIP: For the meaning of every property, see the configuration guide. Pay particular attention to `spring.jpa.hibernate.ddl-auto` (see <<database-configuration>>) and to the items of the <<security-checklist,security checklist>>.
+
+=== Step 4 — Run the containerized Connector
+
+Run the container, mounting the configuration directory and a persistent data volume:
 
 [source,bash]
 ----
 docker run -d \
   --name connector-ng \
-  --env-file docker.env \
+  --env-file connector.env \
   -p 30000:30000 \
-  -v ./config:/app/config \
+  -v "$(pwd)/config:/app/config:ro" \
+  -v connector-data:/app/data \
   scm.ecodex.eu/docker/connector-ng:latest
 ----
 
-To watch the live log output stream:
+To follow the log output:
 [source,bash]
 ----
 docker logs -f connector-ng
 ----
 
-=== Step 5 — Verify Runtime Status
+TIP: For a local evaluation environment (Connector, gateway, database, ActiveMQ and MinIO), use the `docker-compose.yml` file at the root of the source repository, as described in its `README.md`.
+
+=== Step 5 — Verify the runtime status
 
 Once running, the following endpoints are available:
+
 [cols="2,3", options="header"]
 |===
 | Endpoint | URL
 | Root URL | `http://localhost:30000`
+| Health | `http://localhost:30000/actuator/health`
+| Application info | `http://localhost:30000/actuator/info`
 | Swagger UI | `http://localhost:30000/swagger-ui/index.html`
+| SOAP backend API (WSDL) | `http://localhost:30000/services/backend?wsdl`
 |===
+
+The health endpoint must report `"status":"UP"`.
+Log in to the administration API with the admin account configured in `+connector.admin.*+`; you will be asked to change the password at first login.

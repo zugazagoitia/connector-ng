@@ -4,20 +4,27 @@ endif::header[]
 
 = Gateway JMS Broker Configuration
 
-By default, the Domibus Gateway embeds an Apache ActiveMQ broker and uses the provided internal broker configuration for JMS messaging. In this new version of the connector, the Domibus Gateway and the connector are configured to use a shared external JMS broker instead of the embedded one. Consequently, the Domibus Gateway must be explicitly configured with the connection parameters of the external broker( URL, credentials, and related JMS settings) to establish connectivity to the shared messaging infrastructure
+By default, the Domibus gateway embeds an Apache ActiveMQ broker for JMS messaging.
+With connector 7.x, the gateway and the connector share an *external* ActiveMQ Classic broker instead.
+Consequently, the gateway must be configured with the connection parameters of the external broker (URL, credentials and related JMS settings).
+
+NOTE: This chapter describes properties of the *gateway* (Domibus), not of the connector.
+They are set in the gateway's `domibus.properties` file (for a multitenant gateway, in the domain-specific properties file), not in the connector's `application.properties`.
+The connector side is configured with `+spring.activemq.*+` (see the platform configuration chapter).
+An example is available in the source repository under `docker/gateway/config/conf/domibus/domibus.properties`.
 
 == Basic configuration
-Configuration is provided via `application.properties` under the `activeMQ.*` prefix.
+Configuration is provided via the gateway's `domibus.properties` under the `+activeMQ.*+` prefix.
 
-.Gateway Queue Configuration Properties
-[cols="35,40,10,15"]
+.Gateway JMS Broker Configuration Properties
+[cols="35,40,10,15", options="header"]
 |===
 | Property | Description | Optional | Example
 
 | `activeMQ.broker.host`
-| Hostname (or container/service name) of the ActiveMQ broker the connector/Domibus connects to.
+| Host name (or container/service name) of the external ActiveMQ broker. Host name only, without a scheme: it is used to build the `tcp://` and JMX URLs below.
 | No
-| `https://external-active-mq-endpoint`
+| `activemq.example.org`
 
 | `activeMQ.brokerName`
 | Logical name of the JMS broker. Multiple comma-separated names can be defined for a broker network; the count must match the number of JMX service URLs in `activeMQ.JMXURL`. ActiveMQ recommends broker names be unique across the network.
@@ -25,7 +32,7 @@ Configuration is provided via `application.properties` under the `activeMQ.*` pr
 | `activemq-domibus`
 
 | `activeMQ.embedded.configurationFile`
-| Path to the embedded ActiveMQ broker's configuration file (XML). Only used when running an *embedded* broker; should be removed/left empty when connecting to an *external* broker, as is the case here (value is empty, host points to a separate `blue-activemq` service).
+| Path to the embedded ActiveMQ broker's configuration file (XML). Only used when running an *embedded* broker; leave it empty when connecting to an *external* broker.
 | Yes
 | By default, set to `file:///${domibus.config.location}/internal/activemq.xml`
 
@@ -37,12 +44,12 @@ Configuration is provided via `application.properties` under the `activeMQ.*` pr
 | `activeMQ.connectorPort`
 | Port the JMX connector listens on for management connections to the broker.
 | No
-| Set By default to: `1099`
+| By default, set to `1099`
 
 | `activeMQ.transportConnector.uri`
 | Connection URI clients use to connect to the broker over TCP for actual message traffic (as opposed to the JMX management port above).
 | No
-| `tcp://${activeMQ.broker.host}:port`
+| `tcp://${activeMQ.broker.host}:61616`
 
 | `activeMQ.username`
 | Username used to authenticate to the ActiveMQ broker.
@@ -65,7 +72,7 @@ Configuration is provided via `application.properties` under the `activeMQ.*` pr
 [source,properties]
 ----
 #The host of the JMS broker
-activeMQ.broker.host=http://blue-activemq
+activeMQ.broker.host=activemq
 
 #The name of the JMS broker; one or more names can be defined, comma-separated (must match the number of JMX service URLs,
 #as defined in activeMQ.JMXURL)
@@ -87,10 +94,10 @@ activeMQ.connectorPort=1099
 activeMQ.transportConnector.uri=tcp://${activeMQ.broker.host}:61616
 
 #The username that is allowed to connect to the ActiveMQ broker
-activeMQ.username=admin
+activeMQ.username=<broker_user>
 
-#THe password of the username defined in the activeMQ.username property
-activeMQ.password=admin
+#The password of the username defined in the activeMQ.username property
+activeMQ.password=<broker_password>
 
 #The persistence enabled flag
 activeMQ.persistent=true

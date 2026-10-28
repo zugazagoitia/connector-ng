@@ -4,32 +4,44 @@ endif::header[]
 
 = e-CODEX Connector Configuration
 
-include::{basepath}/configuration/business-domain-configuration.adoc[leveloffset=+1]
+All settings described in this guide are Spring Boot properties, read from `config/application.properties` (or from environment variables using Spring Boot's relaxed binding).
+A complete, commented sample is shipped in the distribution package and in the container image.
 
-include::{basepath}/configuration/message-processing-configuration.adoc[leveloffset=+1]
+In the property tables, *Optional* = _Yes_ means the property has a built-in default (shown in the *Example* column as "By default, ...") or is not needed for a minimal setup.
 
-include::{basepath}/configuration/dss-configuration.adoc[leveloffset=+1]
-
-include::{basepath}/configuration/container-configuration.adoc[leveloffset=+1]
-
-include::{basepath}/configuration/business-document-configuration.adoc[leveloffset=+1]
-
-include::{basepath}/configuration/evidence-configuration.adoc[leveloffset=+1]
+// Infrastructure the connector depends on
+include::{basepath}/configuration/platform-configuration.adoc[leveloffset=+1]
 
 include::{basepath}/configuration/s3-configuration.adoc[leveloffset=+1]
+
+include::{basepath}/configuration/user.adoc[leveloffset=+1]
+
+// Exchange set-up
+include::{basepath}/configuration/business-domain-configuration.adoc[leveloffset=+1]
 
 include::{basepath}/configuration/link-partner-configuration.adoc[leveloffset=+1]
 
 include::{basepath}/configuration/backend-routing-configuration.adoc[leveloffset=+1]
 
-include::{basepath}/configuration/c2ctests.adoc[leveloffset=+1]
+include::{basepath}/configuration/message-processing-configuration.adoc[leveloffset=+1]
 
-include::{basepath}/configuration/user.adoc[leveloffset=+1]
+// Security material and validation
+include::{basepath}/configuration/evidence-configuration.adoc[leveloffset=+1]
 
+include::{basepath}/configuration/container-configuration.adoc[leveloffset=+1]
+
+include::{basepath}/configuration/business-document-configuration.adoc[leveloffset=+1]
+
+include::{basepath}/configuration/dss-configuration.adoc[leveloffset=+1]
+
+// Messaging
 include::{basepath}/configuration/connector-queue-configuration.adoc[leveloffset=+1]
 
 include::{basepath}/configuration/gateway-queue-configuration.adoc[leveloffset=+1]
 
 include::{basepath}/configuration/gateway-configuration.adoc[leveloffset=+1]
+
+// Testing and migration
+include::{basepath}/configuration/c2ctests.adoc[leveloffset=+1]
 
 include::{basepath}/configuration/migrate-from-6-to-7.adoc[leveloffset=+1]

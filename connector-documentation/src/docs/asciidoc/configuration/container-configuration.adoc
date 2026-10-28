@@ -2,23 +2,24 @@ ifndef::header[]
 include::{basepath}/header.adoc[]
 endif::header[]
 
-= Container configuration
+= Container Configuration
 
 This configuration defines the cryptographic settings used by the connector security library for:
 
 * Token generation (PDF and XML)
-* ASIC-S container signing
+* ASiC-S container signing
+* ASiC-S container validation (inbound messages)
 
 == Basic configuration
-Configuration is provided via `application.properties` under the `connector.container.*` prefix.
+Configuration is provided via `application.properties` under the `+connector.container.*+` prefix.
 
 .Container Configuration Properties
-[cols="35,40,10,15"]
+[cols="35,40,10,15", options="header"]
 |===
-| Property | Description| Optional | Example
+| Property | Description | Optional | Example
 
 | `connector.container.signature.keystore.path`
-| Path to the Java KeyStore holding the private key/certificate used to SIGN containers
+| Path to the keystore holding the private key/certificate used to sign containers and tokens
 | No
 | `file:./config/keystores/connector-keystore.jks`
 
@@ -28,12 +29,12 @@ Configuration is provided via `application.properties` under the `connector.cont
 | `*(secret)*`
 
 | `connector.container.signature.keystore.type`
-| Keystore format. JKS is the legacy Java format; PKCS12 is also supported
-| No
+| Keystore format: `JKS` (legacy Java format) or `PKCS12`.
+| Yes
 | By default, set to `JKS`
 
 | `connector.container.signature.private-key.alias`
-|Alias identifying which key entry inside the keystore to use for signing
+| Alias identifying which key entry inside the keystore to use for signing
 | No
 | `connector_blue`
 
@@ -42,7 +43,40 @@ Configuration is provided via `application.properties` under the `connector.cont
 | No
 | `*(secret)*`
 
+| `connector.container.signature.validation.constraints-xml`
+| ETSI TS 119 102 / DSS validation policy used when validating inbound ASiC-S containers.
+| Yes
+| By default, set to `classpath:/102853/constraint.xml`
+
+| `connector.container.signature.validation.truststore.path` / `.password` / `.type`
+| Truststore used to validate the signature of inbound containers.
+| Yes
+| `file:./config/keystores/connector-truststore.jks`
+
+| `connector.container.signature.validation.truststore-enabled`
+| Whether the truststore above is used as a trust anchor.
+| Yes
+| By default, set to `true`
+
+| `connector.container.signature.validation.trusted-list-source`
+| Name of a trusted list source declared under `connector.dss.trust-list-sources.<name>` (see <<dss-trust-list-sources>>). When set, certificates are also trusted if they chain to a service listed in that trusted list.
+| Yes
+| `eu`
+
+| `connector.container.signature.validation.ignore-store-enabled`
+| Whether the certificates of the ignore store below are excluded from the validation.
+| Yes
+| By default, set to `false`
+
+| `connector.container.signature.validation.ignore-store.path` / `.password` / `.type`
+| Keystore holding certificates to ignore during validation.
+| Yes
+| `file:./config/keystores/ignore-store.jks`
+
 |===
+
+NOTE: The signature algorithm (RSA) and the digest algorithm (SHA-256) are fixed in the current version and cannot be changed through properties.
+OCSP, CRL and AIA checks are always enabled during certificate validation.
 
 .Configuration Example
 [source,properties]
@@ -52,4 +86,5 @@ connector.container.signature.keystore.password=12345
 connector.container.signature.keystore.type=JKS
 connector.container.signature.private-key.alias=connector_blue
 connector.container.signature.private-key.password=12345
+connector.container.signature.validation.constraints-xml=classpath:/102853/constraint.xml
 ----

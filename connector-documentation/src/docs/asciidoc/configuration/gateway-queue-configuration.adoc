@@ -6,12 +6,7 @@ endif::header[]
 
 This configuration defines the messaging queues used for communication between the connector and the external gateway infrastructure.
 
-These queues are commonly used in JMS-based integrations with gateway platforms such as:
-
-* Domibus
-* AS4 gateways
-* ebMS messaging systems
-* JMS transport middleware
+They correspond to the queues of the Domibus *default JMS plugin*, which must be installed on the gateway (see `+plugins/lib/domibus-default-jms-plugin-*.jar+` and `plugins/config/jms-plugin.properties`).
 
 The gateway queues handle:
 
@@ -20,29 +15,32 @@ The gateway queues handle:
 * Inbound message reception
 
 == Basic configuration
-Configuration is provided via `application.properties` under the `connector.queues.*` prefix.
+Configuration is provided via `application.properties` under the `+connector.queues.*+` prefix.
 
 .Gateway Queue Configuration Properties
-[cols="35,40,10,15"]
+[cols="35,40,10,15", options="header"]
 |===
-| Property | Description| Optional | Example
+| Property | Description | Optional | Value
 
 | `connector.queues.gateway-submission-queue`
 | JMS queue used to submit outbound messages into the Domibus gateway for transmission over AS4. Maps to Domibus's standard backend "in" queue.
-| Yes
-| By default, set to `domibus.backend.jms.inQueue`
+| No
+| `domibus.backend.jms.inQueue`
 
 | `connector.queues.gateway-submission-reply-queue`
 | JMS queue on which the connector receives submission acknowledgements/replies from the gateway (e.g., confirmation that a submitted message was accepted or rejected by Domibus). Maps to Domibus's standard backend "reply" queue.
-| Yes
-| By default, set to `domibus.backend.jms.replyQueue`
+| No
+| `domibus.backend.jms.replyQueue`
 
 | `connector.queues.gateway-reception-queue`
 | JMS queue on which the connector receives inbound messages delivered by the gateway after they arrive over AS4 from a remote party. Maps to Domibus's standard backend "out" queue.
-| Yes
-| By default, set to `domibus.backend.jms.outQueue`
+| No
+| `domibus.backend.jms.outQueue`
 
 |===
+
+IMPORTANT: The names must match the queue names configured in the gateway's `jms-plugin.properties`.
+All three properties must be present. In the current version `gateway-submission-queue` cannot be renamed (messages are always submitted to `domibus.backend.jms.inQueue`), and the administration API reports the default name of `gateway-submission-reply-queue` even when it is overridden.
 
 .Configuration Example
 [source,properties]
