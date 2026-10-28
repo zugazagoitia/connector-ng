@@ -31,7 +31,7 @@ Configuration is provided via `application.properties` under the `+connector.mes
 | `connector.message-processing.auto-trigger-delivery-evidences`
 | Whether the connector automatically generates a `DELIVERY` evidence once an inbound message has been delivered to (pushed to, or downloaded by) the backend. When disabled, the backend must trigger the delivery evidence itself.
 | Yes
-| `true/false`. By default, set to *false* when the property is absent; the sample configuration sets *true*.
+| `true/false`. By default, set to *false* when the property is absent; the template sets *true*.
 
 | `connector.message-processing.ebms-id-generator-enabled`
 | Whether the connector auto-generates ebMS message IDs itself rather than relying on IDs supplied by the backend.
@@ -41,17 +41,17 @@ Configuration is provided via `application.properties` under the `+connector.mes
 | `connector.message-processing.ebms-id-suffix`
 | Domain suffix appended when generating ebMS message IDs (formatted as `<uuid>@<suffix>`, similar to an e-mail Message-ID). Only takes effect when the generator above is enabled.
 | Yes
-| `connector.ecodex.eu`
+| `connector.<your-organisation>.example`
 
 | `connector.message-processing.identifier-suffix`
 | Domain suffix used when generating connector message identifiers.
 | Yes
-| `connector.ecodex.eu`
+| `connector.<your-organisation>.example`
 
 | `connector.message-processing.transport-id-suffix`
 | Domain suffix used for transport step identifiers.
 | Yes
-| `connector.ecodex.eu`
+| `connector.<your-organisation>.example`
 
 | `connector.message-processing.outbound-message-verification-mode`
 | How strictly outbound messages (backend → gateway) are verified against the processing mode before being sent.
@@ -73,10 +73,10 @@ For verification mode:
 
 NOTE: In the current implementation *RELAXED* performs more checks than *STRICT* (party verification). This is expected to be revisited; check the release notes before relying on it.
 
-WARNING: Earlier versions of this guide and of the sample configuration used `outbound-verification-mode` and `inbound-verification-mode`.
+WARNING: Earlier versions of this guide and of the template used `outbound-verification-mode` and `inbound-verification-mode`.
 These names are not bound by the connector and are silently ignored; use the names above.
 
-The three suffix properties default to `connector.ecodex.eu`. Set them to a domain you control so that generated identifiers can be traced to your deployment.
+The three suffix properties default to `connector.ecodex.eu`, which is also the value of the template. Replace it with a domain name of your organisation, so that generated identifiers are unique across connectors and traceable to your deployment.
 
 .Configuration Example
 [source,properties]
@@ -84,9 +84,9 @@ The three suffix properties default to `connector.ecodex.eu`. Set them to a doma
 connector.message-processing.send-generated-evidences-to-backend=true
 connector.message-processing.auto-trigger-delivery-evidences=true
 connector.message-processing.ebms-id-generator-enabled=true
-connector.message-processing.ebms-id-suffix=connector.ecodex.eu
-connector.message-processing.identifier-suffix=connector.ecodex.eu
-connector.message-processing.transport-id-suffix=connector.ecodex.eu
+connector.message-processing.ebms-id-suffix=connector.<your-organisation>.example
+connector.message-processing.identifier-suffix=connector.<your-organisation>.example
+connector.message-processing.transport-id-suffix=connector.<your-organisation>.example
 connector.message-processing.outbound-message-verification-mode=STRICT
 connector.message-processing.inbound-message-verification-mode=RELAXED
 ----

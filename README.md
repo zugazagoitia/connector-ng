@@ -106,9 +106,12 @@ Copy the sample configuration of the distribution into the directory mounted by 
 cp -r connector-distribution/src/main/resources/config/. docker/connector/config/
 ```
 
-Then edit `docker/connector/config/application.properties` to match your environment:
+`application.properties` is a template: its values are placeholders and test values (test backend `backend_alice` / `cn=alice`, sample keystores, `pmode-blue.xml`).
+For a local evaluation you only need the adjustments below; for any other use, replace every value as described in the chapter "Preparing application.properties" of the configuration guide.
 
-- the sample declares a P-Mode file `./config/pmode/pmode-blue.xml`: place your gateway P-Mode there, or remove the `connector.business-domains.defaults[0].pmode.*` lines and upload it later from the administration portal — the connector does not start if the file is missing;
+Edit `docker/connector/config/application.properties`:
+
+- the template declares a P-Mode file `./config/pmode/pmode-blue.xml`: place your gateway P-Mode there, or remove the `connector.business-domains.defaults[0].pmode.*` lines and upload it later from the administration portal — the connector does not start if the file is missing;
 - create the `attachments` bucket in MinIO (console at `http://localhost:9001`) before the first message is sent.
 
 > [!WARNING]
@@ -124,7 +127,7 @@ Once the containers are running, you can access:
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
-| Connector REST API | `http://localhost:30000` | `admin` / `123456` (sample configuration, to be changed at first login) |
+| Connector REST API | `http://localhost:30000` | values of `connector.admin.*` (template: `admin` / `123456`, to be changed at first login) |
 | Connector Swagger UI | `http://localhost:30000/swagger-ui/index.html` | |
 | Connector health | `http://localhost:30000/actuator/health` | |
 | Connector database (MySQL) | `localhost:30006` | `connector` / `connector` |

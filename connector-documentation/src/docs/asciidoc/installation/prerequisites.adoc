@@ -53,8 +53,8 @@ The following ports are used by default. Adapt firewall rules accordingly.
 | Service | Default port | Purpose
 
 | Connector HTTP (REST API, SOAP API, Swagger UI, Actuator)
-| `30000`
-| Set with `server.port`. Expose it only through a TLS-terminating reverse proxy (see <<https-transport-security>>).
+| `server.port` (`30000` in the template and the image)
+| Expose it only through a TLS-terminating reverse proxy (see <<https-transport-security>>).
 
 | ActiveMQ OpenWire
 | `61616`
@@ -74,7 +74,7 @@ The Connector also needs outbound HTTP(S) access (directly or through the proxy 
 [[certificates]]
 == Certificates and key material
 
-Prepare the following key material before the installation.
+Prepare the following key material before the installation (see <<certificates-setup>> for the procedure).
 File names are free; the paths are referenced in `application.properties`.
 
 [cols="2,4", options="header"]
@@ -85,7 +85,7 @@ File names are free; the paths are referenced in `application.properties`.
 | Private key used to sign REM evidences (`+connector.evidences.signature.*+`) and ASiC-S containers (`+connector.container.signature.*+`).
 
 | `connector-truststore.jks`
-| Trusted certificates used to validate business document signatures (`+connector.business-document.signature.validation.truststore.*+`).
+| CA certificates of the national signers, used to validate business document signatures (`+connector.business-document.signature.validation.truststore.*+`).
 
 | `backend-keystore.jks`
 | Private key used for WS-Security signing/decryption on the SOAP backend link (`+connector.link.backend[n].link-config.properties.endpoint.keystore.*+`).
@@ -94,11 +94,16 @@ File names are free; the paths are referenced in `application.properties`.
 | Certificates of the backend clients, used for WS-Security signature verification and encryption (`+connector.link.backend[n].link-config.properties.endpoint.truststore.*+`).
 
 | P-Mode truststore
-| Certificates of the gateways declared in the processing mode (`connector.business-domains.defaults[n].pmode.truststore`).
+| Certificates of the parties declared in the processing mode, including the container signing certificates of the partner connectors; used to validate inbound containers (`connector.business-domains.defaults[n].pmode.truststore`).
 |===
 
-WARNING: The distribution package and the container image contain *sample* keystores protected with the password `12345`.
-They are intended for local testing only and must be replaced with your own key material before connecting to any partner.
+WARNING: The distribution package and the container image contain the keystores of the e-CODEX test environment, protected with the password `12345`.
+They only allow the template to start and must be replaced with your own key material before connecting to any partner.
+
+== Configuration file
+
+The `config/application.properties` file shipped with the Connector is a template with placeholder and test values.
+Plan the values listed in the chapter "Preparing application.properties" of the configuration guide before installing: your organisation data, gateway party, backend applications and their certificates, routing rules and secrets.
 
 == Installation order
 
@@ -107,6 +112,6 @@ The recommended order is:
 . Provision the database schema and user (see <<database-configuration>>).
 . Provision the ActiveMQ broker and the S3 bucket.
 . Install and configure the gateway against the shared broker.
-. Prepare key material and the P-Mode file.
+. Prepare key material, the P-Mode file and the values of `application.properties`.
 . Install the Connector (<<docker-install,containerized>> or <<jar-install,JAR>>).
 . Apply the <<security-guidance,security checklist>> before connecting any partner.

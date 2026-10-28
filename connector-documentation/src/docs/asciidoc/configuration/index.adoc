@@ -5,9 +5,14 @@ endif::header[]
 = e-CODEX Connector Configuration
 
 All settings described in this guide are Spring Boot properties, read from `config/application.properties` (or from environment variables using Spring Boot's relaxed binding).
-A complete, commented sample is shipped in the distribution package and in the container image.
+The file shipped in the distribution package and in the container image is a *template* that must be edited: start with <<configuration-template>>.
 
-In the property tables, *Optional* = _Yes_ means the property has a built-in default (shown in the *Example* column as "By default, ...") or is not needed for a minimal setup.
+In the property tables:
+
+* *Optional* = _Yes_ means the property has a built-in default (written "By default, ...") or is not needed for a minimal set-up. _No_ means it must be set.
+* *Example* values are illustrations. Values written `<like-this>` are placeholders for your own data. Values of the shipped template are mentioned only to tell you that they must be replaced.
+
+include::{basepath}/configuration/configuration-template.adoc[leveloffset=+1]
 
 // Infrastructure the connector depends on
 include::{basepath}/configuration/platform-configuration.adoc[leveloffset=+1]

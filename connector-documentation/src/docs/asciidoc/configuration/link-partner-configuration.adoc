@@ -2,167 +2,219 @@ ifndef::header[]
 include::{basepath}/header.adoc[]
 endif::header[]
 
+[[link-partner-configuration]]
 = Backend Link Partner Configuration
 
-This configuration defines backend link partners and secure transport settings used by the connector platform.
+This configuration declares the backend applications (also called connector clients) allowed to exchange messages with the Connector over the SOAP backend API, and the WS-Security key material used to protect that exchange.
 
-Link partner configurations specify:
-
-* Backend connection definitions
-* Keystore and truststore configuration
-* Encryption settings
-* Message delivery modes
-* Certificate validation rules
-* Push endpoint destinations
-
-A *link* bundles the shared transport and security configuration of a SOAP endpoint; the *link partners* declared under it are the individual backend applications using that endpoint, each with its own routing identity and certificate.
+A *link* bundles the shared transport and security configuration of the SOAP endpoint; the *link partners* declared under it are the individual backend applications using that endpoint, each with its own name, certificate and delivery mode.
 
 NOTE: Only SOAP backend links are supported in this version. Gateway links are no longer configured here: the gateway is reached through the shared JMS broker (see the gateway queue configuration chapter).
 
-== Basic configuration
-Configuration is provided via `application.properties` under the `+connector.link.backend[n].*+` prefix. Several links can be declared by incrementing the index `n`, and several partners per link with `link-partners[m]`.
+IMPORTANT: The template declares one test partner (`backend_alice`, certificate `cn=alice`, push address `http://localhost:port/...`) and refers to the sample backend keystores. Replace the whole block with your own partners and key material.
 
-.Link Partners Configuration Properties
+== Key material
+
+The SOAP messages between the backend applications and the Connector are signed and encrypted (WS-Security, policy `classpath:/policy/backend.policy.xml`).
+This requires:
+
+* one key pair for the Connector (in the *backend keystore*); its certificate is given to every backend application;
+* one key pair per backend application (kept by the backend); its certificate is imported into the Connector *backend truststore*.
+
+The Connector identifies the calling backend by the subject DN of the certificate that signed the request, and encrypts the messages for a backend with the certificate stored under that partner's `encryption-alias`.
+
+See the certificates chapter of the installation guide for step-by-step key generation and exchange.
+
+== Properties
+
+Configuration is provided via `application.properties` under the `+connector.link.backend[n].*+` prefix.
+Several links can be declared by incrementing the index `n`, and several partners per link with `link-partners[m]`.
+
+.Link configuration properties
 [cols="35,40,10,15", options="header"]
 |===
 | Property | Description | Optional | Example
 
-| `connector.link.backend[0].link-config.name`
-| Internal name for this backend link, used to reference the link's shared configuration.
+| `connector.link.backend[n].link-config.name`
+| Free label of the link, used in logs and the administration portal.
 | No
-| `default_backend`
+| `<national-backends>`
 
-| `connector.link.backend[0].link-config.properties.endpoint.keystore.path`
-| Path to the keystore holding the connector's signing/TLS identity for communicating with backend partners on this link.
+| `connector.link.backend[n].link-config.properties.endpoint.keystore.path`
+| Keystore holding the Connector's private key for this link (signing responses, decrypting requests).
 | No
-| `file:./config/keystores/backend-keystore.jks`
+| `file:./config/keystores/<backend-keystore>.p12`
 
-| `connector.link.backend[0].link-config.properties.endpoint.keystore.password`
-| Password protecting the endpoint keystore.
+| `connector.link.backend[n].link-config.properties.endpoint.keystore.password`
+| Password of that keystore.
 | No
-| `*secret*`
+| `${BACKEND_KEYSTORE_PASSWORD}`
 
-| `connector.link.backend[0].link-config.properties.endpoint.keystore.type`
+| `connector.link.backend[n].link-config.properties.endpoint.keystore.type`
 | Keystore format: `JKS` or `PKCS12`.
 | Yes
-| By default, set to `JKS`
+| By default, `JKS`
 
-| `connector.link.backend[0].link-config.properties.endpoint.private-key.alias`
-| Alias of the key entry within the keystore used for signing on this link.
+| `connector.link.backend[n].link-config.properties.endpoint.private-key.alias`
+| Alias of the Connector key entry in the keystore. Its certificate is the one you give to the backend applications. List the aliases with `keytool -list -keystore <file>`.
 | No
-| `connector_blue`
+| `<connector-backend-key>`
 
-| `connector.link.backend[0].link-config.properties.endpoint.private-key.password`
-| Password protecting the specific private key entry.
+| `connector.link.backend[n].link-config.properties.endpoint.private-key.password`
+| Password of that key entry.
 | No
-| `*secret*`
+| `${BACKEND_KEY_PASSWORD}`
 
-| `connector.link.backend[0].link-config.properties.endpoint.truststore.path`
-| Path to the truststore used to verify/encrypt messages to and from backend partners on this link.
+| `connector.link.backend[n].link-config.properties.endpoint.truststore.path`
+| Truststore holding the certificates of all backend applications of this link.
 | No
-| `file:./config/keystores/backend-truststore.jks`
+| `file:./config/keystores/<backend-truststore>.p12`
 
-| `connector.link.backend[0].link-config.properties.endpoint.truststore.password`
-| Password protecting the truststore.
+| `connector.link.backend[n].link-config.properties.endpoint.truststore.password`
+| Password of the truststore.
 | No
-| `*secret*`
+| `${BACKEND_TRUSTSTORE_PASSWORD}`
 
-| `connector.link.backend[0].link-config.properties.endpoint.truststore.type`
+| `connector.link.backend[n].link-config.properties.endpoint.truststore.type`
 | Truststore format: `JKS` or `PKCS12`.
 | Yes
-| By default, set to `JKS`
+| By default, `JKS`
 
-| `connector.link.backend[0].link-config.properties.endpoint.encrypt-alias`
-| Default certificate alias (from the truststore) used to encrypt outgoing messages, unless overridden per-partner.
+| `connector.link.backend[n].link-config.properties.endpoint.encrypt-alias`
+| Default truststore alias used to encrypt outgoing messages when a partner does not define `encryption-alias`.
 | No
-| `alice`
+| `<backend-cert-alias>`
 
-| `connector.link.backend[0].link-config.properties.logging-enabled`
-| Enables logging of the full SOAP traffic on this link, including business payloads. Disable in production.
+| `connector.link.backend[n].link-config.properties.logging-enabled`
+| Logs the full SOAP traffic of this link, including business payloads. The template enables it; disable it in production.
 | Yes
-| `true/false`. By default, set to *false*
+| By default, `false`
 
-| `connector.link.backend[0].link-config.properties.ws-policy`
-| WS-SecurityPolicy XML file applied to this link's web service endpoint(s), defining the security requirements (e.g., signing, encryption, token types) enforced for messages exchanged over it.
+| `connector.link.backend[n].link-config.properties.ws-policy`
+| WS-SecurityPolicy applied to the endpoint. Change it only if agreed with all backend applications.
 | Yes
-| By default, set to `classpath:/policy/backend.policy.xml`
+| By default, `classpath:/policy/backend.policy.xml`
 
-| `connector.link.backend[0].link-config.properties.publish-address`
-| Path, relative to `cxf.path` (`/services`), under which the connector exposes its own SOAP endpoint for this backend link (i.e., where backends call in to submit or pull messages, as opposed to `push-address`, where the connector calls out to).
-Only `/backend` (resulting in `/services/backend`) is currently excluded from JWT authentication; other values are rejected with HTTP 401.
+| `connector.link.backend[n].link-config.properties.publish-address`
+| Path, relative to `cxf.path` (`/services`), of the SOAP endpoint called by the backends. *Keep `/backend`*: only `/services/backend` is excluded from JWT authentication in this version; other values are rejected with HTTP 401.
 | Yes
-| By default, set to `/backend`
+| By default, `/backend`
+|===
 
-| `connector.link.backend[0].link-partners[0].name`
-| Logical name of the partner. Referenced by `+connector.routing.backend-rules[*].link-name+` and `connector.routing.default-backend-name`, and stored with each message as its backend name.
+.Link partner properties
+[cols="35,40,10,15", options="header"]
+|===
+| Property | Description | Optional | Example
+
+| `connector.link.backend[n].link-partners[m].name`
+| Unique name of the backend application. Referenced by the routing rules and stored with each message as its backend name. Choose a stable name: changing it later breaks the association of existing conversations.
 | No
-| `backend_alice`
+| `<backend-courts>`
 
-| `connector.link.backend[0].link-partners[0].description`
-| Free-text human-readable description of the partner.
+| `connector.link.backend[n].link-partners[m].description`
+| Free-text description.
 | Yes
-| `backend alice`
+| `<Case management system of ...>`
 
-| `connector.link.backend[0].link-partners[0].enabled`
-| Whether this partner is active and able to send/receive messages.
+| `connector.link.backend[n].link-partners[m].enabled`
+| Whether the partner may exchange messages.
 | No
-| `true/false`
+| `true`
 
-| `connector.link.backend[0].link-partners[0].sender-mode`
-| Delivery mode for inbound messages to this partner:
-
-* `push` — the connector actively delivers messages to the partner's `push-address`;
-* `pull` (or `passive`) — the connector marks messages as ready for download and the backend retrieves them through the API.
+| `connector.link.backend[n].link-partners[m].sender-mode`
+| How inbound messages are delivered to this partner (see <<backend-delivery-modes>>): `push`, or `pull` / `passive`.
 | No
 | `push`
 
-| `connector.link.backend[0].link-partners[0].properties.encryption-alias`
-| Certificate alias (within the link-level truststore) used to encrypt messages specifically for this partner.
-| Yes
-| `alice`
-
-| `connector.link.backend[0].link-partners[0].properties.certificate-dn`
-| Expected certificate Distinguished Name of this partner, matched case-insensitively against the certificate used to sign the WS-Security header, used to identify the calling backend.
+| `connector.link.backend[n].link-partners[m].properties.certificate-dn`
+| Subject DN of the certificate the backend uses to sign its SOAP requests. See <<certificate-dn-format>>.
 | No
-| `cn=alice`
+| `cn=backend-courts,o=ministry of justice,c=xx`
 
-| `connector.link.backend[0].link-partners[0].properties.push-address`
-| Endpoint URL of the backend's delivery web service (`DomibusConnectorBackendDeliveryWebService`), to which the connector pushes messages for this partner.
+| `connector.link.backend[n].link-partners[m].properties.encryption-alias`
+| Alias of the partner's certificate in the link truststore, used to encrypt messages sent to this partner.
+| Yes
+| `<backend-courts-cert>`
+
+| `connector.link.backend[n].link-partners[m].properties.push-address`
+| URL of the partner's `DomibusConnectorBackendDeliveryWebService` endpoint, provided by the backend team. Required for `push`, ignored otherwise.
 | Required for `push`
-| `https://backend.example.org/services/domibusConnectorDeliveryWebservice`
-
+| `https://<backend-host>/services/domibusConnectorDeliveryWebservice`
 |===
+
+[[certificate-dn-format]]
+=== Format of `certificate-dn`
+
+The Connector lower-cases the DN of the calling certificate and compares it *character by character* with the configured value. Therefore:
+
+* write the complete subject DN, *entirely in lower case*;
+* use the RFC 2253 form produced by Java, with attributes in the same order as in the certificate and no space after the commas, for example `cn=backend-courts,o=ministry of justice,c=xx`;
+* the template comment "lower- or UPPERcase is ignored" is wrong: a value containing upper-case letters never matches.
+
+TIP: Print the subject of the backend certificate with `keytool -printcert -file <backend>.cer` (or `openssl x509 -noout -subject -nameopt RFC2253 -in <backend>.pem`) and lower-case it.
+With `DEBUG` logging enabled for `eu.ecodex.connector`, the Connector logs the DN it received (`retrieving backend client: ...`).
+
+[[backend-delivery-modes]]
+=== Delivery modes
+
+The backend always *submits* messages to the Connector with the `submitMessage` operation of `DomibusConnectorBackendWebService`.
+For messages received from the gateway, two delivery modes exist:
+
+[cols="1,4", options="header"]
+|===
+| `sender-mode` | Behaviour
+
+| `push`
+| The Connector calls the backend's `DomibusConnectorBackendDeliveryWebService` (`deliverMessage`) at `push-address`. The backend must expose that web service.
+
+| `pull` or `passive`
+| The Connector keeps the message in status *ready for download*. The backend retrieves it with `DomibusConnectorBackendWebService`:
+
+. `listPendingMessageIds` – lists the transport identifiers of the messages waiting for this backend;
+. `getMessageById` – downloads one message;
+. `acknowledgeMessage` – confirms (or reports the failure of) the processing of that message.
+
+`requestMessages` (download of all pending messages in one call, without acknowledgement) is also available for backends written for older connector versions. The acknowledged mechanism is recommended.
+|===
+
+A backend can only list, download and acknowledge its own messages.
+
+== Example
+
+The following example declares two backend applications on one link, one in push mode and one in pull mode.
+All values in angle brackets must be replaced.
 
 .Configuration Example
 [source,properties]
 ----
-connector.link.backend[0].link-config.name=default_backend
-
+connector.link.backend[0].link-config.name=<national-backends>
 connector.link.backend[0].link-config.properties.publish-address=/backend
-connector.link.backend[0].link-config.properties.ws-policy=classpath:/policy/backend.policy.xml
-connector.link.backend[0].link-config.properties.logging-enabled=true
+connector.link.backend[0].link-config.properties.logging-enabled=false
 
-connector.link.backend[0].link-config.properties.endpoint.keystore.path=file:./config/keystores/backend-keystore.jks
-connector.link.backend[0].link-config.properties.endpoint.keystore.password=12345
-connector.link.backend[0].link-config.properties.endpoint.private-key.alias=connector_blue
-connector.link.backend[0].link-config.properties.endpoint.private-key.password=12345
+connector.link.backend[0].link-config.properties.endpoint.keystore.path=file:./config/keystores/<backend-keystore>.p12
+connector.link.backend[0].link-config.properties.endpoint.keystore.type=PKCS12
+connector.link.backend[0].link-config.properties.endpoint.keystore.password=${BACKEND_KEYSTORE_PASSWORD}
+connector.link.backend[0].link-config.properties.endpoint.private-key.alias=<connector-backend-key>
+connector.link.backend[0].link-config.properties.endpoint.private-key.password=${BACKEND_KEY_PASSWORD}
+connector.link.backend[0].link-config.properties.endpoint.truststore.path=file:./config/keystores/<backend-truststore>.p12
+connector.link.backend[0].link-config.properties.endpoint.truststore.type=PKCS12
+connector.link.backend[0].link-config.properties.endpoint.truststore.password=${BACKEND_TRUSTSTORE_PASSWORD}
+connector.link.backend[0].link-config.properties.endpoint.encrypt-alias=<backend-courts-cert>
 
-connector.link.backend[0].link-config.properties.endpoint.truststore.path=file:./config/keystores/backend-truststore.jks
-connector.link.backend[0].link-config.properties.endpoint.truststore.password=12345
-connector.link.backend[0].link-config.properties.endpoint.encrypt-alias=alice
-
-# link partner 0 specific configuration
-# this name must match any message routing config
-# this name will also be stored into the DB to the specific message as its backend name
-connector.link.backend[0].link-partners[0].name=backend_alice
-connector.link.backend[0].link-partners[0].description=backend alice
+# backend application delivered by push
+connector.link.backend[0].link-partners[0].name=<backend-courts>
 connector.link.backend[0].link-partners[0].enabled=true
-# this link partner operates in push mode (the connector pushes new messages to the backend)
 connector.link.backend[0].link-partners[0].sender-mode=push
-# this must match the certificate alias within the trust-store
-connector.link.backend[0].link-partners[0].properties.encryption-alias=alice
-# this must match the certificate DN (lower- or UPPERcase is ignored)
-connector.link.backend[0].link-partners[0].properties.certificate-dn=cn=alice
-connector.link.backend[0].link-partners[0].properties.push-address=https://backend.example.org/services/domibusConnectorDeliveryWebservice
+connector.link.backend[0].link-partners[0].properties.certificate-dn=<cn=backend-courts,o=...,c=xx  (lower case)>
+connector.link.backend[0].link-partners[0].properties.encryption-alias=<backend-courts-cert>
+connector.link.backend[0].link-partners[0].properties.push-address=https://<courts-host>/services/domibusConnectorDeliveryWebservice
 
+# backend application pulling its messages
+connector.link.backend[0].link-partners[1].name=<backend-registry>
+connector.link.backend[0].link-partners[1].enabled=true
+connector.link.backend[0].link-partners[1].sender-mode=pull
+connector.link.backend[0].link-partners[1].properties.certificate-dn=<cn=backend-registry,o=...,c=xx  (lower case)>
+connector.link.backend[0].link-partners[1].properties.encryption-alias=<backend-registry-cert>
 ----
+
+WARNING: The REST backend API does not identify the caller yet and always uses the partner whose `certificate-dn` is `cn=alice` (see the security guidance of the installation guide). Use the SOAP backend API for production backends.

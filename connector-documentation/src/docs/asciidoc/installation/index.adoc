@@ -10,6 +10,8 @@ include::{basepath}/installation/prerequisites.adoc[leveloffset=+1]
 
 include::{basepath}/installation/database.adoc[leveloffset=+1]
 
+include::{basepath}/installation/certificates.adoc[leveloffset=+1]
+
 include::{basepath}/installation/standalone-containerized.adoc[leveloffset=+1]
 
 include::{basepath}/installation/standalone-jar.adoc[leveloffset=+1]
@@ -17,3 +19,5 @@ include::{basepath}/installation/standalone-jar.adoc[leveloffset=+1]
 include::{basepath}/installation/mtls.adoc[leveloffset=+1]
 
 include::{basepath}/installation/security-guidance.adoc[leveloffset=+1]
+
+include::{basepath}/installation/troubleshooting.adoc[leveloffset=+1]

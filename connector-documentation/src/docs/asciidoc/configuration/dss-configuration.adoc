@@ -128,7 +128,7 @@ Configuration is provided via `application.properties` under the `+connector.dss
 | `file:./config/keystores/lotl-signers.jks`
 
 | `connector.dss.trust-list-sources.*key*.tl-sources[*index*].tl-url`
-| URL of a trusted list fetched directly (not via a LOTL), e.g. a national TL.
+| URL of a trusted list fetched directly (not via a LOTL), e.g. a national TL. The example is the Austrian TL.
 | Yes
 | `https://www.signatur.rtr.at/currenttl.xml`
 
@@ -160,7 +160,7 @@ Configuration is provided via `application.properties` under the `+connector.dss
 | Property | Description | Optional | Example
 
 | `connector.dss.time-stamp-servers.*key*.url`
-| URL of the RFC 3161 Time-Stamping Authority (TSA).
+| URL of the RFC 3161 Time-Stamping Authority (TSA). The `dss.nowina.lu/pki-factory` URLs of the examples and of the template are public *test* TSAs of the DSS project; never use them in production.
 | Yes
 | `http://dss.nowina.lu/pki-factory/tsa/good-tsa`
 

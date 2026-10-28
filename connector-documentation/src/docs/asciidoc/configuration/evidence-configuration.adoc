@@ -21,7 +21,7 @@ Properties under `+connector.evidences.signature.*+` control how REM evidence XM
 | `connector.evidences.signature.keystore.path`
 | Classpath or filesystem path to the keystore holding the signing private key.
 | No
-| `file:./config/keystores/connector-keystore.jks`
+| `file:./config/keystores/<connector-signing-keystore>.p12`
 
 | `connector.evidences.signature.keystore.password`
 | Password for the keystore.
@@ -36,7 +36,7 @@ Properties under `+connector.evidences.signature.*+` control how REM evidence XM
 | `connector.evidences.signature.private-key.alias`
 | Alias of the private key within the keystore. The corresponding public key must be shared with communication partners.
 | No
-| `connector_blue`
+| `<signing-key-alias>`
 
 | `connector.evidences.signature.private-key.password`
 | Password to unlock the private key entry.
@@ -51,16 +51,19 @@ The `connector.evidences.signature.digest-algorithm` and `connector.evidences.si
 .Configuration Example
 [source,properties]
 ----
-connector.evidences.signature.keystore.path=file:./config/keystores/connector-keystore.jks
-connector.evidences.signature.keystore.password=12345
-connector.evidences.signature.keystore.type=JKS
-connector.evidences.signature.private-key.alias=connector_blue
-connector.evidences.signature.private-key.password=12345
+connector.evidences.signature.keystore.path=file:./config/keystores/<connector-signing-keystore>.p12
+connector.evidences.signature.keystore.password=${SIGNING_KEYSTORE_PASSWORD}
+connector.evidences.signature.keystore.type=PKCS12
+connector.evidences.signature.private-key.alias=<signing-key-alias>
+connector.evidences.signature.private-key.password=${SIGNING_KEY_PASSWORD}
 ----
 
 == Issuer configuration
 
-Properties under `+connector.evidences.issuer.*+` are embedded into generated REM evidences.
+Properties under `+connector.evidences.issuer.*+` are embedded into every generated REM evidence and identify your organisation as the evidence issuer.
+
+IMPORTANT: The template values (`Unknown Street 1`, `Connector NG`, `mailto:gateway@connector.example`, ...) are placeholders. Set the legal address of your organisation, and the party name and endpoint address of *your* gateway exactly as declared in your P-Mode.
+In connector 6.x, the AS4 party information was taken from the uploaded P-Mode; in 7.x it must be configured here.
 
 .Issuer Configuration Properties
 [cols="35,40,10,15", options="header"]
@@ -70,45 +73,45 @@ Properties under `+connector.evidences.issuer.*+` are embedded into generated RE
 | `connector.evidences.issuer.postal-address.street`
 | Issuer street address (mandatory for evidence building).
 | No
-| `Unknown Street 1`
+| `<street and number>`
 
 | `connector.evidences.issuer.postal-address.locality`
 | Issuer locality.
 | No
-| `Unknown`
+| `<city>`
 
 | `connector.evidences.issuer.postal-address.zip-code`
 | Issuer postal code.
 | No
-| `0000`
+| `<postal code>`
 
 | `connector.evidences.issuer.postal-address.country`
 | Issuer country (two-letter ISO 3166-1 code recommended).
 | No
-| `EU`
+| `<XX>`
 
 | `connector.evidences.issuer.as4-party.name`
 | AS4 party name of the gateway through which evidences are sent (home party in PMode configuration).
 | No
-| `Connector Gateway`
+| `<gateway party id>`
 
 | `connector.evidences.issuer.as4-party.endpoint-address`
 | AS4 endpoint address of the evidence issuer gateway.
 | No
-| `mailto:gateway@connector.example`
+| `<gateway endpoint>`
 
 |===
 
 .Configuration Example
 [source,properties]
 ----
-connector.evidences.issuer.as4-party.name=Connector NG
-connector.evidences.issuer.as4-party.endpoint-address=mailto:gateway@connector.example
+connector.evidences.issuer.as4-party.name=<gateway party id from the P-Mode>
+connector.evidences.issuer.as4-party.endpoint-address=<gateway endpoint from the P-Mode>
 
-connector.evidences.issuer.postal-address.street=Unknown Street 1
-connector.evidences.issuer.postal-address.locality=Unknown
-connector.evidences.issuer.postal-address.zip-code=0000
-connector.evidences.issuer.postal-address.country=EU
+connector.evidences.issuer.postal-address.street=<street and number>
+connector.evidences.issuer.postal-address.locality=<city>
+connector.evidences.issuer.postal-address.zip-code=<postal code>
+connector.evidences.issuer.postal-address.country=<XX>
 ----
 
 == Message processing options
@@ -126,7 +129,7 @@ connector.evidences.issuer.postal-address.country=EU
 | `connector.message-processing.auto-trigger-delivery-evidences`
 | When `true`, a `DELIVERY` evidence is generated automatically once the message has been delivered to the backend.
 | Yes
-| `false` (the sample configuration sets `true`)
+| `false` (the template sets `true`)
 
 |===
 

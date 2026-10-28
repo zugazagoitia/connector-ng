@@ -16,7 +16,7 @@ Work through the <<security-checklist,checklist>> for every non-development envi
 | # | Action | Related setting
 
 | 1
-| Replace the sample keystores and truststores shipped with the distribution and the image (password `12345`) with your own key material, and use strong, unique passwords.
+| Replace the test keystores and truststores shipped with the distribution and the image (password `12345`) with your own key material, and use strong, unique passwords.
 | `+connector.*.keystore.*+`, `+connector.*.truststore.*+`, `+connector.*.private-key.*+`
 
 | 2
@@ -24,11 +24,11 @@ Work through the <<security-checklist,checklist>> for every non-development envi
 | `connector.auth.security.jwt.secret` (`JWT_SECRET_KEY`)
 
 | 3
-| Change the built-in admin password and e-mail. The sample configuration ships with `admin` / `123456`. The user is asked to change the password at first login, but the configured value is the one used until then.
+| Set your own admin user name, password and e-mail before the first start. The template contains `admin` / `123456` / `admin@test.com`. The user is asked to change the password at first login, but the configured value is the one used until then.
 | `+connector.admin.*+`
 
 | 4
-| Place a TLS-terminating reverse proxy in front of the Connector and do not expose port `30000` directly (see <<https-transport-security>>).
+| Place a TLS-terminating reverse proxy in front of the Connector and do not expose the Connector port (`server.port`) directly (see <<https-transport-security>>).
 | `server.address`, `server.port`
 
 | 5
@@ -72,12 +72,14 @@ Work through the <<security-checklist,checklist>> for every non-development envi
 | all `+*password*+`, `*secret*`, `+*-key+` properties
 |===
 
-== Default credentials and sample material
+== Test credentials and material in the template
 
-The following values are shipped as samples and must never be used in production:
+The configuration template and the files shipped with it contain test values that must never be used in production:
 
-* Sample keystores in `config/keystores/` (password `12345`, key alias `connector_blue`).
-* Admin account `admin` / `123456` in the sample `application.properties`.
+* Test keystores in `config/keystores/` (password `12345`, key alias `connector_blue`, test partner certificate `alice`).
+* Admin account `admin` / `123456` in the template `application.properties`.
+* Test link partner `backend_alice` with `certificate-dn=cn=alice` and push address `http://localhost:port/...`.
+* All other placeholders listed in the chapter "Preparing application.properties" of the configuration guide.
 * Docker Compose development stack credentials (`connector`/`connector` for the database, `admin`/`admin123` for MinIO, `admin`/`admin` for ActiveMQ, unauthenticated JMX on the broker).
 
 == Authentication and authorization
@@ -119,10 +121,18 @@ The following endpoints are reachable *without* a JWT token in the current versi
 
 [IMPORTANT]
 ====
-The REST backend API does not yet identify the calling backend from a client certificate:
-messages submitted through `/api/v1/messages/outbound` and `/api/v1/messages/evidence-trigger` are currently attributed to the link partner whose `certificate-dn` is `cn=alice`.
-Until native mTLS support is available, do not expose the REST backend API to untrusted networks; restrict it at the reverse proxy (for example with mTLS and an allow-list) or use the SOAP backend API instead.
+The REST backend API does not yet identify the calling backend: the value `cn=alice` is *hard-coded* in the Connector (it is not read from `application.properties`).
+Every message submitted through `/api/v1/messages/outbound` or `/api/v1/messages/evidence-trigger` is attributed to the link partner whose `certificate-dn` is `cn=alice`, whoever calls the endpoint.
+
+* With the template configuration, this is the test partner `backend_alice`.
+* Once you replace the test partners with your own (as required), no partner matches and the REST backend API rejects submissions ("No link partner found for certificateDn: cn=alice").
+* Do *not* declare a link partner with `certificate-dn=cn=alice` to work around this: anybody able to reach the endpoint could then submit messages on behalf of that backend.
+
+Use the SOAP backend API, which identifies each backend from the certificate signing its request, until the REST API authenticates its clients.
 ====
+
+
+NOTE: The SOAP backend API identifies the caller by comparing the lower-cased subject DN of the signing certificate with `certificate-dn`. Configure that value entirely in lower case (see the link partner chapter), otherwise the backend is rejected.
 
 NOTE: Only the SOAP path `/services/backend` is excluded from JWT authentication.
 If you change `connector.link.backend[n].link-config.properties.publish-address` to another value, SOAP calls to that address will be rejected with HTTP 401.

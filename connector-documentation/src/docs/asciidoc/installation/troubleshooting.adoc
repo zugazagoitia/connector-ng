@@ -1,0 +1,70 @@
+ifndef::header[]
+include::{basepath}/header.adoc[]
+endif::header[]
+
+[[troubleshooting]]
+= Troubleshooting
+
+This chapter lists frequent errors after a new installation, most of them caused by values of the configuration template that were not adapted.
+
+== Startup errors
+
+[cols="2,3", options="header"]
+|===
+| Message in the log | Cause and solution
+
+| `Could not resolve placeholder 'DB_URL' in value "${DB_URL}"` (or `BROKER_URL`, `S3_ENDPOINT`, `JWT_SECRET_KEY`, ...)
+| The template reads this value from an environment variable that is not defined. Define the variable, or replace the placeholder in `application.properties`.
+
+| `Could not resolve placeholder 'connector.queues....'`
+| A queue property was removed. All `+connector.queues.*+` properties of the template must be present.
+
+| `No processing mode file found at [file:./config/pmode/pmode-blue.xml]` (or `No truststore found at ...`)
+| `+connector.business-domains.defaults[n].pmode.*+` still points to the template file, which is not shipped. Set the path of your P-Mode and truststore, or remove these properties and upload the P-Mode after startup.
+
+| `Cannot determine the keystore type of [...]`
+| The P-Mode truststore file name must end with `.jks`, `.keystore`, `.p12` or `.pfx`.
+
+| `Binding to target ... failed` / `Property: connector.... Reason: must not be blank`
+| A mandatory property is missing or empty (for example the evidence issuer address, or the business document country). Set it as described in the configuration guide.
+
+| Keystore errors (`Keystore was tampered with, or password was incorrect`, alias not found)
+| Path, password, type or alias of a keystore does not match the file. List the content with `keytool -list -v -keystore <file>`.
+
+| Database errors at startup (`XAER_RMERR`, `XA_RECOVER`, prepared transactions)
+| The database user lacks the XA privileges, or PostgreSQL `max_prepared_transactions` is `0` (see the database chapter).
+|===
+
+== Runtime errors
+
+[cols="2,3", options="header"]
+|===
+| Symptom | Cause and solution
+
+| SOAP calls of a backend are rejected with HTTP 401
+| `publish-address` is not `/backend` (only `/services/backend` is public), or the call is sent to the wrong path.
+
+| `No link partner found for certificateDn: ...` on SOAP calls
+| No link partner has a `certificate-dn` equal to the lower-cased subject DN of the backend signing certificate. Write the full DN in lower case (see the link partner chapter).
+
+| `No link partner found for certificateDn: cn=alice` on REST calls
+| The REST backend API is not usable with your own partners in this version (see the security guidance). Use the SOAP backend API.
+
+| `Link partner ... not found` when delivering an inbound message
+| The routing (or `connector.routing.default-backend-name`, which defaults to `default_backend`) points to a name that is not a declared link partner.
+
+| `Message toParty [...] is not configured on the connector! Check the P-Mode ...`
+| The party, service or action of the message is not in the P-Mode of `default_business_domain`. Check the P-Mode, and the verification modes in the message processing configuration.
+
+| `Processing mode for business domain identifier [...] not found`
+| The business domain has no P-Mode, or its identifier is not `default_business_domain` (see the business domain configuration chapter).
+
+| Inbound messages all go to the default backend
+| `connector.routing.enabled` is not set to `true` (the default is `false`).
+|===
+
+== Getting more information
+
+* Increase the log level of `eu.ecodex.connector` to `DEBUG` in `config/log4j2.xml` (temporarily: debug logs can contain personal data).
+* Check the health endpoint `/actuator/health` (database, broker and disk status).
+* The administration portal shows the effective configuration (`/api/v1/admin/configurations`), which helps to detect properties that were not taken into account.

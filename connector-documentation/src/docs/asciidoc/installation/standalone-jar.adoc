@@ -56,7 +56,7 @@ connector-distribution/
 │   │   ├── application.properties
 │   │   ├── log4j2.xml
 │   │   ├── banner.txt
-│   │   └── keystores/           (sample keystores, password 12345)
+│   │   └── keystores/           (test keystores, to be replaced)
 │   │       ├── connector-keystore.jks
 │   │       ├── connector-truststore.jks
 │   │       ├── backend-keystore.jks
@@ -74,17 +74,17 @@ The application creates `./data/` at runtime for the JTA transaction log and the
 
 === Step 3 — Configure the application
 
-Edit `standalone/config/application.properties`.
+Edit `standalone/config/application.properties`. The shipped file is a template: its values are placeholders and test values. Replace them by following the checklist in the chapter "Preparing application.properties" of the configuration guide. In particular:
 
-* The sample configuration reads several values from environment variables (`DB_URL`, `BROKER_URL`, `S3_ENDPOINT`, `JWT_SECRET_KEY`, ...).
+* The template reads several values from environment variables (`DB_URL`, `BROKER_URL`, `S3_ENDPOINT`, `JWT_SECRET_KEY`, ...).
 Either export them in the shell or service definition that starts the Connector, or replace the placeholders with literal values.
 The complete list is given in the platform chapter of the configuration guide.
-* Replace the sample keystores with your own key material (see <<certificates>>).
+* Replace the test keystores with your own key material (see <<certificates-setup>>).
 * Create `config/pmode/` and place your P-Mode file there, or remove the `+connector.business-domains.defaults[0].pmode.*+` properties and upload the P-Mode after startup.
 If `pmode.file` points to a file that does not exist, the Connector aborts the startup.
 * Create the temporary upload directory referenced by `TEMP_DIR_LOCATION`.
 
-.config/application.properties sample
+.config/application.properties template (all values must be reviewed)
 [source,properties]
 ----
 include::{distributiondir}/src/main/resources/config/application.properties[]
@@ -112,7 +112,7 @@ TIP: For production, run the Connector as a service (for example a `systemd` uni
 
 === Step 5 — Verify the runtime status
 
-Once running, the following endpoints are available:
+Once running, the following endpoints are available (replace `30000` with your `server.port` if you changed it):
 
 [cols="2,3", options="header"]
 |===

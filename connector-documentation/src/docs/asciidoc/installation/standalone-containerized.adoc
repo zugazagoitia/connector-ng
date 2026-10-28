@@ -50,7 +50,7 @@ Alternatively, build the image from the source repository with `docker build -t 
 | Path in the container | Content
 
 | `/app/bin/connector-ng.jar` | Application
-| `/app/config/` | Configuration (`application.properties`, `log4j2.xml`, `banner.txt`, sample keystores). Mount your own configuration here.
+| `/app/config/` | Configuration (`application.properties`, `log4j2.xml`, `banner.txt`, test keystores). Mount your own configuration here.
 | `/app/data/` | Runtime data: JTA transaction log (`data/jtalog`) and DSS trusted list cache (`data/tlcache`). Mount a persistent volume here.
 | `/app/temp/` | Temporary directory for uploads (`TEMP_DIR_LOCATION`).
 |===
@@ -83,7 +83,7 @@ docker images | grep connector-ng
 === Step 2 — Configure the environment
 
 Create a file named `connector.env` in your working directory.
-It provides the values of the environment variables referenced by the sample `application.properties` (see the environment variables table in the platform chapter of the configuration guide).
+It provides the values of the environment variables referenced by the template `application.properties` (see the environment variables table in the platform chapter of the configuration guide).
 
 .connector.env
 [source,properties]
@@ -134,18 +134,18 @@ config/
 │   ├── backend-keystore.jks
 │   └── backend-truststore.jks
 └── pmode/
-    └── pmode-blue.xml
+    └── <your-pmode>.xml
 ----
 
-* Start from the sample files of the distribution package (`config/` folder), or copy them from the image: `docker run --rm --entrypoint cat scm.ecodex.eu/docker/connector-ng:latest /app/config/log4j2.xml > config/log4j2.xml`.
-* Replace the sample keystores with your own key material (see <<certificates>>). File names are free; they are referenced in `application.properties`.
+* Start from the template files of the distribution package (`config/` folder), or copy them from the image: `docker run --rm --entrypoint cat scm.ecodex.eu/docker/connector-ng:latest /app/config/log4j2.xml > config/log4j2.xml`.
+* Replace the test keystores with your own key material (see <<certificates-setup>>). File names are free; they are referenced in `application.properties`.
 * Place the P-Mode file exported from your gateway in `config/pmode/`, or remove the `+connector.business-domains.defaults[0].pmode.*+` properties and upload the P-Mode after startup through the administration UI or API.
 
 WARNING: If `pmode.file` points to a file that does not exist, the Connector aborts the startup.
 
-Then edit `config/application.properties`. The sample below is the one shipped with the distribution:
+Then edit `config/application.properties`. The file below is the template shipped with the distribution: its values are placeholders and test values (test partner `backend_alice`, sample passwords, `pmode-blue.xml`). Replace them by following the checklist in the chapter "Preparing application.properties" of the configuration guide.
 
-.config/application.properties sample
+.config/application.properties template (all values must be reviewed)
 [source,properties]
 ----
 include::{distributiondir}/src/main/resources/config/application.properties[]
@@ -178,7 +178,7 @@ TIP: For a local evaluation environment (Connector, gateway, database, ActiveMQ 
 
 === Step 5 — Verify the runtime status
 
-Once running, the following endpoints are available:
+Once running, the following endpoints are available (replace `30000` with your `server.port` if you changed it):
 
 [cols="2,3", options="header"]
 |===

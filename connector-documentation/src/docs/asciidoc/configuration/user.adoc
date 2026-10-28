@@ -16,7 +16,7 @@ These properties configure the JWT token lifecycle and the built-in admin accoun
 
 IMPORTANT: Change `connector.admin.password` and `connector.auth.security.jwt.secret`
 before deploying to any non-development environment.
-The values of the sample configuration (`admin` / `123456`) are insecure placeholders.
+The template sets the user name `admin`, the password `123456` and the e-mail `admin@test.com`. These are placeholders: set your own values before the first start, because the account is created with them.
 
 .Admin Authentication Properties
 [cols="35,40,10,15", options="header"]
@@ -31,12 +31,12 @@ The values of the sample configuration (`admin` / `123456`) are insecure placeho
 | `connector.auth.security.jwt.expiration`
 | How long an access token remains valid before it must be refreshed.
 | Yes
-| By default, set to `60m` (the sample configuration uses `15m`)
+| By default, `60m`. Choose a value according to your security policy.
 
 | `connector.auth.security.jwt.issuer`
-| Issuer claim embedded in the JWT.
+| Issuer claim embedded in the JWT. Set a value identifying your installation.
 | Yes
-| By default, set to `connector.ecodex.eu`
+| By default, `connector.ecodex.eu`
 
 | `connector.auth.security.jwt.refresh-token.expiration`
 | How long a refresh token remains valid, allowing a client to renew its access token without logging in again.
@@ -51,7 +51,7 @@ The values of the sample configuration (`admin` / `123456`) are insecure placeho
 | `connector.admin.username`
 | Username of the built-in admin account, created at startup if it does not exist.
 | No
-| `admin`
+| `<admin-user>`
 
 | `connector.admin.password`
 | Initial password of the built-in admin account. The user must change it at first login.
@@ -66,7 +66,7 @@ The values of the sample configuration (`admin` / `123456`) are insecure placeho
 | `connector.admin.email`
 | Email address associated with the built-in admin account.
 | No
-| `admin@example.com`
+| `<admin-mailbox>@<your-organisation>.example`
 |===
 
 NOTE: Expired refresh tokens accumulate in the database until the cleanup job removes them.
@@ -76,14 +76,14 @@ NOTE: Expired refresh tokens accumulate in the database until the cleanup job re
 ----
 # JWT session management
 connector.auth.security.jwt.secret=${JWT_SECRET_KEY}
-connector.auth.security.jwt.expiration=15m
-connector.auth.security.jwt.issuer=connector.ecodex.eu
+connector.auth.security.jwt.expiration=<15m>
+connector.auth.security.jwt.issuer=<connector.your-organisation.example>
 connector.auth.security.jwt.refresh-token.expiration=30d
 connector.auth.security.jwt.refresh-token.cleanup-cron=0 0 3 * * *
 
 # Built-in admin account
-connector.admin.username=admin
+connector.admin.username=<admin-user>
 connector.admin.password=${ADMIN_PASSWORD}
 connector.admin.enabled=true
-connector.admin.email=admin@example.com
+connector.admin.email=<admin-mailbox>@<your-organisation>.example
 ----

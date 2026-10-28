@@ -16,6 +16,8 @@ The backend of an inbound message is resolved in this order:
 
 NOTE: Routing rules currently apply to the default business domain only.
 
+IMPORTANT: The template routes the test service `Test` to the test partner `backend_alice`. Replace the rules and the default backend with your own services and link partner names.
+
 == Basic configuration
 Configuration is provided via `application.properties` under the `+connector.routing.*+` prefix.
 
@@ -25,29 +27,29 @@ Configuration is provided via `application.properties` under the `+connector.rou
 | Property | Description | Optional | Example
 
 | `connector.routing.enabled`
-| Master switch for message routing logic. When `false`, the rules below are ignored and inbound messages are routed to `default-backend-name`.
+| Master switch for message routing logic. When `false`, the rules below are ignored and inbound messages are routed to `default-backend-name`. Connector-to-connector test messages are only intercepted when routing is enabled.
 | Yes
-| `true/false`. By default, set to *false*
+| By default, `false` (in connector 6.x the default was `true`)
 
 | `connector.routing.default-backend-name`
-| Link partner that receives inbound messages when routing is disabled or no rule matches.
-| Yes
-| `backend_alice`. By default, set to `default_backend`
+| Name of the link partner that receives inbound messages when routing is disabled or no rule matches. If omitted, the Connector uses `default_backend`, which only works if a link partner has that name.
+| No (effectively)
+| `<backend-courts>`
 
 | `connector.routing.backend-rules[*index*].link-name`
 | Name of the target link partner (must match `connector.link.backend[n].link-partners[m].name`). Declare at most one rule per link partner: a second rule with the same `link-name` replaces the first one. Combine conditions with `\|(...)` instead.
 | No
-| `backend_alice`
+| `<backend-registry>`
 
 | `connector.routing.backend-rules[*index*].description`
 | Free-text description of the rule.
 | Yes
-| `routing rule for backend_alice`
+| `<Land registry messages>`
 
 | `connector.routing.backend-rules[*index*].match-clause`
 | Expression evaluated against the AS4 properties of the inbound message (see the grammar below). Rules are evaluated in index order; the first matching rule wins.
 | No
-| `equals(ServiceName, 'Test')`
+| `equals(ServiceName, '<service>')`
 
 |===
 
@@ -55,14 +57,18 @@ Configuration is provided via `application.properties` under the `+connector.rou
 [source,properties]
 ----
 connector.routing.enabled=true
-connector.routing.default-backend-name=backend_alice
-connector.routing.backend-rules[0].link-name=backend_alice
-# Will match if the serviceName equals 'Test'
-connector.routing.backend-rules[0].match-clause=equals(ServiceName, 'Test')
-connector.routing.backend-rules[1].link-name=backend_abc
-# Will match if the serviceName equals 'abc' or the serviceType equals 'type2' (case-sensitive!)
-connector.routing.backend-rules[1].match-clause=|(equals(ServiceName, 'abc'),equals(ServiceType, 'type2'))
+# backend receiving everything that no rule matches
+connector.routing.default-backend-name=<backend-courts>
+# messages of one service go to another backend
+connector.routing.backend-rules[0].link-name=<backend-registry>
+connector.routing.backend-rules[0].description=<Land registry messages>
+connector.routing.backend-rules[0].match-clause=equals(ServiceName, '<registry-service>')
+# several conditions for the same backend are combined in ONE rule ('|' = or, '&' = and)
+connector.routing.backend-rules[1].link-name=<backend-insolvency>
+connector.routing.backend-rules[1].match-clause=|(equals(ServiceName, '<service-a>'),startswith(Action, '<prefix>'))
 ----
+
+TIP: Service names, service types and actions are those of your P-Mode. Party identifiers (`FromPartyId`, ...) and `FinalRecipient` can also be used.
 
 .Match clause grammar
 [source]

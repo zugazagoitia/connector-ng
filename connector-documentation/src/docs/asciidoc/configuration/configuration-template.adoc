@@ -1,0 +1,218 @@
+ifndef::header[]
+include::{basepath}/header.adoc[]
+endif::header[]
+
+[[configuration-template]]
+= Preparing application.properties
+
+The Connector is configured with a single file, `config/application.properties`.
+The distribution package and the container image ship a file of that name, but it is a *template*: its values are placeholders and test values (the "blue" test environment, test partners `alice`, sample passwords) that allow the application to start in a laboratory set-up.
+
+IMPORTANT: Never deploy the template unchanged. Every value must be reviewed and, unless stated otherwise in this chapter, replaced with a value that matches your environment, your certificates and your agreements with your backend applications and gateway.
+
+Throughout this guide, the *Example* column of the property tables shows an illustrative value, written as a placeholder (`<...>`) or as `example.org` data where possible.
+*Default* means the value the Connector uses when the property is absent from the file. A value that only appears in the template is not a default.
+
+== How to read the template
+
+Each property of the template falls into one of the following categories:
+
+[cols="1,4", options="header"]
+|===
+| Category | Meaning
+
+| *Replace*
+| Placeholder or test value. Must be replaced with your own value (secrets, key material, identities, partner names, addresses).
+
+| *Environment*
+| Read from an environment variable (`${...}`). Provide the variable, or replace the placeholder with a literal value.
+
+| *Review*
+| Technical setting with a value suitable for a test set-up. Check it against your requirements (security, sizing) and change it if needed.
+
+| *Keep*
+| Must keep the template value in the current version, because the Connector relies on it internally (see <<template-fixed-values>>).
+|===
+
+== Checklist of the template
+
+[cols="2,1,4", options="header"]
+|===
+| Template block / properties | Category | What to set
+
+| `+spring.application.*+`, `spring.banner.location`, `logging.config`
+| Review
+| Application name shown in logs and `/actuator/info`; banner and Log4j2 file locations. Adapt `log4j2.xml` (levels, appenders, retention) to your operations standards.
+
+| `server.port`, `server.address`
+| Review
+| The template sets port `30000`. If the property is removed, Spring Boot falls back to `8080`. The container image exposes `30000`, so keep both consistent. Bind to the interface the reverse proxy uses (see the HTTPS chapter of the installation guide).
+
+| `+spring.datasource.*+`, `spring.jpa.database-platform`
+| Environment
+| `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `DB_DRIVER_CLASSNAME`, `DB_DIALECT` for your database (see <<platform-database>>).
+
+| `spring.jpa.hibernate.ddl-auto`
+| Review
+| The template uses `update` (development only). Use the database scripts and set `none` or `validate` in production.
+
+| `+spring.activemq.*+`
+| Environment / Review
+| `BROKER_URL`, `BROKER_USER`, `BROKER_PASSWORD`. Replace `spring.activemq.packages.trust-all=true` with an explicit `spring.activemq.packages.trusted` list where possible.
+
+| `+spring.jms.*+`, `+spring.jta.*+`, `+spring.servlet.multipart.*+`, `+server.tomcat.*+`
+| Review
+| Concurrency, pool sizes, transaction timeouts and upload limits must match your expected volumes and largest messages. `spring.jta.log-file` must point to persistent storage.
+
+| `+connector.cors.*+`
+| Replace
+| The template allows `http://localhost:3000` (a local administration portal). Set the origin(s) of your administration portal.
+
+| `+springdoc.*+`, `+management.*+`
+| Review
+| Swagger UI and health details are enabled in the template. Disable or restrict them in production.
+
+| `cxf.path`
+| Keep
+| `/services`. See <<template-fixed-values>>.
+
+| `connector.business-domains.defaults[0].identifier`
+| Keep
+| `default_business_domain`. See <<template-fixed-values>>.
+
+| `connector.business-domains.defaults[0].description`, `.enabled`
+| Replace
+| Your own description; `enabled=true` for the domain to accept messages.
+
+| `+connector.business-domains.defaults[0].pmode.*+`
+| Replace
+| Path of the P-Mode file exported from *your* gateway, and the truststore holding the certificates of the gateways and partner connectors declared in it (also used to validate the containers of inbound messages). The template refers to `pmode-blue.xml`, which is not shipped.
+
+| `+connector.queues.*+`
+| Keep
+| All queue properties must be present with the template values (see <<template-fixed-values>>). Only the gateway queue names must match the gateway JMS plugin configuration.
+
+| `+connector.message-processing.*-suffix+`
+| Replace
+| The template uses `connector.ecodex.eu`, a domain you do not control. Use a domain name of your organisation so that generated identifiers are unique and traceable.
+
+| other `+connector.message-processing.*+`
+| Review
+| Evidence forwarding, automatic delivery evidence and P-Mode verification modes (see the message processing chapter).
+
+| `+connector.file.storage.s3.*+`
+| Environment
+| `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_REGION`, `S3_BUCKET`, `S3_ENDPOINT` of your object storage.
+
+| `+connector.evidences.signature.*+`
+| Replace
+| Your evidence signing keystore, its password, the alias of your signing key and its password. The template points to the sample `connector-keystore.jks` (password `12345`, alias `connector_blue`).
+
+| `+connector.evidences.issuer.*+`
+| Replace
+| The legal postal address of your organisation, and the AS4 party name and endpoint address of *your* gateway as declared in the P-Mode. The template values (`Unknown Street 1`, `Connector NG`, `mailto:gateway@connector.example`) are placeholders and end up in every evidence you sign.
+
+| `+connector.dss.*+`
+| Review
+| Cache location (persistent and writable), outbound proxy, trusted list sources required by your use case.
+
+| `+connector.container.signature.*+`
+| Replace
+| Your ASiC-S/token signing keystore, password, key alias and key password (often the same key as for evidences).
+
+| `connector.business-document.service-provider`, `.country`
+| Replace
+| Name of your organisation and its two-letter country code. The template uses `TestProvider` and `BL` (the "blue" test country).
+
+| `connector.business-document.default-advanced-system-type`, `.authentication-validation.identity-provider`
+| Replace
+| The advanced electronic system and identity provider agreed for your use case. The template uses `SIGNATURE_BASED` and `ERV` (an Austrian identity provider used in tests).
+
+| `+connector.business-document.signature.validation.*+`
+| Replace
+| The truststore with the CAs that issue the signatures of your national business documents, and optionally a trusted list source.
+
+| `+connector.link.backend[0].link-config.*+`
+| Replace (`publish-address`: Keep)
+| Your backend WS-Security keystore/truststore, passwords and key alias. `name` is a free label. Set `logging-enabled=false` in production. Keep `publish-address=/backend` (see <<template-fixed-values>>).
+
+| `+connector.link.backend[0].link-partners[*]+`
+| Replace
+| One entry per backend application: its name, the alias of its certificate in the backend truststore, the *exact* DN of that certificate, its delivery mode and its push address. `backend_alice` / `cn=alice` / `http://localhost:port/...` are test values. See the backend link partner chapter.
+
+| `+connector.routing.*+`
+| Replace
+| Rules matching *your* services and backends, and your default backend. The template routes the service `Test` to `backend_alice`.
+
+| `connector.auth.security.jwt.secret`
+| Environment
+| `JWT_SECRET_KEY`: a random value of at least 32 characters.
+
+| `+connector.auth.security.jwt.*+` (expiration, issuer, cron)
+| Review
+| Token lifetimes according to your security policy; an issuer identifying your installation.
+
+| `+connector.admin.*+`
+| Replace
+| Administrator user name, a strong initial password (the template uses `123456`) and a real e-mail address.
+
+| `+connector.c2ctests.*+`
+| Review
+| Commented out in the template, but the feature is *enabled by default*. Disable it unless you run connector-to-connector tests, or align the service and action with your P-Mode.
+|===
+
+[[template-fixed-values]]
+== Values the current version relies on
+
+The following values look configurable but are assumed by the Connector code in this version.
+Changing them breaks message processing.
+
+[cols="2,4", options="header"]
+|===
+| Value | Reason
+
+| Business domain identifier `default_business_domain`
+| Messages received from the gateway and from the SOAP backend API, inbound evidences and the routing rules are always assigned to the business domain `default_business_domain`. The domain that carries this traffic, and its P-Mode, must keep this identifier. Additional business domains can only be addressed by the REST API, which accepts an explicit business domain identifier.
+
+| `cxf.path=/services` and `publish-address=/backend`
+| Only `/services/backend` is excluded from JWT authentication. Any other SOAP address is rejected with HTTP 401.
+
+| `+connector.queues.*+` names
+| The listeners read the names from the properties, but the producers always use the built-in names. All properties must be present and keep the template values. Only `gateway-reception-queue` and `gateway-submission-reply-queue` may be renamed to match the gateway; `gateway-submission-queue` is always `domibus.backend.jms.inQueue`.
+
+| Link partner with `certificate-dn=cn=alice` (REST API only)
+| The REST backend API (`/api/v1/messages/outbound`, `/api/v1/messages/evidence-trigger`) does not authenticate the caller yet: it always looks up the link partner whose `certificate-dn` is `cn=alice`. Once the template partners are replaced (as required), the REST backend API rejects submissions with "No link partner found". Use the SOAP backend API, which identifies the backend from its signing certificate.
+|===
+
+== Values that must match other components
+
+[cols="2,3", options="header"]
+|===
+| Property | Must match
+
+| `+connector.queues.gateway-*+`
+| Queue names of the Domibus default JMS plugin (`jms-plugin.properties`).
+
+| `+connector.evidences.issuer.as4-party.*+`
+| Your gateway party in the P-Mode.
+
+| `+connector.c2ctests.service.*+`, `connector.c2ctests.action`
+| Service and action of the connector test process in the P-Mode, identical on both connectors.
+
+| `connector.link.backend[n].link-partners[m].properties.certificate-dn` and `encryption-alias`
+| The certificate used by the backend application to sign its SOAP messages, and its alias in the backend truststore.
+
+| `connector.link.backend[n].link-config.properties.endpoint.private-key.alias`
+| The key whose certificate was given to the backend applications.
+
+| `+connector.routing.backend-rules[*].link-name+`, `connector.routing.default-backend-name`
+| A `connector.link.backend[n].link-partners[m].name`.
+
+| `+spring.activemq.*+`
+| The broker used by the gateway (`+activeMQ.*+` in `domibus.properties`).
+|===
+
+== Keeping secrets out of the file
+
+All passwords and secrets can be supplied as environment variables instead of being written in the file, either through an explicit placeholder (`connector.admin.password=${ADMIN_PASSWORD}`) or through Spring Boot relaxed binding (an environment variable `CONNECTOR_ADMIN_PASSWORD` overrides `connector.admin.password`).
+Protect the file itself with restrictive file permissions (readable by the Connector user only).

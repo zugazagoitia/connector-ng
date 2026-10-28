@@ -6,15 +6,18 @@ endif::header[]
 
 == Overview
 
-Connector 7.x is a new implementation. Its configuration file keeps the structure of 6.x for most sections, with the following changes:
+Connector 7.x is a new implementation. Its configuration file (now `application.properties` instead of `connector.properties`) keeps the structure of 6.x for most sections, with the following changes:
 
-* *Infrastructure*: the embedded Artemis broker is replaced by an external Apache ActiveMQ Classic broker shared with the gateway; file storage moves to an S3-compatible object store; Java 21 is required.
-* *New sections*: business domains, message processing, REST API authentication (JWT and admin account), CORS, C2C tests.
-* *Renamed sections*: DSS cache and proxy, REM evidences, container, business document validation, backend links.
-* *Removed sections*: gateway link (`connector.link.gateway`), embedded broker (`+spring.artemis.*+`).
+* *Infrastructure*: the embedded Artemis broker is replaced by an external Apache ActiveMQ Classic broker shared with the gateway; the gateway is reached through the Domibus JMS plugin instead of the connector web-service plugin; file storage moves to an S3-compatible object store; Java 21 is required.
+* *Renamed sections*: message processing (`+processing.*+`), C2C tests (`+c2ctests.*+`), initial admin user and P-Mode upload (`+connector.init.*+`), DSS cache and proxy, REM evidences, container, business document validation, backend links.
+* *New sections*: REST API authentication (JWT), CORS.
+* *Removed sections*: gateway link (`connector.link.gateway`), embedded broker (`+spring.artemis.*+`), evidence timeouts, content deletion, filesystem/database storage, UI settings (see <<migration-removed>>).
+* *Changed defaults and behaviour*: routing is disabled by default, the P-Mode verification defaults are swapped, at most one routing rule per backend (see <<migration-behaviour>>).
 * *Property naming*: hyphenated store segments (`key-store`, `trust-store`) become `keystore`, `truststore`; filesystem locations must use the `file:` prefix.
 
-WARNING: Unknown properties are silently ignored by Spring Boot. A property that keeps its 6.x name does not cause an error at startup; it simply has no effect.
+IMPORTANT: As in 6.x, the shipped configuration file is a template with test values. Do not merge it blindly with your 6.x file: start from your 6.x values, map them with the tables below, and fill the new sections as described in the chapter on preparing `application.properties`.
+
+WARNING: Connector 6.x failed at startup on invalid properties (`connector.common.fail-on-invalid-property=true`). Connector 7.x silently ignores unknown properties: a property that keeps its 6.x name does not cause an error at startup; it simply has no effect.
 Review the startup log and the configuration exposed by the administration portal after migrating.
 
 NOTE: This chapter covers the configuration file only. Migration of the 6.x database content is not covered.
@@ -26,8 +29,38 @@ have been normalised to their unhyphenated equivalents (`keystore`, `truststore`
 
 === Business Domain Configuration
 
-NOTE: Business domain configuration is new in 7.x. In 6.x, the connector operated
-with a single implicit domain. You can now define one or more named domains explicitly.
+NOTE: In 6.x, business domains (message lanes) existed but were managed in the database, with the default lane `defaultBusinessDomain`, and the P-Mode could be uploaded at first start with `+connector.init.pmode.*+`.
+In 7.x, the default domain is called `default_business_domain` and is declared, together with its P-Mode, under `+connector.business-domains.defaults[n].*+`.
+Keep the identifier `default_business_domain`: gateway and SOAP backend traffic is always assigned to it in this version.
+
+.Initial P-Mode upload
+|===
+| Old property (6.x) | New property (7.x) | Notes
+
+| `connector.init.pmode.enabled`
+| _(removed)_
+| The P-Mode is registered when `pmode.file` is set.
+
+| `connector.init.pmode.upload[n].p-mode-xml`
+| `connector.business-domains.defaults[n].pmode.file`
+| `file:` prefix required for filesystem paths.
+
+| `connector.init.pmode.upload[n].trust-store.path`
+| `connector.business-domains.defaults[n].pmode.truststore`
+|
+
+| `connector.init.pmode.upload[n].trust-store.password`
+| `connector.business-domains.defaults[n].pmode.truststore-password`
+|
+
+| `connector.init.pmode.upload[n].trust-store.type`
+| _(removed)_
+| The type is derived from the file extension (`.jks`, `.keystore`, `.p12`, `.pfx`).
+
+| `connector.init.pmode.upload[n].business-domain-name`
+| `connector.business-domains.defaults[n].identifier`
+| Use `default_business_domain`.
+|===
 
 IMPORTANT: If none of the properties below are set and no business domain exists yet, the connector
 creates a default domain on startup. Set them explicitly if you need to control
@@ -72,11 +105,11 @@ the domain identifier, description, or P-Mode location.
 [source,properties]
 ----
 connector.business-domains.defaults[0].identifier=default_business_domain
-connector.business-domains.defaults[0].description=default business domain
+connector.business-domains.defaults[0].description=<description>
 connector.business-domains.defaults[0].enabled=true
-connector.business-domains.defaults[0].pmode.file=file:./config/pmode/pmode-blue.xml
-connector.business-domains.defaults[0].pmode.truststore=file:./config/keystores/connector-truststore.jks
-connector.business-domains.defaults[0].pmode.truststore-password=12345
+connector.business-domains.defaults[0].pmode.file=file:./config/pmode/<your-pmode>.xml
+connector.business-domains.defaults[0].pmode.truststore=file:./config/keystores/<pmode-truststore>.jks
+connector.business-domains.defaults[0].pmode.truststore-password=<your value from 6.x>
 ----
 
 TIP: Additional domains can be configured by incrementing the index:
@@ -84,8 +117,36 @@ TIP: Additional domains can be configured by incrementing the index:
 
 === Message Processing Configuration
 
-All properties in this section are *new in 7.x*. There are no equivalent properties
-in 6.x — these behaviours were either hardcoded or not configurable in previous versions.
+In 6.x, these properties existed under the `+processing.*+` prefix. They moved to `+connector.message-processing.*+` in 7.x, and the verification defaults changed.
+
+.Renamed Message Processing Properties
+|===
+| Old property (6.x) | New property (7.x) | Notes
+
+| `processing.send-generated-evidences-to-backend`
+| `connector.message-processing.send-generated-evidences-to-backend`
+| Renamed (default `true` in both).
+
+| `processing.ebms-id-generator-enabled`
+| `connector.message-processing.ebms-id-generator-enabled`
+| Renamed (default `true` in both).
+
+| `processing.ebms-id-suffix`
+| `connector.message-processing.ebms-id-suffix`
+| Renamed. The default changed from `ecodex.eu` to `connector.ecodex.eu`.
+
+| `processing.outgoing-p-mode-verification-mode`
+| `connector.message-processing.outbound-message-verification-mode`
+| Renamed. *Default changed from `RELAXED` to `STRICT`.*
+
+| `processing.incoming-p-mode-verification-mode`
+| `connector.message-processing.inbound-message-verification-mode`
+| Renamed. *Default changed from `STRICT` to `RELAXED`.*
+|===
+
+WARNING: The meaning of the verification modes also changed. In 6.x, `STRICT` required every P-Mode attribute (service and service type, action, party id, party id type and role) and `RELAXED` completed missing attributes from the P-Mode.
+In 7.x, `STRICT` only checks the service and action, while `RELAXED` additionally checks the parties (see the message processing chapter).
+Re-test your message exchange with the chosen modes.
 
 .New Message Processing Properties (7.x)
 |===
@@ -150,9 +211,9 @@ you have confirmed your backend and gateway are compatible with connector-genera
 ----
 connector.message-processing.send-generated-evidences-to-backend=true
 connector.message-processing.ebms-id-generator-enabled=true
-connector.message-processing.ebms-id-suffix=connector.ecodex.eu
-connector.message-processing.identifier-suffix=connector.ecodex.eu
-connector.message-processing.transport-id-suffix=connector.ecodex.eu
+connector.message-processing.ebms-id-suffix=connector.<your-organisation>.example
+connector.message-processing.identifier-suffix=connector.<your-organisation>.example
+connector.message-processing.transport-id-suffix=connector.<your-organisation>.example
 connector.message-processing.outbound-message-verification-mode=STRICT
 connector.message-processing.inbound-message-verification-mode=RELAXED
 ----
@@ -199,8 +260,8 @@ or when targeting a specific regional/VPC endpoint.
 .Configuration example (7.x)
 [source,properties]
 ----
-connector.file.storage.s3.access-key=admin
-connector.file.storage.s3.secret-key=******
+connector.file.storage.s3.access-key=${S3_ACCESS_KEY}
+connector.file.storage.s3.secret-key=${S3_SECRET_KEY}
 connector.file.storage.s3.region=us-east-1
 connector.file.storage.s3.bucket=attachments
 connector.file.storage.s3.endpoint=http://localhost:9000
@@ -347,22 +408,22 @@ in the properties being silently ignored. Ensure all references are updated befo
 ----
 # Keystore
 connector.evidences.signature.keystore.path=file:./config/keystores/connector-keystore.jks
-connector.evidences.signature.keystore.password=12345
+connector.evidences.signature.keystore.password=<your value from 6.x>
 connector.evidences.signature.keystore.type=JKS
 
 # Private key
-connector.evidences.signature.private-key.alias=connector_blue
-connector.evidences.signature.private-key.password=12345
+connector.evidences.signature.private-key.alias=<your key alias from 6.x>
+connector.evidences.signature.private-key.password=<your value from 6.x>
 
 # Issuer identity
-connector.evidences.issuer.as4-party.name=Connector NG
-connector.evidences.issuer.as4-party.endpoint-address=mailto:gateway@connector.example
+connector.evidences.issuer.as4-party.name=<gateway party id from your P-Mode>
+connector.evidences.issuer.as4-party.endpoint-address=<gateway endpoint from your P-Mode>
 
 # Issuer postal address
-connector.evidences.issuer.postal-address.street=Unknown Street 1
-connector.evidences.issuer.postal-address.locality=Unknown
-connector.evidences.issuer.postal-address.zip-code=0000
-connector.evidences.issuer.postal-address.country=EU
+connector.evidences.issuer.postal-address.street=<your value from 6.x>
+connector.evidences.issuer.postal-address.locality=<your value from 6.x>
+connector.evidences.issuer.postal-address.zip-code=<your value from 6.x>
+connector.evidences.issuer.postal-address.country=<your value from 6.x>
 ----
 
 === Container Configuration
@@ -411,12 +472,12 @@ All properties under this prefix must be renamed, or they will be silently ignor
 ----
 # Keystore
 connector.container.signature.keystore.path=file:./config/keystores/connector-keystore.jks
-connector.container.signature.keystore.password=12345
+connector.container.signature.keystore.password=<your value from 6.x>
 connector.container.signature.keystore.type=JKS
 
 # Private key
-connector.container.signature.private-key.alias=connector_blue
-connector.container.signature.private-key.password=12345
+connector.container.signature.private-key.alias=<your key alias from 6.x>
+connector.container.signature.private-key.password=<your value from 6.x>
 
 # Validation
 connector.container.signature.validation.constraints-xml=classpath:/102853/constraint.xml
@@ -475,20 +536,20 @@ All properties under this prefix must be renamed, or they will be silently ignor
 [source,properties]
 ----
 # Identity
-connector.business-document.service-provider=TestProvider
-connector.business-document.country=BL
+connector.business-document.service-provider=<your value from 6.x>
+connector.business-document.country=<your value from 6.x>
 connector.business-document.default-advanced-system-type=SIGNATURE_BASED
 
 # Truststore
 connector.business-document.signature.validation.truststore.path=file:./config/keystores/connector-truststore.jks
-connector.business-document.signature.validation.truststore.password=12345
+connector.business-document.signature.validation.truststore.password=<your value from 6.x>
 connector.business-document.signature.validation.truststore.type=JKS
 
 # Validation policy
 connector.business-document.signature.validation.constraints-xml=classpath:/102853/constraint.xml
 
 # Authentication
-connector.business-document.authentication-validation.identity-provider=ERV
+connector.business-document.authentication-validation.identity-provider=<your value from 6.x>
 ----
 
 === Link Partner Configuration
@@ -612,16 +673,16 @@ connector.link.backend[0].link-config.properties.logging-enabled=true
 
 # Endpoint keystore
 connector.link.backend[0].link-config.properties.endpoint.keystore.path=file:./config/keystores/backend-keystore.jks
-connector.link.backend[0].link-config.properties.endpoint.keystore.password=12345
+connector.link.backend[0].link-config.properties.endpoint.keystore.password=<your value from 6.x>
 
 # Endpoint private key
-connector.link.backend[0].link-config.properties.endpoint.private-key.alias=connector_blue
-connector.link.backend[0].link-config.properties.endpoint.private-key.password=12345
+connector.link.backend[0].link-config.properties.endpoint.private-key.alias=<your key alias from 6.x>
+connector.link.backend[0].link-config.properties.endpoint.private-key.password=<your value from 6.x>
 
 # Endpoint truststore
 connector.link.backend[0].link-config.properties.endpoint.truststore.path=file:./config/keystores/backend-truststore.jks
-connector.link.backend[0].link-config.properties.endpoint.truststore.password=12345
-connector.link.backend[0].link-config.properties.endpoint.encrypt-alias=alice
+connector.link.backend[0].link-config.properties.endpoint.truststore.password=<your value from 6.x>
+connector.link.backend[0].link-config.properties.endpoint.encrypt-alias=<your value from 6.x>
 ----
 
 ==== Backend Link Partners
@@ -668,27 +729,45 @@ The link partner configuration is simplified in 7.x.
 .Configuration example (7.x)
 [source,properties]
 ----
-connector.link.backend[0].link-partners[0].name=backend_alice
-connector.link.backend[0].link-partners[0].description=backend alice
+connector.link.backend[0].link-partners[0].name=<your link-partner-name from 6.x>
+connector.link.backend[0].link-partners[0].description=<description>
 connector.link.backend[0].link-partners[0].enabled=true
 connector.link.backend[0].link-partners[0].sender-mode=push
-connector.link.backend[0].link-partners[0].properties.push-address=https://backend.example.org/services/domibusConnectorDeliveryWebservice
-connector.link.backend[0].link-partners[0].properties.encryption-alias=alice
-connector.link.backend[0].link-partners[0].properties.certificate-dn=cn=alice
+connector.link.backend[0].link-partners[0].properties.push-address=https://<backend-host>/services/domibusConnectorDeliveryWebservice
+connector.link.backend[0].link-partners[0].properties.encryption-alias=<your value from 6.x>
+connector.link.backend[0].link-partners[0].properties.certificate-dn=<your value from 6.x, in lower case>
 ----
 
 === Message Routing
 
-NOTE: Message routing configuration is unchanged from 6.x. No migration action required.
-Note that in 7.x routing rules apply to the default business domain only, and that at most one rule per link partner is kept.
+The property names of the backend routing rules are unchanged, but three behaviours changed:
+
+[cols="1,2,2", options="header"]
+|===
+| Item | 6.x | 7.x
+
+| `connector.routing.enabled`
+| Default `true`: rules applied without setting the property.
+| Default `false`. *Add `connector.routing.enabled=true`*, otherwise all inbound messages go to the default backend.
+
+| Several rules for the same backend
+| Allowed (rules ordered by `priority`).
+| Only the last rule per `link-name` is kept; rules are evaluated in index order. Merge the conditions of a backend into one `match-clause` with `\|(...)`.
+
+| Gateway routing (`+connector.routing.gateway-rules*+`, `default-gateway-name`)
+| Available.
+| Removed: a single gateway is used through the JMS broker.
+|===
+
+Rules apply to the default business domain only.
 
 .Configuration Example (7.x)
 [source,properties]
 ----
 connector.routing.enabled=true
-connector.routing.default-backend-name=backend_alice
-connector.routing.backend-rules[0].link-name=backend_alice
-connector.routing.backend-rules[0].match-clause=equals(ServiceName, 'Test')
+connector.routing.default-backend-name=<backend-name>
+connector.routing.backend-rules[0].link-name=<other-backend-name>
+connector.routing.backend-rules[0].match-clause=equals(ServiceName, '<service>')
 ----
 
 === Message Broker Configuration
@@ -739,9 +818,75 @@ used and can be archived or deleted after a successful migration.
 [source,properties]
 ----
 spring.activemq.broker-url=tcp://localhost:61616
-spring.activemq.user=admin
-spring.activemq.password=******
+spring.activemq.user=${BROKER_USER}
+spring.activemq.password=${BROKER_PASSWORD}
 ----
+
+=== Connector-to-Connector Tests
+
+.C2C Test Properties
+|===
+| Old property (6.x) | New property (7.x) | Notes
+
+| `c2ctests.enabled`
+| `connector.c2ctests.enabled`
+| Prefix added. Default `true` in both.
+
+| `c2ctests.action` (bound to `c2ctests.action.action`)
+| `connector.c2ctests.action`
+| Prefix added; now a plain string.
+
+| `c2ctests.service.name`
+| `connector.c2ctests.service.name`
+| Prefix added.
+
+| `c2ctests.service.service-type` (`serviceType`)
+| `connector.c2ctests.service.type`
+| Prefix added and renamed.
+
+| `c2ctests.respond-with-delivery-evidence`, `c2ctests.default-business-xml`, `c2ctests.default-business-pdf`
+| _(removed)_
+|
+|===
+
+=== Admin User
+
+The UI users of 6.x are replaced by REST API users. The initial administrator is configured differently:
+
+.Initial Admin User Properties
+|===
+| Old property (6.x) | New property (7.x) | Notes
+
+| `connector.init.user.enabled`
+| `connector.admin.enabled`
+|
+
+| `connector.init.user.initial-user-name`
+| `connector.admin.username`
+| Required in 7.x.
+
+| `connector.init.user.initial-user-password`
+| `connector.admin.password`
+| Required in 7.x. 6.x generated a random password and logged it; 7.x uses the configured value until the first login.
+
+| `connector.init.user.initial-change-required`
+| _(removed)_
+| A password change is always required at first login.
+
+| `connector.init.user.log-initial-to-console`
+| _(removed)_
+|
+
+| _(none)_
+| `connector.admin.email`
+| *New — required.*
+|===
+
+=== Queues and Transactions
+
+* The internal queues were renamed (6.x: `+connector.queues.to-connector-controller-queue+`, `to-link-queue`, `cleanup-queue` and their dead letter queues). Remove the 6.x queue properties and add all `+connector.queues.*+` properties of the 7.x template with their template values.
+* JTA still uses Atomikos (`+spring.jta.*+`); the 6.x settings can be kept. The JTA log location (`spring.jta.log-file`) must be on persistent storage.
+* Datasource: 6.x documented `spring.datasource.xa.data-source-class-name` for the XA class (or a JNDI datasource when deployed in Tomcat). Deployment in an external Tomcat and JNDI datasources are no longer supported.
 
 === New sections without 6.x equivalent
 
@@ -752,19 +897,62 @@ See the corresponding chapters of this guide.
 |===
 | Section | Properties
 
-| REST API authentication and admin account
-| `+connector.auth.security.jwt.*+`, `+connector.admin.*+` (required)
+| REST API authentication
+| `+connector.auth.security.jwt.*+` (required)
 
 | CORS
 | `+connector.cors.*+`
 
-| Connector and gateway queues
-| `+connector.queues.*+` (all required, keep the default values)
-
-| Connector-to-connector tests
-| `+connector.c2ctests.*+` (enabled by default)
-
-| JTA transactions (Atomikos)
-| `+spring.jta.*+` (replaces the 6.x transaction manager configuration)
+| Gateway queues
+| `+connector.queues.gateway-*+` (must match the Domibus JMS plugin)
 |===
+
+[[migration-removed]]
+=== 6.x properties without 7.x equivalent
+
+The following 6.x settings have no equivalent in 7.x. Remove them, and check whether your operations relied on the corresponding feature.
+
+[cols="2,3", options="header"]
+|===
+| 6.x properties | Situation in 7.x
+
+| `+connector.controller.evidence.*+` (`timeoutActive`, `checkTimeout`, `relayREMMDTimeout`, `deliveryTimeout`, `retrievalTimeout` and the corresponding `+*WarnTimeout+` properties)
+| *Feature not available.* 7.x does not generate `RELAY_REMMD_REJECTION` / `NON_DELIVERY` / `NON_RETRIEVAL` evidences when the expected evidence is not received in time. Monitor pending messages operationally.
+
+| `+connector.controller.content.*+` (`check-timeout-enabled`, `check-timeout`)
+| *Feature not available.* Message content is not deleted automatically; apply a lifecycle/retention policy on the S3 bucket and plan database housekeeping.
+
+| `+connector.persistence.*+` (`default-large-file-provider-class`, `filesystem.storage-path`, `filesystem.create-dir`, `filesystem.encryption-active`)
+| Replaced by S3 storage (`+connector.file.storage.s3.*+`). The Connector no longer encrypts stored content itself: enable server-side encryption on the bucket.
+
+| `+connector.link.gateway.*+` (including `pull-interval`, `gw-address`)
+| Replaced by the JMS queues of the Domibus default JMS plugin.
+
+| `connector.link.backend[n].link-config.link-impl`, `link-partners[m].rcv-link-mode`
+| Removed: one SOAP backend implementation; backends always submit by calling the Connector.
+
+| `ocsp-enabled`, `crl-enabled`, `aia-enabled` of the certificate verifiers (e.g. `connector.business-document-sent.signature-validation.ocsp-enabled`)
+| Always enabled; no longer configurable.
+
+| `connector.business-document-sent.allow-system-type-override-by-client`
+| Replaced by `connector.business-document.allowed-advanced-system-types`.
+
+| `connector.instance-name`, `+connector.stage.*+`, `connector.common.fail-on-invalid-property`
+| Removed.
+
+| `+connector.ui.*+`, `server.servlet.session.cookie.name`
+| Removed: the administration portal is a separate application using the stateless REST API.
+
+| `spring.datasource.jndi-name`, `+spring.liquibase.*+`
+| Removed: standalone deployment only; the database is initialised with the provided scripts.
+|===
+
+[[migration-behaviour]]
+=== Behaviour changes to check
+
+* *Routing* is disabled unless `connector.routing.enabled=true` is set, and only one rule per backend is kept (see above).
+* *P-Mode verification*: defaults swapped and meaning changed (see the message processing section above).
+* *Evidence issuer and container truststore*: in 6.x, the AS4 party of the evidence issuer and the container validation truststore were taken from the P-Mode upload. In 7.x, the issuer must be configured in `+connector.evidences.issuer.as4-party.*+`; the container truststore is still the P-Mode truststore.
+* *Backend identification*: as in 6.x, the backend is identified by the DN of its signing certificate, but the configured `certificate-dn` must now be written entirely in lower case (see the link partner chapter).
+* *Admin password*: no random password is generated anymore; the configured one is used.
 

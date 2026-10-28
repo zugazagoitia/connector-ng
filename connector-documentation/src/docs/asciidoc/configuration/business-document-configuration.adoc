@@ -16,14 +16,14 @@ Configuration is provided via `application.properties` under the `+connector.bus
 | Property | Description | Optional | Example
 
 | `connector.business-document.service-provider`
-| Identifier of the service provider issuing/handling the business document.
+| Name of the organisation operating this Connector, recorded in the trust-ok token. The template value `TestProvider` must be replaced.
 | No
-| `TestProvider`
+| `<Ministry of Justice of ...>`
 
 | `connector.business-document.country`
-| Two-letter country code associated with this connector instance for business document processing.
+| Two-letter ISO 3166-1 country code of this Connector, recorded in the trust-ok token. The template value `BL` is the "blue" test country and must be replaced.
 | No
-| `BL`
+| `<XX>`
 
 | `connector.business-document.default-advanced-system-type`
 | Default type of advanced electronic system (AES) used to qualify the document when the backend does not specify it: `SIGNATURE_BASED` (the document is electronically signed) or `AUTHENTICATION_BASED` (the author was authenticated by an identity provider).
@@ -36,9 +36,9 @@ Configuration is provided via `application.properties` under the `+connector.bus
 | By default, all types: `SIGNATURE_BASED,AUTHENTICATION_BASED`
 
 | `connector.business-document.signature.validation.truststore.path`
-| Truststore containing the trusted certificates/CA chains used to validate signatures on incoming business documents (distinct from the signing keystore used in container configuration)
+| Truststore containing the certificates/CA chains used to validate the signatures of the business documents submitted by *your* backends (distinct from the signing keystore used in the container configuration). The template points to the sample `connector-truststore.jks`.
 | No
-| `file:./config/keystores/connector-truststore.jks`
+| `file:./config/keystores/<national-signers-truststore>.p12`
 
 | `connector.business-document.signature.validation.truststore.password`
 | Password protecting the truststore.
@@ -77,23 +77,23 @@ Configuration is provided via `application.properties` under the `+connector.bus
 
 
 | `connector.business-document.authentication-validation.identity-provider`
-| Name of the identity provider recorded in the token for `AUTHENTICATION_BASED` documents.
+| Name of the identity provider recorded in the token for `AUTHENTICATION_BASED` documents. The template value `ERV` comes from the Austrian test set-up; use the identity provider of your use case.
 | Required when `AUTHENTICATION_BASED` is used
-| `ERV`
+| `<identity provider>`
 
 |===
 
 .Configuration Example
 [source,properties]
 ----
-connector.business-document.service-provider=TestProvider
-connector.business-document.country=BL
+connector.business-document.service-provider=<Ministry of Justice of ...>
+connector.business-document.country=<XX>
 connector.business-document.default-advanced-system-type=SIGNATURE_BASED
-connector.business-document.signature.validation.truststore.path=file:./config/keystores/connector-truststore.jks
-connector.business-document.signature.validation.truststore.password=12345
-connector.business-document.signature.validation.truststore.type=JKS
+connector.business-document.signature.validation.truststore.path=file:./config/keystores/<national-signers-truststore>.p12
+connector.business-document.signature.validation.truststore.password=${SIGNERS_TRUSTSTORE_PASSWORD}
+connector.business-document.signature.validation.truststore.type=PKCS12
 connector.business-document.signature.validation.constraints-xml=classpath:/102853/constraint.xml
-connector.business-document.authentication-validation.identity-provider=ERV
+connector.business-document.authentication-validation.identity-provider=<identity provider>
 # Optional: also trust certificates listed in the EU trusted lists (see the DSS configuration)
 #connector.business-document.signature.validation.trusted-list-source=eu
 ----

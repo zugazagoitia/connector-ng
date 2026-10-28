@@ -51,7 +51,7 @@ The same content is published in the documentation (`connector-documentation/src
 
 ### Security
 
-- Default credentials are shipped in the sample configuration (`admin`/`123456`, keystores with password `12345`). Change them before going to production; see the security guidance.
+- The configuration template contains test credentials and partners (`admin`/`123456`, keystores with password `12345`, test backend `cn=alice`). Replace them before going to production; see the security guidance.
 
 ## [7.0.0] - 2026-06-30
 

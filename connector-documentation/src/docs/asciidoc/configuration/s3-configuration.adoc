@@ -71,12 +71,12 @@ WARNING: Never commit S3 credentials to version control.
 Inject `access-key` and
 `secret-key` at runtime via environment variables or a secrets manager.
 
-.Configuration example (local MinIO)
+.Configuration example (MinIO on the same host; replace every value)
 [source,properties]
 ----
 connector.file.storage.s3.access-key=${S3_ACCESS_KEY}
 connector.file.storage.s3.secret-key=${S3_SECRET_KEY}
-connector.file.storage.s3.region=eu-west-1
-connector.file.storage.s3.bucket=attachments
-connector.file.storage.s3.endpoint=http://localhost:9000
+connector.file.storage.s3.region=<region>
+connector.file.storage.s3.bucket=<connector-bucket>
+connector.file.storage.s3.endpoint=https://<s3-host>:<port>
 ----

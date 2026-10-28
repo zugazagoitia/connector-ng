@@ -10,6 +10,8 @@ This configuration defines the cryptographic settings used by the connector secu
 * ASiC-S container signing
 * ASiC-S container validation (inbound messages)
 
+IMPORTANT: The template refers to the sample keystore `connector-keystore.jks` (password `12345`, alias `connector_blue`). Use your own signing key, usually the same key as for REM evidences. Its certificate must be distributed to your partner connectors (through their P-Mode truststore).
+
 == Basic configuration
 Configuration is provided via `application.properties` under the `+connector.container.*+` prefix.
 
@@ -21,7 +23,7 @@ Configuration is provided via `application.properties` under the `+connector.con
 | `connector.container.signature.keystore.path`
 | Path to the keystore holding the private key/certificate used to sign containers and tokens
 | No
-| `file:./config/keystores/connector-keystore.jks`
+| `file:./config/keystores/<connector-signing-keystore>.p12`
 
 | `connector.container.signature.keystore.password`
 | Password protecting the keystore file itself.
@@ -36,7 +38,7 @@ Configuration is provided via `application.properties` under the `+connector.con
 | `connector.container.signature.private-key.alias`
 | Alias identifying which key entry inside the keystore to use for signing
 | No
-| `connector_blue`
+| `<signing-key-alias>`
 
 | `connector.container.signature.private-key.password`
 | Password protecting that specific private key entry
@@ -47,16 +49,6 @@ Configuration is provided via `application.properties` under the `+connector.con
 | ETSI TS 119 102 / DSS validation policy used when validating inbound ASiC-S containers.
 | Yes
 | By default, set to `classpath:/102853/constraint.xml`
-
-| `connector.container.signature.validation.truststore.path` / `.password` / `.type`
-| Truststore used to validate the signature of inbound containers.
-| Yes
-| `file:./config/keystores/connector-truststore.jks`
-
-| `connector.container.signature.validation.truststore-enabled`
-| Whether the truststore above is used as a trust anchor.
-| Yes
-| By default, set to `true`
 
 | `connector.container.signature.validation.trusted-list-source`
 | Name of a trusted list source declared under `connector.dss.trust-list-sources.<name>` (see <<dss-trust-list-sources>>). When set, certificates are also trusted if they chain to a service listed in that trusted list.
@@ -75,16 +67,20 @@ Configuration is provided via `application.properties` under the `+connector.con
 
 |===
 
+IMPORTANT: Inbound containers are validated against the *truststore of the P-Mode* of the business domain (`connector.business-domains.defaults[n].pmode.truststore`, or the truststore uploaded with the P-Mode), not against a truststore configured in this chapter.
+That truststore must contain the container signing certificates of your partner connectors.
+`+connector.container.signature.validation.truststore.*+` and `truststore-enabled` are accepted but not used for container validation.
+
 NOTE: The signature algorithm (RSA) and the digest algorithm (SHA-256) are fixed in the current version and cannot be changed through properties.
 OCSP, CRL and AIA checks are always enabled during certificate validation.
 
 .Configuration Example
 [source,properties]
 ----
-connector.container.signature.keystore.path=file:./config/keystores/connector-keystore.jks
-connector.container.signature.keystore.password=12345
-connector.container.signature.keystore.type=JKS
-connector.container.signature.private-key.alias=connector_blue
-connector.container.signature.private-key.password=12345
+connector.container.signature.keystore.path=file:./config/keystores/<connector-signing-keystore>.p12
+connector.container.signature.keystore.password=${SIGNING_KEYSTORE_PASSWORD}
+connector.container.signature.keystore.type=PKCS12
+connector.container.signature.private-key.alias=<signing-key-alias>
+connector.container.signature.private-key.password=${SIGNING_KEY_PASSWORD}
 connector.container.signature.validation.constraints-xml=classpath:/102853/constraint.xml
 ----

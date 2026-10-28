@@ -6,12 +6,12 @@ endif::header[]
 = Platform Configuration
 
 This chapter covers the Spring Boot and infrastructure settings of the **Connector**: HTTP server, database, JMS broker, transactions, uploads, CORS, API documentation, monitoring and logging.
-All settings are provided in `config/application.properties`.
+All settings are provided in `config/application.properties`. Values described as "template" below are those of the shipped file, not built-in defaults; review them as described in <<configuration-template>>.
 
 [[environment-variables]]
-== Environment variables used by the sample configuration
+== Environment variables used by the template
 
-The sample `application.properties` reads the following environment variables.
+The template `application.properties` reads the following environment variables.
 Every one of them must be defined (or the placeholder replaced by a literal value), otherwise the application fails to start with `Could not resolve placeholder`.
 
 [cols="2,3,3", options="header"]
@@ -28,9 +28,9 @@ Every one of them must be defined (or the placeholder replaced by a literal valu
 | `BROKER_PASSWORD` | `spring.activemq.password` | _(secret)_
 | `S3_ACCESS_KEY` | `connector.file.storage.s3.access-key` | _(secret)_
 | `S3_SECRET_KEY` | `connector.file.storage.s3.secret-key` | _(secret)_
-| `S3_REGION` | `connector.file.storage.s3.region` | `eu-west-1`
-| `S3_BUCKET` | `connector.file.storage.s3.bucket` | `attachments`
-| `S3_ENDPOINT` | `connector.file.storage.s3.endpoint` | `https://s3.eu-west-1.amazonaws.com`
+| `S3_REGION` | `connector.file.storage.s3.region` | `<region>`
+| `S3_BUCKET` | `connector.file.storage.s3.bucket` | `<connector-bucket>`
+| `S3_ENDPOINT` | `connector.file.storage.s3.endpoint` | `https://<s3-host>`
 | `TEMP_DIR_LOCATION` | `spring.servlet.multipart.location` | `/app/temp`
 | `JWT_SECRET_KEY` | `connector.auth.security.jwt.secret` | output of `openssl rand -base64 32`
 |===
@@ -44,14 +44,14 @@ TIP: Any other property can also be supplied as an environment variable using Sp
 | Property | Description | Optional | Example
 
 | `server.port`
-| HTTP port of the REST API, SOAP API, Swagger UI and Actuator.
+| HTTP port of the REST API, SOAP API, Swagger UI and Actuator. The template sets `30000`, the port exposed by the container image; without the property, Spring Boot uses `8080`.
 | Yes
 | `30000`
 
 | `server.address`
-| Network interface to bind to.
+| Network interface to bind to. The template binds all interfaces (`0.0.0.0`); bind to `127.0.0.1` when the reverse proxy runs on the same host.
 | Yes
-| `0.0.0.0`
+| `127.0.0.1`
 
 | `cxf.path`
 | Base path of the SOAP endpoints. The backend SOAP endpoint is published at `{cxf.path}{publish-address}`, i.e. `/services/backend` by default.
@@ -87,7 +87,7 @@ TIP: Any other property can also be supplied as an environment variable using Sp
 | `org.hibernate.dialect.MySQLDialect`
 
 | `spring.jpa.hibernate.ddl-auto`
-| Schema management. The sample configuration uses `update`, which is suitable for development only. Use `validate` or `none` in production together with the provided database scripts.
+| Schema management. The template uses `update`, which is suitable for development only. Use `validate` or `none` in production together with the provided database scripts.
 | Yes
 | `none`
 |===
@@ -104,8 +104,9 @@ TIP: Any other property can also be supplied as an environment variable using Sp
 |===
 
 NOTE: The data source is enlisted in XA transactions by the JTA transaction manager (Atomikos).
-The sample environment files set `DB_DRIVER_CLASSNAME` to the XA data source class for MySQL (`com.mysql.cj.jdbc.MysqlXADataSource`), while the comments of the sample `application.properties` list the plain JDBC driver classes.
-Until this is aligned, use the value from the sample environment file of your release.
+Connector 6.x documented the Spring Boot convention: the plain JDBC driver in `spring.datasource.driver-class-name` and the XA class in `spring.datasource.xa.data-source-class-name` (Spring Boot otherwise derives the XA class from the JDBC URL).
+The 7.x template instead puts the XA class of MySQL (`com.mysql.cj.jdbc.MysqlXADataSource`) in `DB_DRIVER_CLASSNAME`.
+Until the project documents one convention, validate the chosen combination on a test environment, including a restart while messages are being processed.
 
 == JMS broker (ActiveMQ Classic)
 
@@ -126,7 +127,7 @@ The Connector connects to the shared external ActiveMQ Classic broker with the s
 | _(secret)_
 
 | `spring.activemq.packages.trust-all`
-| Allows deserialization of any class from JMS object messages. The sample configuration sets `true`; prefer `spring.activemq.packages.trusted` with an explicit package list.
+| Allows deserialization of any class from JMS object messages. The template sets `true`; prefer `spring.activemq.packages.trusted` with an explicit package list.
 | Yes
 | `false`
 
@@ -137,7 +138,7 @@ The Connector connects to the shared external ActiveMQ Classic broker with the s
 |===
 
 Redelivery of failed messages is fixed in the current version: at most 5 redeliveries, an initial delay of 60 seconds and a back-off multiplier of 2.
-The commented `+connector.activemq.address-settings.*+` properties in the sample configuration are not yet configurable.
+The commented `+connector.activemq.address-settings.*+` properties in the template are not yet configurable.
 
 == Distributed transactions (JTA / Atomikos)
 
@@ -175,7 +176,7 @@ The Connector uses Atomikos to coordinate database and JMS transactions.
 
 == File uploads
 
-Attachments are uploaded through multipart requests. The sample configuration accepts files up to 200 MB.
+Attachments are uploaded through multipart requests. The template accepts files up to 200 MB per file and 210 MB per request; size these limits (and the reverse proxy limits) for your largest expected message.
 
 [cols="35,40,10,15", options="header"]
 |===
@@ -265,7 +266,7 @@ Cross-origin requests are needed when the administration portal is served from a
 | `health,info`
 
 | `management.endpoint.health.show-details`
-| Level of detail of the health endpoint. The sample uses `always`; use `never` or `when-authorized` when the endpoint is reachable from untrusted networks.
+| Level of detail of the health endpoint. The template uses `always`; use `never` or `when-authorized` when the endpoint is reachable from untrusted networks.
 | Yes
 | `never`
 
@@ -285,7 +286,7 @@ Cross-origin requests are needed when the administration portal is served from a
 | `1.0`
 |===
 
-NOTE: The Actuator `metrics` endpoint is currently disabled because the Apache CXF metrics integration is not yet compatible with Spring Boot 4 (see `spring.autoconfigure.exclude` in the sample configuration).
+NOTE: The Actuator `metrics` endpoint is currently disabled because the Apache CXF metrics integration is not yet compatible with Spring Boot 4 (see `spring.autoconfigure.exclude` in the template).
 
 == Logging
 

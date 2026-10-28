@@ -1,0 +1,95 @@
+ifndef::header[]
+include::{basepath}/header.adoc[]
+endif::header[]
+
+[[certificates-setup]]
+= Certificates and Key Stores
+
+The Connector uses several key pairs and trust stores.
+The keystores shipped with the distribution and the image (`+config/keystores/*.jks+`, password `12345`, aliases such as `connector_blue` and `alice`) belong to the e-CODEX test environment. They are only meant to let the template start and must be replaced.
+
+== Overview
+
+[cols="2,3,3", options="header"]
+|===
+| Purpose | Store and content | Properties
+
+| WS-Security between the backend applications and the Connector (SOAP backend API)
+| *Backend keystore*: the Connector key pair. +
+*Backend truststore*: the certificate of each backend application.
+| `+connector.link.backend[n].link-config.properties.endpoint.*+`, `+link-partners[m].properties.certificate-dn+`, `encryption-alias`
+
+| Signing REM evidences
+| *Signing keystore*: the Connector signing key pair.
+| `+connector.evidences.signature.*+`
+
+| Signing ASiC-S containers and trust-ok tokens
+| *Signing keystore* (usually the same key as for evidences).
+| `+connector.container.signature.*+`
+
+| Validating the containers of inbound messages
+| *P-Mode truststore*: the container signing certificates of the partner connectors (and the gateway certificates of the P-Mode).
+| `+connector.business-domains.defaults[n].pmode.truststore*+`, or uploaded with the P-Mode
+
+| Validating the signatures of national business documents (`SIGNATURE_BASED`)
+| *Signers truststore*: the CA certificates of the national signers; optionally a trusted list.
+| `+connector.business-document.signature.validation.*+`
+
+| TLS towards backends (push), S3, the broker and trusted list servers
+| Java default truststore of the runtime, or a custom one passed with `-Djavax.net.ssl.trustStore=...`
+| JVM options
+|===
+
+Both `JKS` and `PKCS12` are supported (set the `type` property accordingly). The examples below use PKCS12 and the JDK `keytool`; any equivalent tool (e.g. KeyStore Explorer, OpenSSL) can be used.
+Choose key sizes and validity periods according to your organisation's security policy.
+
+== Signing key (evidences and containers)
+
+Obtain the signing certificate from the certification authority required by your use case, or for a test environment generate one:
+
+[source,bash]
+----
+keytool -genkeypair -alias <signing-key-alias> -keyalg RSA -keysize 3072 -validity 1095 \
+  -dname "CN=<connector name>,O=<organisation>,C=<XX>" \
+  -keystore connector-signing.p12 -storetype PKCS12
+keytool -exportcert -rfc -alias <signing-key-alias> -keystore connector-signing.p12 -file connector-signing.pem
+----
+
+Give `connector-signing.pem` to your partner connectors: it must be in *their* P-Mode truststore so that they can validate your containers.
+Import the signing certificates of your partners in your P-Mode truststore.
+
+== Backend link key material
+
+For each SOAP backend link:
+
+. Create the Connector key pair in the backend keystore and export its certificate:
++
+[source,bash]
+----
+keytool -genkeypair -alias <connector-backend-key> -keyalg RSA -keysize 3072 -validity 1095 \
+  -dname "CN=<connector>,O=<organisation>,C=<XX>" \
+  -keystore backend-keystore.p12 -storetype PKCS12
+keytool -exportcert -rfc -alias <connector-backend-key> -keystore backend-keystore.p12 -file connector-backend.pem
+----
+. Give `connector-backend.pem` to each backend team; they import it in their client truststore.
+. Obtain the certificate of each backend application (the one it uses to *sign* its SOAP requests) and import it in the backend truststore under a dedicated alias:
++
+[source,bash]
+----
+keytool -importcert -alias <backend-courts-cert> -file backend-courts.pem \
+  -keystore backend-truststore.p12 -storetype PKCS12
+----
+. Read the subject DN of that certificate and configure the link partner:
++
+[source,bash]
+----
+keytool -printcert -file backend-courts.pem | grep Owner
+----
++
+Set `properties.encryption-alias` to the alias used above, and `properties.certificate-dn` to the subject DN written *entirely in lower case*, without spaces after the commas (for example `cn=backend-courts,o=ministry of justice,c=xx`).
+
+== Validity and rotation
+
+* Track the expiry dates of all certificates; an expired backend or signing certificate stops message exchange.
+* To rotate a backend certificate, import the new certificate under a new alias, update `encryption-alias` and `certificate-dn`, and restart the Connector.
+* To rotate the signing key, distribute the new certificate to the partners (P-Mode truststores) *before* switching `private-key.alias`.

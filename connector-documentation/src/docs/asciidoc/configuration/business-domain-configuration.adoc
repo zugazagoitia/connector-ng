@@ -25,7 +25,7 @@ Configuration is provided via `application.properties` under the `+connector.bus
 | Property | Description | Optional | Example
 
 | `connector.business-domains.defaults[n].identifier`
-| Message lane identifier of the business domain. Must be unique across the connector.
+| Message lane identifier of the business domain. Must be unique across the connector. *Keep `default_business_domain`* for the domain that carries the gateway and SOAP backend traffic (see the warning below).
 | No
 | `default_business_domain`
 
@@ -43,13 +43,13 @@ Configuration is provided via `application.properties` under the `+connector.bus
 | Processing mode definition (XML, as exported from the gateway) registered for the domain. When absent, no processing
 mode is registered and the remaining `+pmode.*+` properties are ignored. If the file cannot be read, startup is aborted.
 | Yes
-| `file:./config/pmode/pmode-blue.xml`
+| `file:./config/pmode/<your-pmode>.xml`
 
 | `connector.business-domains.defaults[n].pmode.truststore`
-| Truststore holding the certificates of the gateways declared in the processing mode.
+| Truststore holding the certificates of the parties declared in the processing mode. It is also the truststore used to validate the signature of the ASiC-S containers and tokens of inbound messages, so it must contain the signing certificates of the partner connectors. The store type is derived from the file extension (`.jks`, `.keystore` = JKS; `.p12`, `.pfx` = PKCS12).
 Required as soon as `pmode.file` is set.
 | Yes
-| `file:./config/pmode/truststore-blue.jks`
+| `file:./config/pmode/<pmode-truststore>.jks`
 
 | `connector.business-domains.defaults[n].pmode.truststore-password`
 | Password protecting the truststore. Required as soon as `pmode.file` is set.
@@ -57,6 +57,12 @@ Required as soon as `pmode.file` is set.
 | `${PMODE_TRUSTSTORE_PASSWORD}`
 
 |===
+
+[WARNING]
+====
+In this version, messages received from the gateway, messages submitted through the SOAP backend API, inbound evidences and the routing rules are always assigned to the business domain `default_business_domain`.
+Keep this identifier for your main domain and attach your P-Mode to it. Additional business domains can only be used by backends submitting through the REST API with an explicit business domain identifier.
+====
 
 [NOTE]
 ====
@@ -87,7 +93,7 @@ determines where the resource is read from:
 [WARNING]
 ====
 A location without a prefix is resolved from the *classpath*, not the filesystem.
-Filesystem paths must be written as `file:./config/pmode/pmode-blue.xml`. Deployments
+Filesystem paths must be written as `file:./config/pmode/<your-pmode>.xml`. Deployments
 migrating from connector 6.x, where bare paths were treated as filesystem paths, must
 add the prefix.
 ====
@@ -96,10 +102,10 @@ add the prefix.
 [source,properties]
 ----
 connector.business-domains.defaults[0].identifier=default_business_domain
-connector.business-domains.defaults[0].description=Default business domain
+connector.business-domains.defaults[0].description=<description>
 connector.business-domains.defaults[0].enabled=true
-connector.business-domains.defaults[0].pmode.file=file:./config/pmode/pmode-blue.xml
-connector.business-domains.defaults[0].pmode.truststore=file:./config/pmode/truststore-blue.jks
+connector.business-domains.defaults[0].pmode.file=file:./config/pmode/<your-pmode>.xml
+connector.business-domains.defaults[0].pmode.truststore=file:./config/pmode/<pmode-truststore>.jks
 connector.business-domains.defaults[0].pmode.truststore-password=${PMODE_TRUSTSTORE_PASSWORD}
 ----
 
@@ -148,46 +154,46 @@ must already exist.
 | `description`
 | Free-text description of the processing mode.
 | No
-| `Default processing mode for domain blue`
+| `<P-Mode of the ... use case>`
 
 | `processingModeFile`
 | Processing mode definition. Must be an XML document.
 | No
-| `pmode-blue.xml`
+| `<your-pmode>.xml`
 
 | `truststore.truststoreFile`
 | Truststore holding the certificates.
 Must be a `.jks`, `.keystore`, `.p12` or `.pfx` file.
 | No
-| `truststore-blue.jks`
+| `<pmode-truststore>.jks`
 
 | `truststore.password`
 | Password protecting the truststore.
 | No
-| `12345`
+| `<truststore-password>`
 |===
 
 .Step 1 — Obtain a bearer token
 [source,bash]
 ----
-TOKEN=$(curl -s -X POST http://localhost:30000/api/v1/auth/login \
+TOKEN=$(curl -s -X POST https://<connector-host>/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"<password>"}' \
+  -d '{"username":"<admin-user>","password":"<password>"}' \
   | jq -r '.accessToken')
 ----
 
 NOTE: The login response also contains `refreshToken`, `expiresIn`, `refreshExpiresIn` and `mustChangePassword`.
 When `mustChangePassword` is `true` (first login with the configured admin password), change the password with `POST /api/v1/auth/change-password` before using the administration API.
-The examples use the default port `30000`.
+`<connector-host>` is the address of your reverse proxy (or `localhost:<server.port>` on the Connector host).
 
 .Step 2 — Register the processing mode
 [source,bash]
 ----
-curl -X POST http://localhost:30000/api/v1/admin/processing-modes \
+curl -X POST https://<connector-host>/api/v1/admin/processing-modes \
   -H "Authorization: Bearer ${TOKEN}" \
   -F "businessDomainIdentifier=default_business_domain" \
-  -F "description=Default processing mode for domain blue" \
-  -F "processingModeFile=@./config/pmode/pmode-blue.xml;type=application/xml" \
-  -F "truststore.truststoreFile=@./config/pmode/truststore-blue.jks" \
-  -F "truststore.password=12345"
+  -F "description=<P-Mode of the ... use case>" \
+  -F "processingModeFile=@./config/pmode/<your-pmode>.xml;type=application/xml" \
+  -F "truststore.truststoreFile=@./config/pmode/<pmode-truststore>.jks" \
+  -F "truststore.password=<truststore-password>"
 ----
