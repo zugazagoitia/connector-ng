@@ -11,7 +11,7 @@ A *link* bundles the shared transport and security configuration of the SOAP end
 
 NOTE: Only SOAP backend links are supported in this version. Gateway links are no longer configured here: the gateway is reached through the shared JMS broker (see the gateway queue configuration chapter).
 
-IMPORTANT: The template declares one test partner (`backend_alice`, certificate `cn=alice`, push address `http://localhost:port/...`) and refers to the sample backend keystores. Replace the whole block with your own partners and key material.
+IMPORTANT: The template declares one test partner (`backend_alice`, certificate `cn=alice`, push address `+http://localhost:port/...+`) and refers to the sample backend keystores. Replace the whole block with your own partners and key material.
 
 == Key material
 
@@ -139,7 +139,7 @@ Several links can be declared by incrementing the index `n`, and several partner
 | `connector.link.backend[n].link-partners[m].properties.push-address`
 | URL of the partner's `DomibusConnectorBackendDeliveryWebService` endpoint, provided by the backend team. Required for `push`, ignored otherwise.
 | Required for `push`
-| `https://<backend-host>/services/domibusConnectorDeliveryWebservice`
+| `+https://<backend-host>/services/domibusConnectorDeliveryWebservice+`
 |===
 
 [[certificate-dn-format]]

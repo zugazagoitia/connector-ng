@@ -16,13 +16,14 @@ The full documentation is written in AsciiDoc under [`connector-documentation/sr
 
 | Guide | Content |
 |-------|---------|
+| [**Complete documentation**](connector-documentation/src/docs/asciidoc/index.adoc) | Single entry point: all guides below in one document, with a reading guide |
 | [Installation](connector-documentation/src/docs/asciidoc/installation/index.adoc) | Prerequisites, database, Docker and JAR installation, TLS, security guidance |
 | [Configuration](connector-documentation/src/docs/asciidoc/configuration/index.adoc) | Reference of all configuration properties, migration from 6.x |
 | [Architecture](connector-documentation/src/docs/asciidoc/architecture/index.adoc) | Modules and message/evidence processing |
 | [Compatibility](connector-documentation/src/docs/asciidoc/compatibility/index.adoc) | Tested databases, Java, gateway and broker versions |
 | [Changelog](CHANGELOG.md) | Release notes |
 
-HTML and PDF versions are built with `./gradlew :connector-documentation:build` (output in `connector-documentation/build/docs/asciidoc`) and are included in the distribution package.
+HTML and PDF versions are built with `./gradlew :connector-documentation:build` (output in `connector-documentation/build/docs/asciidoc`) and are included in the distribution package. The complete documentation is `index.html` / `index.pdf`; each guide is also available on its own.
 
 ## REST API
 The OpenAPI documentation is available at `http://localhost:30000/swagger-ui/index.html` once the connector is running.

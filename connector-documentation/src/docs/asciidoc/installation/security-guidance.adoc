@@ -78,7 +78,7 @@ The configuration template and the files shipped with it contain test values tha
 
 * Test keystores in `config/keystores/` (password `12345`, key alias `connector_blue`, test partner certificate `alice`).
 * Admin account `admin` / `123456` in the template `application.properties`.
-* Test link partner `backend_alice` with `certificate-dn=cn=alice` and push address `http://localhost:port/...`.
+* Test link partner `backend_alice` with `certificate-dn=cn=alice` and push address `+http://localhost:port/...+`.
 * All other placeholders listed in the chapter "Preparing application.properties" of the configuration guide.
 * Docker Compose development stack credentials (`connector`/`connector` for the database, `admin`/`admin123` for MinIO, `admin`/`admin` for ActiveMQ, unauthenticated JMX on the broker).
 

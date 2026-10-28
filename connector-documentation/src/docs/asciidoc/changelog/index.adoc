@@ -2,6 +2,7 @@ ifndef::header[]
 include::{basepath}/header.adoc[]
 endif::header[]
 
+[[changelog-guide]]
 = e-CODEX Connector Changelog
 
 include::{basepath}/changelog/changelog-7.x.x.adoc[leveloffset=+1]

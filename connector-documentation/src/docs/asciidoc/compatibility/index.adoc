@@ -2,6 +2,7 @@ ifndef::header[]
 include::{basepath}/header.adoc[]
 endif::header[]
 
+[[compatibility-guide]]
 = e-CODEX Connector Compatibility
 
 include::{basepath}/compatibility/testing-matrix.adoc[leveloffset=+1]

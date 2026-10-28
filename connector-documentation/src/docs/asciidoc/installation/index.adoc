@@ -2,6 +2,7 @@ ifndef::header[]
 include::{basepath}/header.adoc[]
 endif::header[]
 
+[[installation-guide]]
 = e-CODEX Connector Installation
 
 include::{basepath}/installation/introduction.adoc[leveloffset=+1]
