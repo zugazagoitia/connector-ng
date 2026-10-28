@@ -1,0 +1,53 @@
+name: Documentation
+
+on:
+    push:
+        paths:
+            - 'connector-documentation/**'
+            - 'connector-distribution/src/main/resources/config/**'
+            - 'CHANGELOG.md'
+            - '.github/workflows/docs.yaml'
+    pull_request:
+        paths:
+            - 'connector-documentation/**'
+            - 'connector-distribution/src/main/resources/config/**'
+            - 'CHANGELOG.md'
+            - '.github/workflows/docs.yaml'
+    workflow_dispatch:
+
+jobs:
+    docs:
+        name: Build documentation (HTML and PDF)
+        permissions:
+            contents: read
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            -   name: Checkout code
+                uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            -   name: Setup Java
+                uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+                with:
+                    distribution: 'temurin'
+                    java-version: 21
+                    cache: gradle
+
+            -   name: Install Graphviz
+                uses: e-CODEX/workflows/.github/actions/install-graphviz@main
+
+            -   name: Make Gradle wrapper executable
+                run: chmod +x ./gradlew
+
+            -   name: Build documentation with Gradle
+                run: ./gradlew :connector-documentation:asciidoctorAll --no-configuration-cache
+                shell: bash
+
+            -   name: Upload documentation
+                uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+                with:
+                    name: connector-documentation-${{ github.run_number }}
+                    path: |
+                        connector-documentation/build/docs/asciidoc
+                        !connector-documentation/build/docs/asciidoc/**/.asciidoctor/**
+                    if-no-files-found: error
