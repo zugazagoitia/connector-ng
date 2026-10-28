@@ -30,7 +30,7 @@ Every one of them must be defined (or the placeholder replaced by a literal valu
 | `S3_SECRET_KEY` | `connector.file.storage.s3.secret-key` | _(secret)_
 | `S3_REGION` | `connector.file.storage.s3.region` | `<region>`
 | `S3_BUCKET` | `connector.file.storage.s3.bucket` | `<connector-bucket>`
-| `S3_ENDPOINT` | `connector.file.storage.s3.endpoint` | `https://<s3-host>`
+| `S3_ENDPOINT` | `connector.file.storage.s3.endpoint` | `+https://<s3-host>+`
 | `TEMP_DIR_LOCATION` | `spring.servlet.multipart.location` | `/app/temp`
 | `JWT_SECRET_KEY` | `connector.auth.security.jwt.secret` | output of `openssl rand -base64 32`
 |===

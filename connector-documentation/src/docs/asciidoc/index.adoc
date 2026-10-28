@@ -1,0 +1,101 @@
+= e-CODEX Connector Documentation
+:doctype: book
+:toc: left
+:toc-title: Table of Contents
+:toclevels: 3
+:sectnums:
+:sectnumlevels: 4
+:partnums:
+:sectanchors:
+:sectlinks:
+:icons: font
+:header: header
+:description: Complete documentation of the e-CODEX Connector: installation, configuration, architecture, compatibility and changelog.
+ifdef::backend-pdf[]
+:title-page:
+:title-logo-image: image:logo.png[pdfwidth=50%,align=center]
+:revnumber: {project-version}
+:author: eu-LISA
+:imagesdir: {imagesoutdir}
+endif::[]
+
+include::{basepath}/header.adoc[]
+
+// The HTML output of this document is generated at the root of the output folder,
+// next to the "resources" folder holding images and diagrams.
+ifndef::backend-pdf[]
+:imagesdir: resources
+endif::[]
+
+[preface]
+== About this documentation
+
+This document is the complete documentation of the e-CODEX **Connector** (version {project-version}).
+It brings together the five guides, which are also published separately:
+
+[cols="1,3", options="header"]
+|===
+| Part | Content
+
+| <<installation-guide>>
+| Prerequisites, database, certificates, Docker and JAR installation, HTTPS, security guidance, troubleshooting.
+
+| <<configuration-guide>>
+| How to prepare `application.properties` from the template, and the reference of every configuration property. Migration from 6.x.
+
+| <<architecture-guide>>
+| Modules, message flows and evidence processing.
+
+| <<compatibility-guide>>
+| Tested operating systems, Java, databases, gateway and broker versions.
+
+| <<changelog-guide>>
+| Release notes and upgrade notes.
+|===
+
+=== Where to start
+
+[cols="2,3", options="header"]
+|===
+| I want to... | Read
+
+| Install a new Connector
+| <<prerequisites>>, then <<database-configuration>>, <<certificates-setup>> and <<docker-install>> (recommended) or <<jar-install>>.
+
+| Prepare the configuration file
+| <<configuration-template>>: the shipped `application.properties` is a template that must be edited.
+
+| Connect a backend application
+| <<link-partner-configuration>>, <<certificate-dn-format>> and <<backend-delivery-modes>>.
+
+| Secure an installation before going live
+| <<security-checklist>>, <<public-endpoints>> and <<https-transport-security>>.
+
+| Upgrade from connector 6.x
+| <<migrate-from-6-to-7>>, in particular <<migration-behaviour>> and <<migration-removed>>.
+
+| Upgrade from an earlier 7.x release
+| The upgrade notes in the <<changelog-guide>>, and the database chapter (<<database-configuration>>).
+
+| Solve a startup or runtime error
+| <<troubleshooting>>.
+
+| Look up a property
+| The chapters of the <<configuration-guide>> (one chapter per property prefix) and <<environment-variables>>.
+|===
+
+=== Conventions
+
+* Property tables give, for each property, its description, whether it is optional and an example. *Default* always means the value used when the property is absent; values of the shipped template are not defaults.
+* Values written `<like-this>` are placeholders for your own data.
+* `NOTE`, `TIP`, `IMPORTANT` and `WARNING` blocks highlight information of increasing importance.
+
+include::{basepath}/installation/index.adoc[]
+
+include::{basepath}/configuration/index.adoc[]
+
+include::{basepath}/architecture/index.adoc[]
+
+include::{basepath}/compatibility/index.adoc[]
+
+include::{basepath}/changelog/index.adoc[]
