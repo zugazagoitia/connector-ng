@@ -955,4 +955,3 @@ The following 6.x settings have no equivalent in 7.x. Remove them, and check whe
 * *Evidence issuer and container truststore*: in 6.x, the AS4 party of the evidence issuer and the container validation truststore were taken from the P-Mode upload. In 7.x, the issuer must be configured in `+connector.evidences.issuer.as4-party.*+`; the container truststore is still the P-Mode truststore.
 * *Backend identification*: as in 6.x, the backend is identified by the DN of its signing certificate, but the configured `certificate-dn` must now be written entirely in lower case (see the link partner chapter).
 * *Admin password*: no random password is generated anymore; the configured one is used.
-
