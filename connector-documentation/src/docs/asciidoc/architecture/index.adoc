@@ -2,6 +2,7 @@ ifndef::header[]
 include::{basepath}/header.adoc[]
 endif::header[]
 
+[[architecture-guide]]
 = e-CODEX Connector Architecture
 
 include::{basepath}/architecture/overview.adoc[leveloffset=+1]

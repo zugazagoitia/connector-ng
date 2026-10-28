@@ -29,8 +29,8 @@ The output must report version `21.x.x` or higher.
 The distribution is published as a ZIP archive named `connector-distribution-<version>.zip`.
 
 * **Option A — Download from the e-CODEX Artifactory** (an account is required):
-** Release versions: `https://scm.ecodex.eu/artifactory/libs-release/eu/ecodex/connector/connector-distribution/<version>/`
-** Snapshot versions: `https://scm.ecodex.eu/artifactory/libs-snapshot/eu/ecodex/connector/connector-distribution/<version>-SNAPSHOT/`
+** Release versions: `+https://scm.ecodex.eu/artifactory/libs-release/eu/ecodex/connector/connector-distribution/<version>/+`
+** Snapshot versions: `+https://scm.ecodex.eu/artifactory/libs-snapshot/eu/ecodex/connector/connector-distribution/<version>-SNAPSHOT/+`
 * **Option B — Build from source.** Requires JDK 21 and internet access to download the dependencies. Docker is additionally required to run the integration tests.
 +
 [source,bash]

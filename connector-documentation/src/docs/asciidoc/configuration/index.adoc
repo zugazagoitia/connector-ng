@@ -2,6 +2,7 @@ ifndef::header[]
 include::{basepath}/header.adoc[]
 endif::header[]
 
+[[configuration-guide]]
 = e-CODEX Connector Configuration
 
 All settings described in this guide are Spring Boot properties, read from `config/application.properties` (or from environment variables using Spring Boot's relaxed binding).

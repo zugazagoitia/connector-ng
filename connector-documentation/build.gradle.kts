@@ -35,6 +35,8 @@ asciidoc {
             sourceSet {
                 sources {
                     include(
+                        // complete documentation: single entry point including all guides
+                        "index.adoc",
                         "architecture/index.adoc",
                         "configuration/index.adoc",
                         "installation/index.adoc",

@@ -138,7 +138,7 @@ Each property of the template falls into one of the following categories:
 
 | `+connector.link.backend[0].link-partners[*]+`
 | Replace
-| One entry per backend application: its name, the alias of its certificate in the backend truststore, the *exact* DN of that certificate, its delivery mode and its push address. `backend_alice` / `cn=alice` / `http://localhost:port/...` are test values. See the backend link partner chapter.
+| One entry per backend application: its name, the alias of its certificate in the backend truststore, the *exact* DN of that certificate, its delivery mode and its push address. `backend_alice` / `cn=alice` / `+http://localhost:port/...+` are test values. See the backend link partner chapter.
 
 | `+connector.routing.*+`
 | Replace

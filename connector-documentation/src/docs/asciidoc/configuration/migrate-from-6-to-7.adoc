@@ -2,6 +2,7 @@ ifndef::header[]
 include::{basepath}/header.adoc[]
 endif::header[]
 
+[[migrate-from-6-to-7]]
 = Migrate Configuration From 6.x to 7.x
 
 == Overview
