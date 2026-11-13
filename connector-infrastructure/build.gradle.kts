@@ -95,6 +95,10 @@ dependencies {
     implementation(libs.itextpdf)
     implementation(libs.lombok)
     annotationProcessor(libs.lombok)
+    // generates META-INF/spring-configuration-metadata.json, used by the property reference of the documentation
+    // (must come after Lombok so that the generated accessors are visible)
+    annotationProcessor(platform(libs.spring.boot.bom))
+    annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
     implementation(libs.micrometer)
     implementation(libs.opencsv)
     implementation("org.springframework.boot:spring-boot-starter-opentelemetry")

@@ -51,3 +51,6 @@ include::{basepath}/configuration/gateway-configuration.adoc[leveloffset=+1]
 include::{basepath}/configuration/c2ctests.adoc[leveloffset=+1]
 
 include::{basepath}/configuration/migrate-from-6-to-7.adoc[leveloffset=+1]
+
+// Generated at build time from the @ConfigurationProperties classes (see build.gradle.kts)
+include::{generated-dir}/property-reference.adoc[leveloffset=+1]
