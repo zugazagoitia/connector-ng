@@ -84,6 +84,7 @@ that does not exist stops the connector with an error naming the offending prope
 | Name of the identity provider recorded in the token for `AUTHENTICATION_BASED` documents. The template value `ERV` comes from the Austrian test set-up; use the identity provider of your use case.
 | Required when `AUTHENTICATION_BASED` is used. The `authentication-validation` block is optional, but `identity-provider` is required when the block is present.
 | `<identity provider>`
+|===
 
 === Certificate verification options
 

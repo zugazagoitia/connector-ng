@@ -791,7 +791,6 @@ applied across all sections in 7.x.
 
 | `connector.link.backend[0].link-config.properties.publish-address`
 | `connector.link.backend[0].link-config.properties.publish-address`
-| `connector.link.backend[0].link-config.properties.publish-address`
 | No change in name. Must start with `/`. Defaults to `/backend`.
 |===
 
