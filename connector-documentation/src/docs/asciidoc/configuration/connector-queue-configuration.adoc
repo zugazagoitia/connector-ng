@@ -20,15 +20,15 @@ The queues are JMS queues provided by the external Apache ActiveMQ broker config
 
 [IMPORTANT]
 ====
-* The listener of each queue resolves its name from these properties, so *all of them must be present* in `application.properties`; a missing property prevents the application from starting.
-* The queue names cannot be changed in the current version: the producers always use the default names listed below. Keep the default values.
-* Failed messages are redelivered up to 5 times (initial delay 60 seconds, multiplier 2) before being moved to the broker's dead letter queue.
+* Every property marked _No_ in the table must be present in `application.properties`. Removing one stops the startup with `Could not resolve placeholder 'connector.queues....'`.
+* The names can be changed: producers and listeners use the configured values (verified with all queues renamed: an outbound message went through the renamed staging, processing and backend delivery queues and was submitted to the renamed gateway submission queue).
+* Redelivery is configured with `+connector.activemq.address-settings.*+` (default 5 delivery attempts). After the last attempt the broker moves the message to its dead letter queue; with the stock ActiveMQ Classic configuration this is the shared `ActiveMQ.DLQ` (see the operations chapter of the installation guide).
 ====
 == Basic configuration
 Configuration is provided via `application.properties` under the `+connector.queues.*+` prefix.
 Queue names must not be blank.
 
-NOTE: The message listeners resolve the queue names from the Spring environment, so keep every property of the table in `application.properties`, as in the shipped template. Removing one can prevent the Connector from starting, even though the binding class has a default value for most of them.
+NOTE: All properties of the table must be present in `application.properties`, as in the shipped template.
 
 .Connector Queue Configuration Properties
 [cols="35,40,10,15", options="header"]
@@ -77,8 +77,8 @@ NOTE: The message listeners resolve the queue names from the Spring environment,
 |===
 
 NOTE: The configuration is validated at startup. An empty value (for example
-`connector.queues.backend-delivery-queue=`) counts as set to blank and stops the connector.
-Remove or comment out the line to use the default.
+`connector.queues.backend-delivery-queue=`) counts as set to blank and stops the connector
+(`connector.queues.backendDeliveryQueue ... must not be blank`). For the queues marked _No_, removing the line is not an alternative: write the name.
 
 .Configuration Example
 [source,properties]

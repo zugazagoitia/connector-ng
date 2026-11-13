@@ -17,14 +17,14 @@ connector-infrastructure/src/main/resources/xjb/spocseu.xjb
 
 == Primary schemas (JAXB-generated)
 
-These three schemas drive code generation and define the core evidence structures:
+These three schemas are passed to the JAXB compiler and define the core evidence structures:
 
 |===
 | File | Namespace | Purpose
 
 | `TS102640_v2.xsd`
 | `http://uri.etsi.org/02640/v2#`
-| Core ETSI TS 102 640 REM evidence types (`SubmissionAcceptanceRejection`, `DeliveryNonDeliveryToRecipient`, etc.)
+| Core ETSI TS 102 640 REM evidence types (`SubmissionAcceptanceRejection`, `RelayREMMDAcceptanceRejection`, `DeliveryNonDeliveryToRecipient`, `RetrievalNonRetrievalByRecipient`, etc.)
 
 | `SPOCS_ts102640_soap_body.xsd`
 | `http://uri.etsi.org/02640/soapbinding/v1#`
@@ -36,7 +36,7 @@ These three schemas drive code generation and define the core evidence structure
 
 |===
 
-== Supporting schemas (imported at compile/validation time)
+== Supporting schemas (imported by the primary schemas)
 
 |===
 | File | Purpose
@@ -65,15 +65,16 @@ These three schemas drive code generation and define the core evidence structure
 
 Package mappings are defined in `spocseu.xjb`:
 
-* `eDeliveryDetails.xsd` → `eu.spocseu.edeliverygw.configuration`
+* `eDeliveryDetails.xsd` → `eu.spocseu.edeliverygw.configuration.xsd`
 * `TS102640_v2.xsd` → `org.etsi.uri._02640.v2`
 
-The generated Java classes are vendored under `connector-infrastructure/src/main/java/`.
-Namespace-to-class mappings are also recorded in `META-INF/sun-jaxb.episode`.
+The other schemas use the packages derived by the JAXB compiler from their namespaces (for example `org.w3._2000._09.xmldsig_` for XML Digital Signature).
+
+The generated Java classes are not stored in the repository. The Gradle task `generateEvidenceJaxb` of the `connector-infrastructure` module writes them to `connector-infrastructure/build/generated/jaxb/`, which is added to the main source set. The task runs automatically before `compileJava`, `compileTestJava` and `compileTestFixturesJava`, so a normal build always uses classes generated from the current schemas.
 
 == Regenerating JAXB classes
 
-To regenerate bindings from the XSD sources (output goes to `build/generated-sources/jaxb/` and does not replace vendored sources):
+To regenerate the classes without compiling (the task deletes and recreates its output directory):
 
 [source,bash]
 ----

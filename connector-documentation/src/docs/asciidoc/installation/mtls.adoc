@@ -44,4 +44,16 @@ server {
 }
 ----
 
+The values of the example:
+
+* `client_max_body_size 210m` matches the template values `spring.servlet.multipart.max-request-size=210MB` (and `max-file-size=200MB`). Nginx answers `413` for a larger request before it reaches the Connector; the Connector also answers `413` for a request above its own limits. If you change the multipart limits of the Connector, change this value accordingly.
+* `proxy_pass http://127.0.0.1:30000` assumes that Nginx runs on the same host as the Connector. When Nginx runs in a container, use the name of the Connector container (or service) and its internal port, for example `+http://connector-ng:30000+`, and put both containers in the same Docker network.
+* With `ssl_verify_client on`, a request without a client certificate, or with a certificate that was not issued by the configured CA, is answered by Nginx with `400` and never reaches the Connector. The check applies to every path, including the administration API and Swagger UI.
+
+By default the Connector ignores the `X-Forwarded-*` headers: it does not set `server.forward-headers-strategy`.
+Behind the proxy, generated absolute URLs therefore use `http` and the host name without port, for example the server URL in the OpenAPI document (`/v3/api-docs`) and the schema locations in the WSDL (`/services/backend?wsdl`).
+To make the Connector use the `X-Forwarded-*` headers (for example `X-Forwarded-Proto`), add `server.forward-headers-strategy=framework` to `application.properties` (with this setting, the OpenAPI server URL became `https://...`).
+Only enable it if the Connector can be reached through the proxy alone, because otherwise clients could send these headers themselves.
+Note that `proxy_set_header Host $host` drops a non-standard port from the host name; use `$http_host` if the proxy listens on a port other than 443.
+
 See also <<security-guidance>> for the list of endpoints that should not be reachable from untrusted networks.

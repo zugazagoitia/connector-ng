@@ -26,10 +26,10 @@ The full documentation is written in AsciiDoc under [`connector-documentation/sr
 | [Compatibility](connector-documentation/src/docs/asciidoc/compatibility/index.adoc) | Tested databases, Java, gateway and broker versions |
 | [Changelog](CHANGELOG.md) | Release notes |
 
-HTML and PDF versions are built with `./gradlew :connector-documentation:build` (output in `connector-documentation/build/docs/asciidoc`) and are included in the distribution package. The complete documentation is `index.html` / `index.pdf`; each guide is also available on its own.
+HTML and PDF versions are built with `./gradlew :connector-documentation:build` (output in `connector-documentation/build/docs/asciidoc`) and are included in the distribution package. The complete documentation is `html/index.html` / `pdf/index.pdf`; each guide is also available on its own.
 
 ## REST API
-The OpenAPI documentation is available at `http://localhost:30000/swagger-ui/index.html` once the connector is running.
+The OpenAPI documentation is available at `http://localhost:30000/swagger-ui/index.html` once the connector is running. It covers the lookup, authentication and administration endpoints; the backend message endpoints are described in the architecture guide.
 Most endpoints require a JWT bearer token obtained from `POST /api/v1/auth/login`.
 
 ## Build from source
@@ -69,7 +69,10 @@ export TEMP_DIR_LOCATION=/path/to/connector/temp
 > [!NOTE]
 > If you mount a volume or a host folder on `/app/temp`, the owner and permissions of the mount replace the ones set in the image. Make sure the mounted folder is owned by the container user (UID 1000 by default) and has `700` permissions, for example: `install -d -m 700 -o 1000 -g 1000 <host-folder>`.
 
-Prerequisites: Docker Engine 24+ and Docker Compose 2.x, and read access to the e-CODEX registry for the gateway image (`docker login scm.ecodex.eu`).
+Prerequisites: Docker Engine 24+ and Docker Compose 2.x.
+
+> [!WARNING]
+> The gateway image used by this stack (`scm.ecodex.eu/docker/gateway:edge`) is for development and evaluation only. It is **not supported for production**.
 
 ### 1. Build the connector image
 
@@ -90,6 +93,7 @@ cp docker.env.example docker.env
 
 Host names in the example are those of the Compose services, and ports are the ports *inside* the Compose network.
 Set `JWT_SECRET_KEY` to at least 32 characters, for example the output of `openssl rand -base64 32`.
+`DB_URL` must contain `?pinGlobalTxToPhysicalConnection=true`.
 
 > [!NOTE]
 > These values can also be set directly in `docker/connector/config/application.properties`.
@@ -104,11 +108,12 @@ cp -r connector-distribution/src/main/resources/config/. docker/connector/config
 ```
 
 `application.properties` is a template: its values are placeholders and test values (test backend `backend_alice` / `cn=alice`, sample keystores, `pmode-blue.xml`).
-For a local evaluation you only need the adjustments below; for any other use, replace every value as described in the chapter "Preparing application.properties" of the configuration guide.
+For a local evaluation you need at least the adjustments below; for any other use, replace every value as described in the chapter "Preparing application.properties" of the configuration guide.
 
-Edit `docker/connector/config/application.properties`:
+Edit `docker/connector/config/application.properties` (this directory now holds keystores and is not ignored by git: do not commit it):
 
-- the template declares a P-Mode file `./config/pmode/pmode-blue.xml`: place your gateway P-Mode there, or remove the `connector.business-domains.defaults[0].pmode.*` lines and upload it later from the administration portal — the connector does not start if the file is missing;
+- replace the placeholder in `connector.link.backend[0].link-partners[0].properties.push-address` (`http://localhost:port/...`) with a real URL such as `http://localhost:8080/services/domibusConnectorDeliveryWebservice` — the connector does not start with the placeholder;
+- the template declares a P-Mode file `./config/pmode/pmode-blue.xml`: place your gateway P-Mode there (for a first try, `connector-integrationtest/src/testFixtures/resources/pmode/pmode.xml` works with the sample truststore), or remove the `connector.business-domains.defaults[0].pmode.*` lines and upload it later from the administration portal — the connector does not start if the file is missing;
 - the connector creates the `attachments` bucket in MinIO at startup when it is missing (`connector.file.storage.s3.auto-create-bucket`, enabled by default); the MinIO console is at `http://localhost:9001`.
 
 > [!WARNING]
@@ -117,7 +122,14 @@ Edit `docker/connector/config/application.properties`:
 ### 4. Start the stack
 
 ```shell
-docker compose up -d
+docker compose up -d minio-s3 activemq gateway-db gateway connector-ng-db connector-ng
+```
+
+A plain `docker compose up -d` also starts the optional MariaDB, PostgreSQL and Oracle services.
+Grant the XA recovery privilege to the connector database user once:
+
+```shell
+docker exec mysql mysql -uroot -pconnector -e "GRANT XA_RECOVER_ADMIN ON *.* TO 'connector'@'%';"
 ```
 
 Once the containers are running, you can access:

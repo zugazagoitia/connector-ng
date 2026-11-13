@@ -9,9 +9,9 @@ This configuration declares the backend applications (also called connector clie
 
 A *link* bundles the shared transport and security configuration of the SOAP endpoint; the *link partners* declared under it are the individual backend applications using that endpoint, each with its own name, certificate and delivery mode.
 
-NOTE: Only SOAP backend links are supported in this version. Gateway links are no longer configured here: the gateway is reached through the shared JMS broker (see the gateway queue configuration chapter).
+NOTE: This chapter covers SOAP backend links only. The gateway is reached through the shared JMS broker (see the gateway queue configuration chapter).
 
-IMPORTANT: The template declares one test partner (`backend_alice`, certificate `cn=alice`, push address `+http://localhost:port/...+`) and refers to the sample backend keystores. Replace the whole block with your own partners and key material.
+IMPORTANT: The template declares one test partner (`backend_alice`, certificate `cn=alice`, push address `+http://localhost:port/...+`) and refers to the sample backend keystores. Replace the whole block with your own partners and key material. The template push address is not a valid URL: the startup stops with `push-address must be an absolute http(s) URL` until it is replaced.
 
 == Key material
 
@@ -30,7 +30,8 @@ See the certificates chapter of the installation guide for step-by-step key gene
 Configuration is provided via `application.properties` under the `+connector.link.backend[n].*+` prefix.
 Several links can be declared by incrementing the index `n`, and several partners per link with `link-partners[m]`.
 
-NOTE: The configuration is validated at startup. A missing mandatory value, a path that does not exist, or an invalid URL stops the connector with an error naming the offending property.
+NOTE: The configuration is validated at startup. A missing mandatory value, an invalid `sender-mode`, a `publish-address` not starting with `/`, an invalid `push-address` or a duplicate partner name stops the connector with an error naming the offending property or partner.
+A `ws-policy` location that cannot be read stops the startup.
 
 .Link configuration properties
 [cols="35,40,10,15", options="header"]
@@ -39,7 +40,7 @@ NOTE: The configuration is validated at startup. A missing mandatory value, a pa
 
 | `connector.link.backend[n].link-config.name`
 | Free label of the link, used in logs and the administration portal.
-Must be unique across all backend links.
+Should be unique across all backend links.
 | No
 | `<national-backends>`
 
@@ -84,7 +85,7 @@ Must be unique across all backend links.
 | By default, `JKS`
 
 | `connector.link.backend[n].link-config.properties.endpoint.encrypt-alias`
-| Default truststore alias used to encrypt outgoing messages when a partner does not define `encryption-alias`.
+| Truststore alias of the link (mandatory). Each partner must also define its own `encryption-alias`, which is used to encrypt the messages sent to that partner.
 | No
 | `<backend-cert-alias>`
 
@@ -99,7 +100,7 @@ Must be unique across all backend links.
 | By default, `classpath:/policy/backend.policy.xml`
 
 | `connector.link.backend[n].link-config.properties.publish-address`
-| Path, relative to `cxf.path` (`/services`), of the SOAP endpoint called by the backends. *Keep `/backend`*: only `/services/backend` is excluded from JWT authentication in this version; other values are rejected with HTTP 401.
+| Path, relative to `cxf.path` (`/services`), of the SOAP endpoint called by the backends. *Keep `/backend`*: only `/services/backend` is excluded from JWT authentication; other values are rejected with HTTP 401.
 | Yes
 | By default, `/backend`
 |===
@@ -120,13 +121,13 @@ Must be unique across all backend links.
 | `<Case management system of ...>`
 
 | `connector.link.backend[n].link-partners[m].enabled`
-| Whether the partner may exchange messages.
+| Whether the partner may exchange messages. Set it to `true` for every partner you declare.
 | Yes
 | By default, `false`
 
 | `connector.link.backend[n].link-partners[m].sender-mode`
-| How inbound messages are delivered to this partner (see <<backend-delivery-modes>>): `push`, or `pull` / `passive`.
-| No
+| How inbound messages are delivered to this partner (see <<backend-delivery-modes>>): `push`, `pull` or `passive` (case is ignored).
+| No (but always set it)
 | `push`
 
 | `connector.link.backend[n].link-partners[m].properties.certificate-dn`
@@ -135,13 +136,13 @@ Must be unique across all backend links.
 | `cn=backend-courts,o=ministry of justice,c=xx`
 
 | `connector.link.backend[n].link-partners[m].properties.encryption-alias`
-| Alias of the partner's certificate in the link truststore, used to encrypt messages sent to this partner.
-| Yes
+| Alias of the partner's certificate in the link truststore, used to encrypt messages sent to this partner. A missing or blank value stops the startup.
+| No
 | `<backend-courts-cert>`
 
 | `connector.link.backend[n].link-partners[m].properties.push-address`
-| URL of the partner's `DomibusConnectorBackendDeliveryWebService` endpoint, provided by the backend team. Required for `push`, ignored otherwise. Must be an absolute `http` or `https` URL including the host.
-| Required for `push`
+| URL of the partner's `DomibusConnectorBackendDeliveryWebService` endpoint, provided by the backend team. Must be an absolute `http` or `https` URL including the host. It is mandatory for *every* partner, including `pull` and `passive` partners, where it is not used: without it the startup stops with `...properties.pushAddress ... must not be null`. For such partners, set any valid URL, for example the backend's address.
+| No
 | `+https://<backend-host>/services/domibusConnectorDeliveryWebservice+`
 |===
 
@@ -152,7 +153,7 @@ The Connector lower-cases the DN of the calling certificate and compares it *cha
 
 * write the complete subject DN, *entirely in lower case*;
 * use the RFC 2253 form produced by Java, with attributes in the same order as in the certificate and no space after the commas, for example `cn=backend-courts,o=ministry of justice,c=xx`;
-* the template comment "lower- or UPPERcase is ignored" is wrong: a value containing upper-case letters never matches.
+* a value containing upper-case letters never matches.
 
 TIP: Print the subject of the backend certificate with `keytool -printcert -file <backend>.cer` (or `openssl x509 -noout -subject -nameopt RFC2253 -in <backend>.pem`) and lower-case it.
 With `DEBUG` logging enabled for `eu.ecodex.connector`, the Connector logs the DN it received (`retrieving backend client: ...`).
@@ -171,7 +172,7 @@ For messages received from the gateway, two delivery modes exist:
 | The Connector calls the backend's `DomibusConnectorBackendDeliveryWebService` (`deliverMessage`) at `push-address`. The backend must expose that web service.
 
 | `pull` or `passive`
-| The Connector keeps the message in status *ready for download*. The backend retrieves it with `DomibusConnectorBackendWebService`:
+| The Connector records a transport step with status `READY_FOR_PULL` for the message. The backend retrieves it with `DomibusConnectorBackendWebService`:
 
 . `listPendingMessageIds` – lists the transport identifiers of the messages waiting for this backend;
 . `getMessageById` – downloads one message;
@@ -182,7 +183,7 @@ For messages received from the gateway, two delivery modes exist:
 
 A backend can only list, download and acknowledge its own messages.
 
-NOTE: The 6.x property `receiver-mode` (and `rcv-link-mode`) is not read in 7.x. Remove it from your configuration file.
+NOTE: The 6.x property `receiver-mode` (and `rcv-link-mode`) is no longer part of the configuration in 7.x. Remove it from your configuration file.
 
 == Example
 
@@ -220,6 +221,8 @@ connector.link.backend[0].link-partners[1].enabled=true
 connector.link.backend[0].link-partners[1].sender-mode=pull
 connector.link.backend[0].link-partners[1].properties.certificate-dn=<cn=backend-registry,o=...,c=xx  (lower case)>
 connector.link.backend[0].link-partners[1].properties.encryption-alias=<backend-registry-cert>
+# required for every partner, also in pull mode
+connector.link.backend[0].link-partners[1].properties.push-address=https://<registry-host>/
 ----
 
-WARNING: The REST backend API does not identify the caller yet and always uses the partner whose `certificate-dn` is `cn=alice` (see the security guidance of the installation guide). Use the SOAP backend API for production backends.
+WARNING: The REST backend API does not authenticate the caller in this release (see the security guidance of the installation guide). Use the SOAP backend API for production backends.

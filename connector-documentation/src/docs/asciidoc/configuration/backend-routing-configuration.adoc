@@ -11,10 +11,12 @@ Routing rules allow dynamic selection of backend destinations based on the AS4 p
 The backend of an inbound message is resolved in this order:
 
 . If the message belongs to a conversation (AS4 `ConversationId`) already associated with a backend, it is delivered to that backend (e.g. replies and evidences).
-. Otherwise, if routing is enabled, the rules are evaluated in index order and the first matching rule determines the backend.
+. Otherwise, if routing is enabled, the rules are evaluated in index order and the first matching rule determines the backend. The built-in rule for connector-to-connector test messages is evaluated after your rules.
 . Otherwise, the message is delivered to `default-backend-name`.
 
-NOTE: Routing rules currently apply to the default business domain only.
+The `link-name` and `default-backend-name` values must name a declared link partner.
+
+NOTE: Routing rules apply to the default business domain only.
 
 IMPORTANT: The template routes the test service `Test` to the test partner `backend_alice`. Replace the rules and the default backend with your own services and link partner names.
 
@@ -27,7 +29,7 @@ Configuration is provided via `application.properties` under the `+connector.rou
 | Property | Description | Optional | Example
 
 | `connector.routing.enabled`
-| Master switch for message routing logic. When `false`, the rules below are ignored and inbound messages are routed to `default-backend-name`. Connector-to-connector test messages are only intercepted when routing is enabled.
+| Master switch for message routing logic. When `false`, the rules below are ignored and inbound messages are routed to `default-backend-name`. When `true`, a built-in rule is added that sends connector-to-connector test messages to the internal test backend: it matches the service name and type of `+connector.c2ctests.service.*+` *or* the action `connector.c2ctests.action` (by default `Connector-TEST`, `urn:e-codex:services:`, `ConTest_Form`).
 | Yes
 | By default, `false` (in connector 6.x the default was `true`)
 
@@ -37,7 +39,7 @@ Configuration is provided via `application.properties` under the `+connector.rou
 | `<backend-courts>`
 
 | `connector.routing.backend-rules[*index*].link-name`
-| Name of the target link partner (must match `connector.link.backend[n].link-partners[m].name`). Declare at most one rule per link partner: a second rule with the same `link-name` replaces the first one. Combine conditions with `\|(...)` instead.
+| Name of the target link partner (must match `connector.link.backend[n].link-partners[m].name`). Use one rule per link partner. To combine several conditions for the same partner, nest them in one `match-clause` with `\|(...)` or `&(...)`.
 | No
 | `<backend-registry>`
 
@@ -56,6 +58,7 @@ Configuration is provided via `application.properties` under the `+connector.rou
 NOTE: The configuration is validated at startup. If routing is enabled, a missing
 `default-backend-name`, or a rule without `link-name` or `match-clause`, stops the connector
 with an error naming the offending property.
+A match clause that cannot be parsed makes the backend resolution of *every* inbound message fail (`Could not parse routing rule pattern: ...`) as long as the message is not assigned by its conversation, also when routing is disabled. Check your clauses against the grammar below, and send one inbound test message after each change.
 
 .Configuration Example
 [source,properties]
@@ -75,7 +78,7 @@ connector.routing.backend-rules[2].link-name=<backend-orders>
 connector.routing.backend-rules[2].match-clause=&(startswith(Action, '<prefix>'),not(equals(ServiceName, '<service-b>')))
 ----
 
-TIP: Service names, service types and actions are those of your P-Mode. Party identifiers (`FromPartyId`, ...) and `FinalRecipient` can also be used.
+TIP: Service names, service types and actions are those of your P-Mode. `FromPartyId`, `FromPartyRole` and `FinalRecipient` can also be used (see the restrictions below the grammar).
 
 [[routing-pattern]]
 .Match clause grammar
@@ -87,9 +90,11 @@ TIP: Service names, service types and actions are those of your P-Mode. Party id
 <NOT_EXPRESSION> ::= not(<ROUTING_RULE_PATTERN>)
 <OPERAND> ::= "&" | "|"
 <AS4_TYPE> ::= ServiceType | ServiceName | FinalRecipient | Action | FromPartyId | FromPartyRole
-| FromPartyIdType
-<VALUE> ::= <VALUE><LETTER> | <LETTER>
+<VALUE> ::= one or more of: letters, digits, _ : @ - ~ . / # ?
 ----
 
-`<VALUE>` may contain letters `[a-zA-Z]` and digits `[0-9]`. Other printable characters are untested, and the characters `'`, `\`, `|`, `&`, `(` and `)` are not supported.
-Comparisons are case-sensitive.
+* The value must be written between single quotes and must not be empty. Only the characters listed for `<VALUE>` are allowed; spaces, `+`, `=`, `'`, `\`, `|`, `&`, `(` and `)` are not. Values such as `urn:e-codex:services:` are accepted.
+* Function and attribute names are case-sensitive and must be written exactly as shown (`equals`, `startswith`, `not`, `ServiceName`, ...). Comparisons of values are case-sensitive as well.
+* Spaces between the elements are allowed (`equals(ServiceName, 'EPO')` and `equals(ServiceName,'EPO')` are equivalent).
+* `&` and `|` take exactly two operands. Nest them to combine more conditions, for example `+|(equals(Action, 'A'),|(equals(Action, 'B'),equals(Action, 'C')))+`. * Use `equals` rather than `startswith` for optional attributes such as `FinalRecipient`, which may be absent from a message.
+* `ToPartyId`, `ConversationId` and other AS4 properties are not supported.

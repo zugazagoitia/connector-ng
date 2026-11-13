@@ -19,7 +19,7 @@ Connector 7.x is a new implementation. Its configuration file (now `application.
 
 IMPORTANT: As in 6.x, the shipped configuration file is a template with test values. Do not merge it blindly with your 6.x file: start from your 6.x values, map them with the tables below, and fill the new sections as described in the chapter on preparing `application.properties`.
 
-WARNING: Connector 6.x failed at startup on invalid properties (`connector.common.fail-on-invalid-property=true`). Connector 7.x silently ignores unknown properties: a property that keeps its 6.x name does not cause an error at startup; it simply has no effect.
+WARNING: Connector 6.x failed at startup on invalid properties (`connector.common.fail-on-invalid-property=true`). Connector 7.x does not recognize the 6.x property names: rename them as described in the tables below.
 Review the startup log and the configuration exposed by the administration portal after migrating.
 
 NOTE: This chapter covers the configuration file only. Migration of the 6.x database content is not covered.
@@ -52,7 +52,7 @@ Always include the prefix.
 
 NOTE: In 6.x, business domains (message lanes) existed but were managed in the database, with the default lane `defaultBusinessDomain`, and the P-Mode could be uploaded at first start with `+connector.init.pmode.*+`.
 In 7.x, the default domain is called `default_business_domain` and is declared, together with its P-Mode, under `+connector.business-domains.defaults[n].*+`.
-Keep the identifier `default_business_domain`: gateway and SOAP backend traffic is always assigned to it in this version.
+Keep the identifier `default_business_domain`: gateway and SOAP backend traffic is assigned to it.
 
 .Initial P-Mode upload
 |===
@@ -87,27 +87,26 @@ IMPORTANT: If none of the properties below are set and no business domain exists
 creates a default domain on startup. Set them explicitly if you need to control
 the domain identifier, description, or P-Mode location.
 
-If you define a domain entry, `identifier`, `description` and all three `pmode` properties
-are required for that entry.
+If you define a domain entry, `identifier` and `description` are required for that entry. The `pmode` block is optional, but when it is present all three `pmode` properties are required.
 
 .New Business Domain Configuration Properties (7.x)
 |===
 | Property | Default | Required | Notes
 
 | `connector.business-domains.defaults[0].identifier`
-| `default_business_domain`
+| _(none)_
 | Yes (per entry)
 | Logical name of the business domain
 
 | `connector.business-domains.defaults[0].description`
-| `default business domain`
+| _(none)_
 | Yes (per entry)
 | Human-readable description of the domain
 
 | `connector.business-domains.defaults[0].enabled`
-| `false`
+| `true`
 | No
-| Set to `true` so that the domain accepts messages
+| Set to `false` to register the domain disabled
 
 | `connector.business-domains.defaults[0].pmode.file`
 | _(none)_
@@ -169,7 +168,7 @@ In 6.x, these properties existed under the `+processing.*+` prefix. They moved t
 |===
 
 WARNING: The meaning of the verification modes also changed. In 6.x, `STRICT` required every P-Mode attribute (service and service type, action, party id, party id type and role) and `RELAXED` completed missing attributes from the P-Mode.
-In 7.x, `STRICT` only checks the service and action, while `RELAXED` additionally checks the parties (see the message processing chapter).
+In 7.x, `RELAXED` only checks the service and action, while `STRICT` additionally checks the parties; nothing is completed from the P-Mode (see the message processing chapter).
 Re-test your message exchange with the chosen modes.
 
 .New Message Processing Properties (7.x)
@@ -182,11 +181,6 @@ Re-test your message exchange with the chosen modes.
 | Whether REM evidences (submission acceptance/rejection, delivery/non-delivery)
 are forwarded to the backend in addition to the gateway side
 
-| `connector.message-processing.auto-trigger-delivery-evidences`
-| `false`
-| No
-| Whether delivery evidences are triggered automatically
-
 | `connector.message-processing.ebms-id-generator-enabled`
 | `true`
 | No
@@ -194,9 +188,9 @@ are forwarded to the backend in addition to the gateway side
 relying on IDs supplied by the backend or gateway
 
 | `connector.message-processing.auto-trigger-delivery-evidences`
-| `false`
+| `true` in the binding class, but `false` in effect when the property is absent (this version)
 | No
-| When `true`, a `DELIVERY` evidence is generated automatically once the message has been delivered to the backend
+| When `true`, a `DELIVERY` evidence is generated automatically once the message has been delivered to the backend. The template sets `true`; set it explicitly.
 
 | `connector.message-processing.ebms-id-suffix`
 | `connector.ecodex.eu`
@@ -269,8 +263,7 @@ otherwise the startup fails.
 | `connector.file.storage.s3.auto-create-bucket`
 | `true`
 | No
-| Create the bucket at startup when it does not exist. Set it to `false` in production
-and create the bucket yourself.
+| Create the bucket at startup when it does not exist. Switch it off with `connector.file.storage.s3.auto-create-bucket=false` (see the file storage chapter).
 
 | `connector.file.storage.s3.access-key`
 | _(none)_
@@ -304,14 +297,15 @@ for the region is used. When set, path-style bucket addressing is used.
 |===
 
 NOTE: With `auto-create-bucket=true`, the connector creates the bucket at startup when it does
-not exist, and the credentials need `s3:ListBucket` and `s3:CreateBucket`. With `false`, the
-bucket must exist before startup, otherwise operations that write files fail.
+not exist, and the credentials need `s3:ListBucket` and `s3:CreateBucket`. To create the bucket yourself and run with
+credentials that cannot create buckets, set `connector.file.storage.s3.auto-create-bucket=false`; the bucket must then
+exist before startup, otherwise operations that write files fail.
 
 .Configuration example (7.x)
 [source,properties]
 ----
 connector.file.storage.upload-temp-directory=${TEMP_DIR_LOCATION}
-connector.file.storage.s3.auto-create-bucket=false
+connector.file.storage.s3.auto-create-bucket=true
 connector.file.storage.s3.access-key=${S3_ACCESS_KEY}
 connector.file.storage.s3.secret-key=${S3_SECRET_KEY}
 connector.file.storage.s3.region=us-east-1
@@ -364,7 +358,7 @@ The LOTL/TL sources and timestamp server properties are *unchanged*, with one ad
 
 | `connector.dss.trust-list-sources.*`
 | `connector.dss.trust-list-sources.*`
-| No change. A blank `lotl-url` or `tl-url` now stops the startup.
+| No change in the names. A blank `lotl-url` or `tl-url` now stops the startup.
 
 | `connector.dss.time-stamp-servers.*`
 | `connector.dss.time-stamp-servers.*`
@@ -394,7 +388,7 @@ connector.dss.trust-list-sources.eu.lotl-sources[0].signing-certificates-announc
 connector.dss.trust-list-sources.eu.lotl-sources[0].pivot-support=true
 
 # Direct TL source (optional)
-connector.dss.trust-list-sources.eu.tl-sources[0].tl-url=https://www.signatur.rtr.at/currenttl.xml
+connector.dss.trust-list-sources.eu.tl-sources[0].tl-url=https://www.signatur.rtr.at/vertrauensliste.xml
 
 # Timestamp servers (optional)
 connector.dss.time-stamp-servers.t1.url=http://dss.nowina.lu/pki-factory/tsa/good-tsa
@@ -465,8 +459,8 @@ Two property prefixes have been renamed in 7.x:
 | Renamed
 |===
 
-WARNING: Keeping the old `key-store` or `issuer-info` property names in 7.x will result
-in the properties being silently ignored. Ensure all references are updated before startup.
+WARNING: The old `key-store` and `issuer-info` property names are no longer recognized in 7.x.
+Ensure all references are updated before startup.
 
 NOTE: The keystore `path` and `password`, the private key `alias` and `password`, and all
 issuer values are required and must not be blank.
@@ -542,10 +536,14 @@ Additionally, the validation properties have been reorganized under the
 | `connector.container.signature.validation.constraints-xml`
 | Renamed — prefix and sub-path both changed. Defaults to `classpath:/102853/constraint.xml`.
 The file must exist, otherwise the startup fails.
+
+| `+connector.ecodex-container.signature-validation.trust-store.*+`
+| _(no equivalent)_
+| Inbound containers are validated against the truststore of the P-Mode.
 |===
 
 WARNING: The `connector.ecodex-container` prefix is no longer recognized in 7.x.
-All properties under this prefix must be renamed, or they will be silently ignored at startup.
+All properties under this prefix must be renamed.
 
 The `signature.validation` block also accepts the certificate verification options listed in
 <<signature-validation-options>>.
@@ -614,11 +612,11 @@ Must be one of the allowed types.
 
 | `connector.business-document-sent.authentication-validation.identity-provider`
 | `connector.business-document.authentication-validation.identity-provider`
-| Renamed (prefix only). If the block is present, `identity-provider` is required.
+| Renamed (prefix only). Required, also when only `SIGNATURE_BASED` is used.
 |===
 
 WARNING: The `connector.business-document-sent` prefix is no longer recognized in 7.x.
-All properties under this prefix must be renamed, or they will be silently ignored at startup.
+All properties under this prefix must be renamed.
 
 The `signature.validation` block also accepts the certificate verification options listed in
 <<signature-validation-options>>.
@@ -667,7 +665,7 @@ These options are available under both `connector.container.signature.validation
 
 | `truststore-enabled`
 | `true`
-| Use the configured `truststore.*` block. If `true`, the truststore must be configured.
+| Use the configured `truststore.*` block. If `true`, the truststore must be configured. Not used for container validation.
 
 | `ignore-store-enabled`
 | `false`
@@ -675,7 +673,7 @@ These options are available under both `connector.container.signature.validation
 
 | `trusted-list-source`
 | _(none)_
-| Source of the trusted list
+| Name of a trust source declared under `+connector.dss.trust-list-sources.*+`.
 
 | `truststore.path` / `.password` / `.type`
 | _(none)_ / _(none)_ / `JKS`
@@ -738,7 +736,7 @@ applied across all sections in 7.x.
 
 | `connector.link.backend[0].link-config.config-name`
 | `connector.link.backend[0].link-config.name`
-| Renamed (`config-name` → `name`). Required, and unique across backends.
+| Renamed (`config-name` → `name`). Required. Keep it unique.
 
 | `connector.link.backend[0].link-config.link-impl`
 | _(removed)_
@@ -789,14 +787,13 @@ applied across all sections in 7.x.
 | No change in name. Resource location (`classpath:` or `file:`), defaults to
 `classpath:/policy/backend.policy.xml`. The file must exist, otherwise the startup fails.
 
+| `connector.link.backend[0].link-config.properties.backend-publish-address`
 | `connector.link.backend[0].link-config.properties.publish-address`
-| `connector.link.backend[0].link-config.properties.publish-address`
-| No change in name. Must start with `/`. Defaults to `/backend`.
+| Renamed (`backend-` dropped). Must start with `/`. Defaults to `/backend`.
 |===
 
 WARNING: The `properties.soap` sub-prefix is no longer recognized in 7.x.
-Any backend keystore, truststore, or key properties still using `soap` will be
-silently ignored at startup.
+Any backend keystore, truststore, or key properties still using `soap` must be renamed.
 
 .Configuration example (7.x)
 [source,properties]
@@ -843,7 +840,7 @@ It must match the names used in the message routing configuration.
 
 | `connector.link.backend[0].link-partners[0].rcv-link-mode`
 | _(removed)_
-| No longer applicable. Remove it; a `receiver-mode` property is *not* read in 7.x either.
+| No longer applicable. Remove it.
 
 | `connector.link.backend[0].link-partners[0].send-link-mode`
 | `connector.link.backend[0].link-partners[0].sender-mode`
@@ -851,15 +848,15 @@ It must match the names used in the message routing configuration.
 
 | `connector.link.backend[0].link-partners[0].properties.push-address`
 | `connector.link.backend[0].link-partners[0].properties.push-address`
-| No change in name. Required when `sender-mode=push`. Must be an absolute `http(s)` URL.
+| No change in name. Required for *every* partner, also with `sender-mode` `pull` or `passive` (otherwise `pushAddress ... must not be null`). Must be an absolute `http(s)` URL.
 
 | `connector.link.backend[0].link-partners[0].properties.encryption-alias`
 | `connector.link.backend[0].link-partners[0].properties.encryption-alias`
-| No change. Must match the certificate alias in the truststore.
+| No change. Required (must not be blank). Must match the certificate alias in the truststore.
 
 | `connector.link.backend[0].link-partners[0].properties.certificate-dn`
 | `connector.link.backend[0].link-partners[0].properties.certificate-dn`
-| No change. Must match the certificate DN (case is ignored).
+| No change. Must be written in lower case: the Connector lower-cases the DN of the client certificate and compares it exactly with this value (see the link partner chapter).
 |===
 
 .Configuration example (7.x)
@@ -1009,7 +1006,7 @@ The UI users of 6.x are replaced by REST API users. The initial administrator is
 
 | `connector.init.user.initial-change-required`
 | _(removed)_
-| A password change is always required at first login.
+| The login response contains `mustChangePassword=true` until the password is changed. Change the password after the first login.
 
 | `connector.init.user.log-initial-to-console`
 | _(removed)_
@@ -1023,7 +1020,7 @@ The UI users of 6.x are replaced by REST API users. The initial administrator is
 === Queues and Transactions
 
 * The internal queues were renamed (6.x: `+connector.queues.to-connector-controller-queue+`, `to-link-queue`, `cleanup-queue` and their dead letter queues). Remove the 6.x queue properties and add all `+connector.queues.*+` properties of the 7.x template with their template values.
-* JTA still uses Atomikos (`+spring.jta.*+`); the 6.x settings can be kept. The JTA log location (`spring.jta.log-file`) must be on persistent storage.
+* JTA still uses Atomikos (`+spring.jta.*+`). Set `spring.jta.atomikos.properties.log-base-dir=./data/jtalog` and keep that directory on persistent storage.
 * Datasource: 6.x documented `spring.datasource.xa.data-source-class-name` for the XA class (or a JNDI datasource when deployed in Tomcat). Deployment in an external Tomcat and JNDI datasources are no longer supported.
 
 ==== Redelivery Settings
@@ -1038,7 +1035,7 @@ The UI users of 6.x are replaced by REST API users. The initial administrator is
 
 | `connector.activemq.address-settings.redelivery-delay`
 | `60s`
-| Delay before the first redelivery. Must be positive. A bare number is read as milliseconds.
+| Delay before the first redelivery. Must be positive. A bare number is read as milliseconds. No observable effect in tests of this version.
 
 | `connector.activemq.address-settings.redelivery-multiplier`
 | `2.0`
@@ -1048,7 +1045,7 @@ Minimum `1.0`.
 
 ==== Queue Names
 
-All queue names are set under `connector.queues.*`. They must not be blank. Keep every property of the template in your file and change a name only if your broker setup requires it (see the queue configuration chapter).
+All queue names are set under `connector.queues.*`. They must not be blank. Keep every property of the template in your file. The names can be changed, except that `resolved-message-cleanup-processing-queue` must keep its default name (see the queue configuration chapter).
 
 .New Queue Properties (7.x)
 |===
@@ -1081,6 +1078,9 @@ All queue names are set under `connector.queues.*`. They must not be blank. Keep
 | `gateway-submission-reply-queue`
 | `domibus.backend.jms.replyQueue`
 
+| `gateway-reception-queue`
+| _(none, the template value is `domibus.backend.jms.outQueue`)_
+
 | `resolved-message-cleanup-processing-queue`
 | `connector.queues.resolved-message-cleanup-processing-queue`
 |===
@@ -1095,7 +1095,7 @@ All properties in this section are *new in 7.x*.
 
 | `connector.file-deletion.orphan.threshold`
 | `1d`
-| Age after which attachments with no linked message are deleted. Must be positive.
+| Age after which attachments with no linked message are deleted (file and database row). Must be positive.
 
 | `connector.file-deletion.orphan.cron`
 | `0 0 0 * * *`
@@ -1103,13 +1103,15 @@ All properties in this section are *new in 7.x*.
 
 | `connector.file-deletion.unresolved-messages.threshold`
 | `7d`
-| Age after which messages that were neither confirmed nor rejected are cleaned up.
+| Age after which messages that were neither confirmed nor rejected are deleted, with their files and database rows.
 Must be positive.
 
 | `connector.file-deletion.unresolved-messages.cron`
 | `0 10 0 * * *`
 | Spring cron for the unresolved message cleanup
 |===
+
+NOTE: For the schedules of the clean-up jobs, see the file clean-up chapter.
 
 .Configuration example (7.x)
 [source,properties]
@@ -1199,7 +1201,7 @@ The following 6.x settings have no equivalent in 7.x. Remove them, and check whe
 
 In 7.x the configuration is validated when the connector starts. If a value is missing or
 invalid, the startup stops and the error names the property, for example
-`connector.dss.trust-list-sources[eu].tl-sources[0].tl-url: must not be blank`.
+`Property: connector.dss.trustListSources[eu].tlSources[0].tlUrl` with `Reason: must not be blank`. The property name is shown in its Java form (camel case), and for class-level checks it is the name of the check, for example `connector.file-deletion.orphan.cronValid`.
 
 The following are checked:
 
@@ -1207,8 +1209,8 @@ The following are checked:
 * Cron expressions must be valid 6-field Spring cron expressions.
 * Durations that represent a threshold or delay must be positive.
 * URLs (S3 endpoint, push address) must be absolute `http(s)` URLs.
-* Resource files (`ws-policy`, `constraints-xml`) must exist.
-* Link configuration names and link partner names must be unique.
+* Resource files (`ws-policy`, `constraints-xml`) and the evidence signing keystore must exist.
+* Link partner names must be unique.
 
 NOTE: An empty value (`property=`) counts as *set to blank*, not as unset. Comment the line
 out or remove it to use the default.

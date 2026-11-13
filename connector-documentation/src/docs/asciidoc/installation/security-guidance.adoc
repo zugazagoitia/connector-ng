@@ -20,11 +20,11 @@ Work through the <<security-checklist,checklist>> for every non-development envi
 | `+connector.*.keystore.*+`, `+connector.*.truststore.*+`, `+connector.*.private-key.*+`
 
 | 2
-| Set a random JWT signing secret of at least 32 bytes and keep it out of version control.
+| Set a random JWT signing secret of at least 32 bytes and keep it out of version control. A shorter secret stops the startup (`WeakKeyException`).
 | `connector.auth.security.jwt.secret` (`JWT_SECRET_KEY`)
 
 | 3
-| Set your own admin user name, password and e-mail before the first start. The template contains `admin` / `123456` / `admin@test.com`. The user is asked to change the password at first login, but the configured value is the one used until then.
+| Set your own admin user name, password and e-mail before the first start, and change the password with the API right after the first login. The template contains `admin` / `123456` / `admin@test.com`. The login response reports `mustChangePassword: true` until the password is changed. The account is created only at the first start (see <<authentication-authorization>>).
 | `+connector.admin.*+`
 
 | 4
@@ -36,27 +36,27 @@ Work through the <<security-checklist,checklist>> for every non-development envi
 | reverse proxy / firewall
 
 | 6
-| Disable Swagger UI and the OpenAPI description in production.
+| Disable Swagger UI and the OpenAPI description in production (both paths then answer 404). The template enables them.
 | `springdoc.swagger-ui.enabled=false`, `springdoc.api-docs.enabled=false`
 
 | 7
-| Limit Actuator exposure and do not publish health details to unauthenticated clients.
+| Limit Actuator exposure and do not publish health details to unauthenticated clients. Every Actuator endpoint you expose is public (see <<public-endpoints>>). The template sets `show-details=always`, which shows the database type, the disk path and the JMS provider; with `never` only the status is returned.
 | `management.endpoints.web.exposure.include`, `management.endpoint.health.show-details`
 
 | 8
-| Restrict CORS to the origin(s) of the administration portal. Without configuration, all origins are allowed with credentials.
+| Set the CORS origins to the origin(s) of the administration portal (the template uses `+http://localhost:3000+`). A request that carries an `Origin` header from another origin is rejected with HTTP 403; requests without an `Origin` header (backends, scripts) are not affected.
 | `connector.cors.allowed-origins`
 
 | 9
-| Disable the connector-to-connector test mode unless you are actively running C2C tests. It is *enabled by default*.
-| `connector.c2ctests.enabled=false`
+| Disable the sending of connector-to-connector test messages unless you are actively running C2C tests. It is *enabled by default*, and any authenticated user of the administration API can then send test messages. While routing is enabled, an incoming message whose service name and type, or whose action, equal the configured test values is routed to the internal test backend. The `enabled` flag does not switch off this inbound routing. Do not use these values for business services.
+| `connector.c2ctests.enabled=false`, `+connector.c2ctests.*+`
 
 | 10
-| Disable traffic logging on backend links in production; it writes full SOAP messages (including business payloads) to the log.
+| Disable traffic logging on backend links in production; it writes the SOAP messages exchanged with the backends to the log. The default is `false`, but the template sets it to `true`.
 | `connector.link.backend[n].link-config.properties.logging-enabled=false`
 
 | 11
-| Protect the ActiveMQ broker: strong credentials, TLS for OpenWire where possible, no unauthenticated JMX, and restrict the trusted packages for JMS object messages.
+| Protect the ActiveMQ broker: strong credentials, TLS for OpenWire where possible, no unauthenticated JMX, and restrict the trusted packages for JMS object messages (the template sets `spring.activemq.packages.trust-all=true`).
 | `+spring.activemq.*+`, broker configuration
 
 | 12
@@ -69,7 +69,15 @@ Work through the <<security-checklist,checklist>> for every non-development envi
 
 | 14
 | Inject all secrets through environment variables or a secrets manager, never through files committed to version control.
-| all `+*password*+`, `*secret*`, `+*-key+` properties
+| all `+*password*+`, `+*secret*+`, `+*-key+` properties
+
+| 15
+| Give the `ROLE_ADMIN` role only to administrators, and give the other roles only to trusted operators (see <<authentication-authorization>>).
+| administration API (`+/api/v1/admin/users/**+`)
+
+| 16
+| Limit the rate of login attempts at the reverse proxy. The Connector does not lock an account or slow down after failed logins.
+| reverse proxy
 |===
 
 == Test credentials and material in the template
@@ -78,23 +86,45 @@ The configuration template and the files shipped with it contain test values tha
 
 * Test keystores in `config/keystores/` (password `12345`, key alias `connector_blue`, test partner certificate `alice`).
 * Admin account `admin` / `123456` in the template `application.properties`.
-* Test link partner `backend_alice` with `certificate-dn=cn=alice` and push address `+http://localhost:port/...+`.
+* Test link partner `backend_alice` with `certificate-dn=cn=alice` and push address `+http://localhost:port/...+` (not a valid URL: it stops the startup until you replace it).
 * All other placeholders listed in the chapter "Preparing application.properties" of the configuration guide.
-* Docker Compose development stack credentials (`connector`/`connector` for the database, `admin`/`admin123` for MinIO, `admin`/`admin` for ActiveMQ, unauthenticated JMX on the broker).
+* Docker Compose development stack credentials (`connector`/`connector` for the Connector database, `gateway`/`gateway` for the gateway database, `admin`/`admin123` for MinIO, `admin`/`admin` for ActiveMQ and its web console, unauthenticated JMX on the broker).
 
+[[authentication-authorization]]
 == Authentication and authorization
 
 The REST API is protected with JWT bearer tokens (see the admin user authentication chapter of the configuration guide).
 
-* Access tokens are signed with HMAC-SHA using `connector.auth.security.jwt.secret`. The value is used as-is (UTF-8 bytes); it is *not* Base64-decoded. Use at least 32 random bytes, e.g. the output of `openssl rand -base64 32`.
-* Rotating the secret invalidates all issued access tokens.
-* Refresh tokens are persisted in the database and purged according to `connector.auth.security.jwt.refresh-token.cleanup-cron`.
-* `+/api/v1/admin/users/**+` and the creation of business domains and processing modes require the `ADMIN` role. Every other `+/api/v1/admin/**+` endpoint requires an authenticated user.
+Access tokens::
+* Access tokens are signed with HMAC-SHA using `connector.auth.security.jwt.secret`. The value is used as-is (UTF-8 bytes); it is *not* Base64-decoded. Use at least 32 random bytes, e.g. the output of `openssl rand -base64 32`; a shorter secret stops the startup.
+* An access token is valid for `connector.auth.security.jwt.expiration` (default `1h`, `15m` in the template).
+* Keep the lifetime short. Rotating the secret invalidates all issued access tokens at once.
+* `connector.auth.security.jwt.issuer` must be set.
+
+Refresh tokens::
+* `POST /api/v1/auth/refresh` with the body `+{"refreshToken": "..."}+` returns a new access token and a new refresh token; the refresh token that was used is revoked.
+* `POST /api/v1/auth/logout` (with an access token and the same body) revokes the refresh token.
+* Refresh tokens are persisted in the database and are valid for `connector.auth.security.jwt.refresh-token.expiration` (`30d` in the template). The job scheduled by `connector.auth.security.jwt.refresh-token.cleanup-cron` deletes expired refresh tokens and revoked refresh tokens that expired more than 30 days ago.
+
+Passwords::
+* Passwords must have at least 6 characters (at most 255 when a user is created), and a new password must differ from the current one. Passwords do not expire, and there is no lock-out after failed login attempts.
+* Every new user, including the built-in admin, starts with `mustChangePassword: true`. The flag is returned at login, so change the initial password right away.
+* While the flag is set, the user changes the password with `POST /api/v1/auth/change-password`; afterwards (the first endpoint then answers 409) with `POST /api/v1/auth/me/change-password`. Both need an access token and the body `+{"refreshToken": "...", "currentPassword": "...", "newPassword": "..."}+`.
+* An administrator cannot set the password of another user. To reset a forgotten password, delete the user and create it again.
+
+Built-in admin account::
+* The account defined by `+connector.admin.*+` is created at startup only when no user with that user name or e-mail address exists yet. Changing these properties later does not change an existing account, and renaming the admin creates a second account.
+* The account is created enabled. To deactivate it, use `PATCH /api/v1/admin/users/<uuid>` with `{"enabled": false}`.
+
+Roles::
+* The roles are `ROLE_ADMIN`, `ROLE_USER` and `ROLE_LOAD_TESTER`. Use these exact names when you create a user.
+* `+/api/v1/admin/users/**+` and the creation of business domains and processing modes (`POST`) require `ROLE_ADMIN`. Any authenticated user may replace the truststore of a P-Mode (`PATCH /api/v1/admin/processing-modes/{uuid}/truststore`); only creating a P-Mode requires `ROLE_ADMIN`.
+* Deactivating a user blocks new logins (HTTP 401 "Your account is inactive"). To remove a user's access, delete the account; this also invalidates their refresh tokens.
 
 [[public-endpoints]]
 === Endpoints that do not require authentication
 
-The following endpoints are reachable *without* a JWT token in the current version:
+The following endpoints are reachable *without* a JWT token:
 
 [cols="3,4", options="header"]
 |===
@@ -103,39 +133,35 @@ The following endpoints are reachable *without* a JWT token in the current versi
 | `/api/v1/auth/login`, `/api/v1/auth/refresh`
 | Authentication.
 
-| `/api/v1/messages/outbound`, `/api/v1/messages/evidence-trigger`, `/api/v1/attachments/upload`, `/api/v1/evidences/{uuid}/download`
-| REST backend API (message submission).
+| `/api/v1/messages/outbound`, `/api/v1/messages/evidence-trigger`, `/api/v1/attachments/upload`
+| REST backend API (message submission). These endpoints are not listed in Swagger UI or in `/v3/api-docs`.
 
-| `/api/v1/services`, `/api/v1/link-partners`, `/api/v1/processing-modes/{identifier}/services`, `.../actions`, `.../parties`
-| Read-only lookups for backend clients.
+| `/api/v1/link-partners`, `+/api/v1/processing-modes/<business-domain>/services+`, `+.../actions+`, `+.../parties+`
+| Read-only lookups for backend clients. `/api/v1/link-partners` returns every link partner with its certificate DN and push address.
 
 | `/services/backend`
-| SOAP backend API. Protected at the message level by WS-Security (signature and encryption).
+| SOAP backend API, including its WSDL (`/services/backend?wsdl`). Protected at the message level by WS-Security (signature and encryption).
 
 | `+/actuator/**+`
-| Spring Boot Actuator (by default `health` and `info` are exposed).
+| Spring Boot Actuator. In the template: the index `/actuator`, `/actuator/health` (with the groups `liveness` and `readiness`) and `/actuator/info`. Every endpoint added to `management.endpoints.web.exposure.include` is public as well.
 
-| `+/swagger-ui/**+`, `+/v3/api-docs/**+`, `+/swagger-resources/**+`
-| API documentation.
+| `+/swagger-ui/**+`, `+/v3/api-docs/**+`
+| API documentation (404 when disabled with the `+springdoc.*+` properties).
 |===
+
+Evidences are downloaded with `+/api/v1/admin/evidences/<uuid>/download+`, which requires a token.
+All other paths, including `/` and every other path under `/services`, answer HTTP 401 without a token.
 
 [IMPORTANT]
 ====
-The REST backend API does not yet identify the calling backend: the value `cn=alice` is *hard-coded* in the Connector (it is not read from `application.properties`).
-Every message submitted through `/api/v1/messages/outbound` or `/api/v1/messages/evidence-trigger` is attributed to the link partner whose `certificate-dn` is `cn=alice`, whoever calls the endpoint.
-
-* With the template configuration, this is the test partner `backend_alice`.
-* Once you replace the test partners with your own (as required), no partner matches and the REST backend API rejects submissions ("No link partner found for certificateDn: cn=alice").
-* Do *not* declare a link partner with `certificate-dn=cn=alice` to work around this: anybody able to reach the endpoint could then submit messages on behalf of that backend.
-
-Use the SOAP backend API, which identifies each backend from the certificate signing its request, until the REST API authenticates its clients.
+Use the SOAP backend API for production backends, which identifies each backend from the certificate signing its request. The REST backend API does not authenticate the calling backend in this release.
 ====
 
 
 NOTE: The SOAP backend API identifies the caller by comparing the lower-cased subject DN of the signing certificate with `certificate-dn`. Configure that value entirely in lower case (see the link partner chapter), otherwise the backend is rejected.
 
 NOTE: Only the SOAP path `/services/backend` is excluded from JWT authentication.
-If you change `connector.link.backend[n].link-config.properties.publish-address` to another value, SOAP calls to that address will be rejected with HTTP 401.
+Do not change `connector.link.backend[n].link-config.properties.publish-address` or the `cxf.path` prefix (`/services`): SOAP calls to any other address (and its WSDL) are rejected with HTTP 401.
 
 == Transport security
 
@@ -148,18 +174,18 @@ See <<https-transport-security>>. In summary:
 == Message and document validation
 
 * Business document signatures are validated with DSS against the truststore and, optionally, a trusted list source (see the business document and DSS configuration chapters).
-* Inbound and outbound messages are verified against the processing mode. `STRICT` is the default for outbound messages and `RELAXED` for inbound messages; consider `STRICT` for both once your partners are aligned.
+* Inbound and outbound messages are verified against the processing mode. `STRICT` (service, action and parties) is the default for outbound messages and `RELAXED` (service and action only) for inbound messages; consider `STRICT` for both once your partners are aligned.
 
 == Logging and data protection
 
 * Message payloads are stored in the S3 bucket; message metadata, evidences and transport history are stored in the database. Apply your organisation's retention and backup policies to both.
-* Avoid `DEBUG` logging and backend traffic logging in production, as they may write personal data to log files.
-* The JTA transaction log (`./data/jtalog` by default) must be kept on persistent storage; deleting it can leave in-doubt transactions unresolved.
+* Avoid `DEBUG` logging and backend traffic logging in production, as they may write personal data to log files. The shipped `log4j2.xml` sets `eu.ecodex.connector` to `DEBUG`.
+* The JTA transaction log must be kept on persistent storage; deleting it can leave in-doubt transactions unresolved. By default the log (`tmlog<N>.log` and `tmlog.lck`) is written into the working directory. Set `spring.jta.atomikos.properties.log-base-dir=./data/jtalog` to write the log into `data/jtalog`.
 
 == Container runtime
 
 The official image runs as the unprivileged user `connector` (UID 1000) from `/app`.
-Mount configuration read-only where possible, and mount `/app/data` on a persistent volume.
+Mount configuration read-only where possible, and mount `/app/data` on a persistent volume. The transaction log is only written below `/app/data` when `spring.jta.atomikos.properties.log-base-dir=./data/jtalog` is set (see above).
 
 == Reporting vulnerabilities
 

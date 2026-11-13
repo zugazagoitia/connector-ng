@@ -11,12 +11,13 @@ These properties configure the JWT token lifecycle and the built-in admin accoun
 * Obtain a token pair with `POST /api/v1/auth/login` (`{"username": "...", "password": "..."}`); the response contains `accessToken`, `refreshToken`, `expiresIn`, `refreshExpiresIn` and `mustChangePassword`.
 * Send the access token in the `Authorization: Bearer <token>` header.
 * Renew it with `POST /api/v1/auth/refresh`, and end the session with `POST /api/v1/auth/logout`.
-* At first login, `mustChangePassword` is `true`: change the password with `POST /api/v1/auth/change-password` before using the rest of the API.
+* At first login, `mustChangePassword` is `true`. The flag is advisory: the administration portal asks for the change, and the API does not block other calls while it is set. Change the password immediately with `POST /api/v1/auth/change-password` (body `{"refreshToken": "...", "currentPassword": "...", "newPassword": "..."}`, at least 6 characters).
 * Additional users and roles are managed through `/api/v1/admin/users` (requires the `ADMIN` role).
 
 IMPORTANT: Change `connector.admin.password` and `connector.auth.security.jwt.secret`
 before deploying to any non-development environment.
 The template sets the user name `admin`, the password `123456` and the e-mail `admin@test.com`. These are placeholders: set your own values before the first start, because the account is created with them.
+The account is only created when neither its user name nor its e-mail address is already registered. Changing `connector.admin.password` or `connector.admin.email` after the first start does not change the existing account; use the change-password endpoint or the user administration instead.
 
 .Admin Authentication Properties
 [cols="35,40,10,15", options="header"]
@@ -24,7 +25,7 @@ The template sets the user name `admin`, the password `123456` and the e-mail `a
 | Property | Description | Optional | Example
 
 | `connector.auth.security.jwt.secret`
-| Secret used to sign (HMAC-SHA) the JWT access tokens. The string is used as-is (its UTF-8 bytes, not Base64-decoded) and must be at least 32 bytes long. Never commit it to version control.
+| Secret used to sign (HMAC-SHA) the JWT access tokens. The string is used as-is (its UTF-8 bytes, not Base64-decoded) and must be at least 32 bytes long; a shorter value stops the startup with `WeakKeyException`. Never commit it to version control.
 | No
 | `${JWT_SECRET_KEY}` — generate a value with `openssl rand -base64 32`
 
@@ -34,17 +35,17 @@ The template sets the user name `admin`, the password `123456` and the e-mail `a
 | By default, `60m`. Choose a value according to your security policy.
 
 | `connector.auth.security.jwt.issuer`
-| Issuer claim embedded in the JWT. Set a value identifying your installation.
-| Yes
-| By default, `connector.ecodex.eu`
+| Issuer claim embedded in the JWT. Set a value identifying your installation. There is no default: a missing or blank value stops the startup (`must not be blank`).
+| No
+| `connector.<your-organisation>.example`
 
 | `connector.auth.security.jwt.refresh-token.expiration`
-| How long a refresh token remains valid, allowing a client to renew its access token without logging in again.
+| How long a refresh token remains valid, allowing a client to renew its access token without logging in again. No default: a missing value stops the startup.
 | No
 | `30d`
 
 | `connector.auth.security.jwt.refresh-token.cleanup-cron`
-| Spring cron expression (six fields, starting with seconds) controlling when expired refresh tokens are purged from the database.
+| Spring cron expression (six fields, starting with seconds) controlling when expired refresh tokens are purged from the database. No default: a missing value stops the startup.
 | No
 | `+0 0 3 * * *+` (daily at 03:00)
 
@@ -54,17 +55,17 @@ The template sets the user name `admin`, the password `123456` and the e-mail `a
 | `<admin-user>`
 
 | `connector.admin.password`
-| Initial password of the built-in admin account. The user must change it at first login.
+| Initial password of the built-in admin account, used only when the account is created. The login response then reports `mustChangePassword=true`; change the password at first login.
 | No
 | `${ADMIN_PASSWORD}`
 
 | `connector.admin.enabled`
-| Set to `false` to disable the built-in admin account.
+| Whether the built-in admin account is enabled when it is created. To disable the account later, use the user administration API.
 | Yes
 | By default, set to `true`
 
 | `connector.admin.email`
-| Email address associated with the built-in admin account.
+| Email address associated with the built-in admin account. Must be a well-formed e-mail address, otherwise the startup stops (`must be a well-formed email address`).
 | No
 | `<admin-mailbox>@<your-organisation>.example`
 |===

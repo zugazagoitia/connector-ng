@@ -13,4 +13,4 @@ Send a private report to the e-CODEX team at **e-codex@eulisa.europa.eu**. Inclu
 
 ## Hardening a deployment
 
-The installation guide contains a security checklist, the list of endpoints that do not require authentication, and the default credentials that must be replaced before going to production. See the chapter "Security guidance" in `connector-documentation/src/docs/asciidoc/installation/security-guidance.adoc`.
+The installation guide contains a security checklist, the list of endpoints that do not require authentication and the default credentials that must be replaced before going to production. See the chapter "Security guidance" in [`connector-documentation/src/docs/asciidoc/installation/security-guidance.adoc`](connector-documentation/src/docs/asciidoc/installation/security-guidance.adoc).

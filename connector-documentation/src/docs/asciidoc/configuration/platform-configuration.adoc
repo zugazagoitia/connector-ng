@@ -12,13 +12,13 @@ All settings are provided in `config/application.properties`. Values described a
 == Environment variables used by the template
 
 The template `application.properties` reads the following environment variables.
-Every one of them must be defined (or the placeholder replaced by a literal value), otherwise the application fails to start with `Could not resolve placeholder`.
+Define every one of them, or replace the placeholder by a literal value. If the startup fails on a property that still contains `${...}`, see the troubleshooting chapter of the installation guide.
 
 [cols="2,3,3", options="header"]
 |===
 | Variable | Property | Example
 
-| `DB_URL` | `spring.datasource.url` | `jdbc:mysql://db-host:3306/connector`
+| `DB_URL` | `spring.datasource.url` | `jdbc:mysql://db-host:3306/connector?pinGlobalTxToPhysicalConnection=true`
 | `DB_USERNAME` | `spring.datasource.username` | `connector`
 | `DB_PASSWORD` | `spring.datasource.password` | _(secret)_
 | `DB_DRIVER_CLASSNAME` | `spring.datasource.driver-class-name` | see <<platform-database>>
@@ -31,7 +31,7 @@ Every one of them must be defined (or the placeholder replaced by a literal valu
 | `S3_REGION` | `connector.file.storage.s3.region` | `<region>`
 | `S3_BUCKET` | `connector.file.storage.s3.bucket` | `<connector-bucket>`
 | `S3_ENDPOINT` | `connector.file.storage.s3.endpoint` | `+https://<s3-host>+`
-| `TEMP_DIR_LOCATION` | `spring.servlet.multipart.location` | `/app/temp`
+| `TEMP_DIR_LOCATION` | `spring.servlet.multipart.location` and `connector.file.storage.upload-temp-directory` | `/app/temp`
 | `JWT_SECRET_KEY` | `connector.auth.security.jwt.secret` | output of `openssl rand -base64 32`
 |===
 
@@ -67,9 +67,9 @@ TIP: Any other property can also be supplied as an environment variable using Sp
 | Property | Description | Optional | Example
 
 | `spring.datasource.url`
-| JDBC URL of the connector schema.
+| JDBC URL of the connector schema. With MySQL and the XA data source class, add `?pinGlobalTxToPhysicalConnection=true`: without it the first start fails while creating the administrator (`XAER_INVAL: Invalid arguments (or unsupported command)`).
 | No
-| `jdbc:mysql://db-host:3306/connector`
+| `jdbc:mysql://db-host:3306/connector?pinGlobalTxToPhysicalConnection=true`
 
 | `spring.datasource.username` / `spring.datasource.password`
 | Database credentials.
@@ -127,7 +127,7 @@ The Connector connects to the shared external ActiveMQ Classic broker with the s
 | _(secret)_
 
 | `spring.activemq.packages.trust-all`
-| Allows deserialization of any class from JMS object messages. The template sets `true`; prefer `spring.activemq.packages.trusted` with an explicit package list.
+| Allows deserialization of any class from JMS object messages. The template sets `true`; prefer `false` or `spring.activemq.packages.trusted` with an explicit package list. The Connector writes JSON text messages to its own queues (Jackson message converter) and does not send object messages itself. Test a configuration with `trust-all=false` on a test environment, including the reception of gateway messages.
 | Yes
 | `false`
 
@@ -137,7 +137,9 @@ The Connector connects to the shared external ActiveMQ Classic broker with the s
 | `1` / `10`
 |===
 
-Redelivery of failed JMS messages is configured with `+connector.activemq.address-settings.*+`:
+Redelivery of failed JMS messages is configured with `+connector.activemq.address-settings.*+`.
+These settings apply to the outbound staging and outbound processing queues. The other queues use the ActiveMQ client defaults (6 redeliveries, i.e. 7 delivery attempts).
+Messages that exhaust their attempts go to the dead-letter queue of the broker (`ActiveMQ.DLQ` on a broker with the default dead-letter strategy).
 
 [cols="3,1,4", options="header"]
 |===
@@ -169,8 +171,8 @@ The Connector uses Atomikos to coordinate database and JMS transactions.
 | Yes
 | `true`
 
-| `spring.jta.log-file`
-| Location of the transaction log used for crash recovery. Must be on persistent storage.
+| `spring.jta.atomikos.properties.log-base-dir`
+| Directory of the Atomikos transaction log used for crash recovery. Not set in the template. Set it to a directory on persistent storage (for the container image, a directory under the `/app/data` volume); the directory is created at startup.
 | Yes
 | `./data/jtalog`
 
@@ -209,7 +211,7 @@ Attachments are uploaded through multipart requests. The template accepts files 
 | `210MB`
 
 | `spring.servlet.multipart.location`
-| Temporary directory for uploads. Must exist and be writable.
+| Temporary directory for uploads. Must exist and be writable. The template sets it from `TEMP_DIR_LOCATION`, like `connector.file.storage.upload-temp-directory` (see the file storage chapter for the checks applied to that directory).
 | Yes
 | `${TEMP_DIR_LOCATION}`
 
@@ -228,7 +230,7 @@ Cross-origin requests are needed when the administration portal is served from a
 | Property | Description | Optional | Default
 
 | `connector.cors.allowed-origins`
-| Allowed origins. Set it explicitly: the default allows every origin.
+| Allowed origins. Set it explicitly to the origin(s) of your administration portal. Requests from origins that are not listed are answered with HTTP 403.
 | Yes
 | `+*+`
 
@@ -260,7 +262,7 @@ Cross-origin requests are needed when the administration portal is served from a
 | Property | Description | Optional | Example
 
 | `springdoc.swagger-ui.enabled`
-| Serves Swagger UI at `/swagger-ui/index.html`. Disable in production.
+| Serves Swagger UI at `/swagger-ui/index.html` (`/swagger-ui.html` is not available). Disable in production.
 | Yes
 | `false`
 
@@ -302,7 +304,7 @@ Cross-origin requests are needed when the administration portal is served from a
 | `1.0`
 |===
 
-NOTE: The Actuator `metrics` endpoint is currently disabled because the Apache CXF metrics integration is not yet compatible with Spring Boot 4 (see `spring.autoconfigure.exclude` in the template).
+NOTE: The Actuator `metrics` endpoint is not available in this release (see `spring.autoconfigure.exclude` in the template).
 
 == Logging
 

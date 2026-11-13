@@ -16,7 +16,7 @@ ASiC-S::
 The signed container format (Associated Signature Container, simple) in which the Connector packages the business document, its attachments and the trust-ok token for transport.
 
 Backend::
-The national application that submits business messages to the Connector and receives messages from it. The Connector knows each backend as a *link partner* of type `backend`.
+The national application that submits business messages to the Connector and receives messages from it. The Connector knows each backend as a *link partner* of type `BACKEND`.
 
 Business domain::
 A named lane of the Connector that groups a P-Mode and its services, actions and parties. The default business domain is `default_business_domain`.
@@ -25,22 +25,22 @@ Business message::
 A message that carries a business document and optional attachments between two parties.
 
 Conversation identifier::
-The AS4 identifier that groups related messages. It can be used by the routing to deliver replies to the backend that started a conversation.
+The AS4 identifier that groups related messages. The routing uses it to deliver replies to the backend that started the conversation.
 
 DSS::
 The Digital Signature Service library of the European Commission. The Connector uses it to build and validate signatures and to read trusted lists.
 
 ebMS identifier::
-The identifier that the AS4 layer assigns to a message. Evidences refer to the business message by this identifier.
+The ebMS message identifier of a message. For outbound messages the Connector generates it unless the backend sets it. Evidences refer to the business message by this identifier.
 
 Evidence::
 A signed receipt about a step in the life of a business message, based on the ETSI REM standard: for example `SUBMISSION_ACCEPTANCE`, `RELAY_REMMD_ACCEPTANCE`, `DELIVERY` or `RETRIEVAL`, and their negative counterparts.
 
 Gateway::
-The e-CODEX access point (Domibus) that exchanges AS4 messages with the gateways of other participants. The Connector reaches it through JMS. A gateway is a *link partner* of type `gateway`.
+The e-CODEX access point (Domibus) that exchanges AS4 messages with the gateways of other participants. The Connector reaches it through the JMS queues `connector.queues.gateway-*`. It is the built-in *link partner* `default_gateway`, of type `GATEWAY`.
 
 Link partner::
-A system the Connector exchanges messages with: either a backend or the gateway. Link partners are configured under `connector.link.*`.
+A system the Connector exchanges messages with: either a backend or the gateway. Backend link partners are configured under `connector.link.backend[n].*`. Two link partners are built in and not configured there: the gateway `default_gateway` and the backend `default_test_backend` used for connector-to-connector tests. `GET /api/v1/link-partners` lists them.
 
 LOTL::
 The List of Trusted Lists published by the European Commission. It points to the trusted lists of the member states.
@@ -52,7 +52,7 @@ REM::
 Registered Electronic Mail, the ETSI standard on which the e-CODEX evidences are based. *REM-MD* is the message dispatcher; the *relay REM-MD* evidences confirm that the message was passed on.
 
 Routing rule::
-A rule that selects the backend that receives an inbound message, based on a match clause over the message properties. Rules are configured under `connector.routing.*`.
+A rule that selects the backend that receives an inbound message, based on a match clause over the message properties. Rules are configured under `connector.routing.backend-rules[n].*`.
 
 Sender mode::
 The way the Connector hands over a message to a backend: `push` (the Connector calls the backend), or `pull` and `passive` (the backend downloads the message).
@@ -61,7 +61,7 @@ TL::
 A Trusted List published by a member state. It lists the qualified trust service providers.
 
 Transport step::
-The record of one attempt to move a message to a link partner, with its status (for example `READY_FOR_DOWNLOAD`, `DELIVERED` or `FAILED`).
+The record of the transport of a message to one link partner, with its number of attempts and its status history. The statuses are `SUBMITTED`, `READY_FOR_PULL`, `PULLED`, `DELIVERED` and `FAILED`.
 
 Trust-ok token::
 A token added to the ASiC-S container that states the result of the validation of the business document's signature.

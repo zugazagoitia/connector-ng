@@ -6,11 +6,11 @@ endif::header[]
 = Processing of an incoming evidence message
 
 This chapter describes how an evidence confirmation message delivered by the gateway is processed.
-An incoming evidence message carries REM evidence XML (for example `DELIVERY` or `NON_DELIVERY`) and references the original business message via `referenceToIdentifier`.
+An incoming evidence message carries REM evidence XML (for example `DELIVERY` or `NON_DELIVERY`) and references the original business message by its ebMS identifier (JMS property `refToMessageId`, `referenceToIdentifier` in the domain model).
 
 == Message from gateway to the connector
 
-The gateway submits messages to the connector via JMS on the gateway reception queue (`connector.queues.gateway-reception-queue`).
+The gateway submits messages to the connector via JMS on the gateway reception queue (`connector.queues.gateway-reception-queue`, `domibus.backend.jms.outQueue` in the template).
 
 [plantuml, incoming_evidence_1, format=png, opts=inline]
 ----
@@ -31,12 +31,14 @@ gatewayReceptionQueue --> ConnectorJmsGatewayMessageListener : JMS MapMessage
 @enduml
 ----
 
-`ConnectorJmsGatewayMessageListener` parses AS4 properties and payloads from the JMS message.
-When the message has no business content but contains evidence payloads, it is treated as a confirmation message.
+`ConnectorJmsGatewayMessageListener` parses AS4 properties and payloads from the JMS message. Every message from the gateway must carry at least one evidence payload (a payload whose description is the name of an evidence type).
+When the message has a business content payload (description `messageContent`), it is a business message; otherwise it is treated as a confirmation (evidence) message.
+
+The confirmation message is passed to `ConnectorInboundEvidenceMessageReceiverService`, which checks the business domain and verifies the message against the P-Mode according to `connector.message-processing.inbound-verification-mode`, and then publishes it to the inbound evidence trigger queue (`connector.queues.inbound-evidence-trigger-queue`).
 
 == Confirmation message processing
 
-Confirmation messages are handled by `ConnectorInboundEvidenceMessageProcessorService` (the 7.x counterpart of `EvidenceMessageProcessor` in connector 6.x).
+`ConnectorJmsInboundEvidenceTriggerListener` consumes the inbound evidence trigger queue and passes each confirmation message to `ConnectorInboundEvidenceMessageProcessorService` (the counterpart of `EvidenceMessageProcessor` in connector 6.x).
 
 [plantuml,incoming_evidence_2,format=png, opts=inline]
 ----
@@ -47,12 +49,15 @@ skinparam monochrome false
 skinparam linetype ortho
 
 queue gatewayReceptionQueue
+queue inboundEvidenceTriggerQueue
 
 package connector-infrastructure {
   component ConnectorJmsGatewayMessageListener
+  component ConnectorJmsInboundEvidenceTriggerListener
 }
 
 package connector-application {
+  component ConnectorInboundEvidenceMessageReceiverService
   component ConnectorInboundEvidenceMessageProcessorService
   component ConnectorMessageEvidenceVerifier
   component ConnectorLinkSubmitter
@@ -62,34 +67,43 @@ database ConnectorMessageRepository
 database ConnectorMessageEvidenceRepository
 
 gatewayReceptionQueue --> ConnectorJmsGatewayMessageListener
-ConnectorJmsGatewayMessageListener --> ConnectorInboundEvidenceMessageProcessorService : confirmation message
-ConnectorInboundEvidenceMessageProcessorService --> ConnectorMessageRepository : find referenced business message (referenceToIdentifier)
-ConnectorInboundEvidenceMessageProcessorService --> ConnectorMessageEvidenceVerifier : validate evidence priority
-ConnectorInboundEvidenceMessageProcessorService --> ConnectorMessageEvidenceRepository : persist evidence
-ConnectorInboundEvidenceMessageProcessorService --> ConnectorLinkSubmitter : forward to backend
+ConnectorJmsGatewayMessageListener --> ConnectorInboundEvidenceMessageReceiverService : confirmation message
+ConnectorInboundEvidenceMessageReceiverService --> inboundEvidenceTriggerQueue : verified message
+inboundEvidenceTriggerQueue --> ConnectorJmsInboundEvidenceTriggerListener
+ConnectorJmsInboundEvidenceTriggerListener --> ConnectorInboundEvidenceMessageProcessorService
+ConnectorInboundEvidenceMessageProcessorService --> ConnectorMessageRepository : 1. find referenced business message
+ConnectorInboundEvidenceMessageProcessorService --> ConnectorMessageEvidenceVerifier : 2. apply evidence (status)
+ConnectorInboundEvidenceMessageProcessorService --> ConnectorMessageEvidenceRepository : 3. persist evidence
+ConnectorInboundEvidenceMessageProcessorService --> ConnectorLinkSubmitter : 4. forward to backend
 
 @enduml
 ----
 
 Processing steps:
 
-. Load the referenced business message using `referenceToIdentifier` (ebMS message identifier).
-. For each transported evidence, verify applicability via `ConnectorMessageEvidenceVerifier` (priority rules).
-. Persist accepted evidences and update the business message lifecycle (confirmed/rejected).
-. Forward the confirmation message to the backend via `ConnectorLinkSubmitter`.
+. Load the referenced business message: the message that the Connector sent with this ebMS identifier.
+. For each transported evidence, apply it with `ConnectorMessageEvidenceVerifier`. An evidence with a lower priority than one already received is ignored for the status. Otherwise `RELAY_REMMD_ACCEPTANCE` sets the message to `RECEIVED_BY_OPPOSITE_CONNECTOR`, a positive evidence (`DELIVERY`, `RETRIEVAL`) sets it to `CONFIRMED`, and a negative one (`SUBMISSION_REJECTION`, `RELAY_REMMD_REJECTION`, `RELAY_REMMD_FAILURE`, `NON_DELIVERY`, `NON_RETRIEVAL`) sets it to `REJECTED`. A positive evidence received after a negative one is ignored.
+. Persist each applied evidence with the business message.
+. Forward the confirmation message to the backend of the business message via `ConnectorLinkSubmitter`, with the backend message identifier as reference.
+
+When a message becomes `CONFIRMED` or `REJECTED`, the Connector also publishes it to the resolved-message clean-up queue, which deletes its files from the storage and sets its status to `DELETED`.
+
+If no business message matches the reference, the confirmation message is forwarded without a status update, and a warning `Referenced business message not found for confirmation message [...]` is logged.
 
 == Generated evidences during inbound business processing
 
-When an inbound *business* message is processed, the connector may also generate evidences as side effects:
+An inbound *business* message takes another path: `ConnectorInboundBusinessMessageReceiverService` verifies it and publishes it to the inbound staging queue, and the processing queue then runs `ConnectorInboundMessagePipeline`, which generates evidences as side effects:
 
-* `ConnectorInboundMessageAcceptanceStep` creates a `RELAY_REMMD_ACCEPTANCE` evidence and submits it back to the gateway.
-* On security/container errors, `ConnectorInboundMessageNonDeliveryStep` creates a `NON_DELIVERY` evidence.
+. `ConnectorInboundMessageBackendNameStep` selects the backend (routing);
+. `ConnectorInboundMessageAcceptanceStep` creates a `RELAY_REMMD_ACCEPTANCE` evidence, which is submitted back to the gateway;
+. `ConnectorInboundMessageSecurityStep` validates the ASiC-S container;
+. the message is submitted to the backend.
 
-These are handled by `ConnectorInboundMessagePipeline`, not by the confirmation processor above.
+When the security or container validation fails, `ConnectorInboundMessageNonDeliveryStep` creates a `NON_DELIVERY` evidence instead, which is submitted back to the gateway.
 
 == Message forwarded to the backend
 
-After processing, the confirmation message is submitted to the backend link partner with the backend routing context of the referenced business message.
+After processing, the confirmation message is submitted to the backend link partner of the referenced business message. `ConnectorJmsBackendLinkPublisher` publishes it to the backend delivery queue (`connector.queues.backend-delivery-queue`). `ConnectorJmsBackendMessageDeliveryListener` then calls `deliverMessage` on the backend when its `sender-mode` is `push`, or registers a transport step `READY_FOR_PULL` for `pull` and `passive` backends. A failed push is recorded as transport step `FAILED` and is not retried.
 
 [plantuml,incoming_evidence_3,format=png, opts=inline]
 ----
@@ -113,9 +127,9 @@ interface DomibusConnectorBackendDeliveryWebService
 queue backendDeliveryQueue
 
 ConnectorLinkSubmitter --> ConnectorJmsBackendLinkPublisher
-ConnectorJmsBackendLinkPublisher --> backendDeliveryQueue : PUSH
+ConnectorJmsBackendLinkPublisher --> backendDeliveryQueue
 backendDeliveryQueue --> ConnectorJmsBackendMessageDeliveryListener
-ConnectorJmsBackendMessageDeliveryListener --> DomibusConnectorBackendDeliveryWebService
+ConnectorJmsBackendMessageDeliveryListener --> DomibusConnectorBackendDeliveryWebService : deliverMessage (push)
 
 @enduml
 ----

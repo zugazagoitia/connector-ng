@@ -9,8 +9,8 @@ This chapter describes how evidence is generated and submitted when triggered fr
 
 == Evidence trigger from the backend
 
-The backend can request evidence generation by submitting an evidence trigger message via the backend SOAP API.
-The trigger specifies the evidence type (for example `DELIVERY`) and references the original business message via `referenceToIdentifier`.
+The backend can request evidence generation with an evidence trigger, either through the REST API (`POST /api/v1/messages/evidence-trigger`, handled by `ConnectorMessageController`) or through the SOAP API (`submitMessage` without message content and with one empty confirmation, handled by `ConnectorBackendWebServiceController`).
+The trigger specifies the evidence type (for example `DELIVERY`) and references the business message that the backend received.
 
 [plantuml,outgoing_evidence_1,format=png, opts=inline]
 ----
@@ -21,26 +21,35 @@ skinparam monochrome false
 skinparam linetype ortho
 
 interface DomibusConnectorBackendWebService
+interface "REST evidence-trigger" as restTrigger
 
 package connector-infrastructure {
   component ConnectorBackendWebServiceController
+  component ConnectorMessageController
   component ConnectorJmsOutboundEvidenceTriggerPublisher
+}
+
+package connector-application {
+  component ConnectorOutboundEvidenceMessageReceiverService
 }
 
 queue outboundEvidenceTriggerQueue
 
 DomibusConnectorBackendWebService --> ConnectorBackendWebServiceController : submitMessage (trigger)
-ConnectorBackendWebServiceController --> ConnectorJmsOutboundEvidenceTriggerPublisher
+restTrigger --> ConnectorMessageController : POST
+ConnectorBackendWebServiceController --> ConnectorOutboundEvidenceMessageReceiverService
+ConnectorMessageController --> ConnectorOutboundEvidenceMessageReceiverService
+ConnectorOutboundEvidenceMessageReceiverService --> ConnectorJmsOutboundEvidenceTriggerPublisher : verified trigger
 ConnectorJmsOutboundEvidenceTriggerPublisher --> outboundEvidenceTriggerQueue
 
 @enduml
 ----
 
-The message is transformed from the SOAP transition model to the internal `ConnectorMessage` domain model and staged for asynchronous processing.
+`ConnectorOutboundEvidenceMessageReceiverService` assigns an identifier to the trigger and checks it before queuing it: a business message must match the reference (otherwise the REST API returns `404`), and that message must have been received from the gateway (direction `GATEWAY_TO_BACKEND`, otherwise `409`). The reference is looked up as an ebMS identifier, then as a backend message identifier, then as a Connector identifier. The trigger is then published to the outbound evidence trigger queue (`connector.queues.outbound-evidence-trigger-queue`) for asynchronous processing, and the caller receives the identifier of the trigger.
 
 == Evidence trigger processing
 
-`ConnectorJmsOutboundEvidenceTriggerListener` consumes trigger messages from the outbound evidence trigger queue and delegates to `ConnectorOutboundEvidenceMessageProcessorService` (the 7.x counterpart of `EvidenceMessageProcessor` and `EvidenceTriggerStep` in connector 6.x).
+`ConnectorJmsOutboundEvidenceTriggerListener` consumes trigger messages from the outbound evidence trigger queue and delegates to `ConnectorOutboundEvidenceMessageProcessorService` (the counterpart of `EvidenceMessageProcessor` and `EvidenceTriggerStep` in connector 6.x).
 
 [plantuml,outgoing_evidence_2,format=png, opts=inline]
 ----
@@ -66,36 +75,41 @@ package connector-application {
 
 outboundEvidenceTriggerQueue --> ConnectorJmsOutboundEvidenceTriggerListener
 ConnectorJmsOutboundEvidenceTriggerListener --> ConnectorOutboundEvidenceMessageProcessorService
-ConnectorOutboundEvidenceMessageProcessorService --> ConnectorMessageEvidenceCreator : build REM evidence XML
-ConnectorOutboundEvidenceMessageProcessorService --> ConnectorMessageEvidenceVerifier : validate against business message
-ConnectorOutboundEvidenceMessageProcessorService --> ConnectorEvidenceMessageCreator : wrap as confirmation message
-ConnectorOutboundEvidenceMessageProcessorService --> ConnectorLinkSubmitter : submit to gateway
-ConnectorOutboundEvidenceMessageProcessorService --> ConnectorLinkSubmitter : optionally submit to backend
+ConnectorOutboundEvidenceMessageProcessorService --> ConnectorMessageEvidenceCreator : 1. build REM evidence XML
+ConnectorOutboundEvidenceMessageProcessorService --> ConnectorMessageEvidenceVerifier : 2. apply to business message
+ConnectorOutboundEvidenceMessageProcessorService --> ConnectorEvidenceMessageCreator : 3. wrap as confirmation message
+ConnectorOutboundEvidenceMessageProcessorService --> ConnectorLinkSubmitter : 4. to gateway\n5. to backend (optional)
 
 @enduml
 ----
 
 Processing steps:
 
-. Validate that the message is an evidence trigger and triggering is allowed.
-. Resolve the referenced gateway-to-backend business message via `referenceToIdentifier`.
-. Build the ETSI-REM evidence XML of the requested type using `ConnectorMessageEvidenceCreator` and `ConnectorEvidenceToolkitImpl`.
-. Verify evidence applicability against previously received evidence.
-. Create a confirmation message and submit it to the gateway via `ConnectorLinkSubmitter`.
-. When `connector.message-processing.send-generated-evidences-to-backend` is enabled, also forward the evidence to the backend.
+. Resolve the referenced business message again and check that it was received from the gateway (`GATEWAY_TO_BACKEND`).
+. Build the signed ETSI-REM evidence XML of the requested type using `ConnectorMessageEvidenceCreator` and `ConnectorEvidenceToolkitImpl`. The toolkit builds on the evidences that the message already has: an evidence whose predecessor in the REM chain is missing cannot be created, and the trigger fails.
+. Apply the evidence to the business message with `ConnectorMessageEvidenceVerifier`: an evidence with a lower priority than one already received is ignored for the status; a positive evidence (`DELIVERY`, `RETRIEVAL`) sets the message to `CONFIRMED`, a negative one sets it to `REJECTED`.
+. Create a confirmation message (`ConnectorEvidenceMessageCreator`) and submit it to the gateway via `ConnectorLinkSubmitter`.
+. When `connector.message-processing.send-generated-evidences-to-backend` is enabled, also send the confirmation message to the backend.
+
+A failure in these steps is only logged (`Failed to process evidence trigger`); the backend already received `201` (REST) or `result=true` (SOAP) when the trigger was queued.
 
 == Evidences generated during outbound business processing
 
-When an outbound business message is processed by `ConnectorOutboundMessagePipeline`, evidences are generated automatically:
+When an outbound business message is processed by `ConnectorOutboundMessagePipeline` (listener `ConnectorJmsOutboundMessagePipelineListener` on `connector.queues.outbound-message-processing-queue`), the steps run in this order:
 
-* `ConnectorOutboundMessageAcceptanceStep` creates `SUBMISSION_ACCEPTANCE` after successful gateway validation.
-* On submission failure, `ConnectorOutboundMessageRejectionStep` creates `SUBMISSION_REJECTION`.
+. `ConnectorOutboundMessageValidationStep` checks the parties of the message;
+. `ConnectorOutboundMessageSecurityStep` builds the ASiC-S container and the trust-ok token;
+. `ConnectorOutboundMessageGatewayNameStep` sets the gateway (`default_gateway`) when none is set;
+. `ConnectorOutboundMessageEbmsIdStep` generates the ebMS identifier when the backend did not set one;
+. `ConnectorOutboundMessageAcceptanceStep` creates the `SUBMISSION_ACCEPTANCE` evidence;
+. the message is submitted to the gateway via `ConnectorLinkSubmitter`;
+. `ConnectorOutboundMessageConfirmationStep` creates the confirmation message carrying `SUBMISSION_ACCEPTANCE`, which is submitted back to the backend via `ConnectorLinkSubmitter`.
 
-The confirmation message is submitted back to the backend via `ConnectorLinkSubmitter`.
+If one of these steps throws an exception, `ConnectorOutboundMessageRejectionStep` creates a `SUBMISSION_REJECTION` evidence and submits it, and the pipeline then throws `ConnectorGatewaySubmissionException`.
 
 == Message submitted to the gateway
 
-Evidence confirmation messages destined for the gateway are submitted through the gateway link client.
+Messages destined for the gateway (business messages and evidence confirmation messages) are published by `ConnectorJmsGatewayLinkPublisher` to the gateway submission queue (`connector.queues.gateway-submission-queue`, `domibus.backend.jms.inQueue` in the template), where the JMS plugin of the gateway picks them up.
 
 [plantuml,outgoing_evidence_3,format=png, opts=inline]
 ----
@@ -116,9 +130,9 @@ package connector-infrastructure {
 queue gatewaySubmissionQueue
 
 ConnectorLinkSubmitter --> ConnectorJmsGatewayLinkPublisher
-ConnectorJmsGatewayLinkPublisher --> gatewaySubmissionQueue : submitMessage
+ConnectorJmsGatewayLinkPublisher --> gatewaySubmissionQueue : JMS MapMessage
 
 @enduml
 ----
 
-Before submission, the internal domain message is transformed back to the SOAP transition model of the API.
+A transport step for the gateway (status `SUBMITTED`) records the submission; it is visible with `GET /api/v1/admin/messages/<identifier>/transport-steps`.

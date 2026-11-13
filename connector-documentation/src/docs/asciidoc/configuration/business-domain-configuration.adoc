@@ -9,17 +9,23 @@ under `connector.business-domains.defaults`, together with the processing mode (
 attached to each of them.
 
 The initializer is idempotent: domains and processing modes that are already registered
-are skipped silently, so restarting the connector is safe. Any other failure — an
-unreadable file, a malformed PMode definition, a truststore that cannot be opened —
-aborts startup rather than leaving the connector half-configured.
+are skipped, so restarting the connector is safe. As a consequence, the configuration is only
+applied when a domain or its processing mode is registered for the first time: changing `description`,
+`enabled` or the `pmode.*` values afterwards does not change the registered domain. Use the administration
+API or portal to change a registered domain.
+
+An unreadable P-Mode or truststore location, or a truststore file whose extension does not
+identify its type, aborts the startup.
+
+Check the log after the first start, and the registered processing mode in the administration portal.
 
 If no default is configured and no business domain exists yet, the connector registers a
-single built-in default domain so that it can start in a usable state.
+single built-in default domain, `default_business_domain` (description `Default Business Domain`, enabled), so that it can start in a usable state.
 
 == Properties
 Configuration is provided via `application.properties` under the `+connector.business-domains.*+` prefix.
 
-NOTE: The configuration is validated at startup. A blank `identifier` or `description`, or a `pmode` block with a missing or blank value, stops the connector with an error naming the offending property.
+NOTE: The configuration is validated at startup. A blank `identifier` or `description`, or a `pmode` block with a missing or blank value (as soon as one `pmode.*` property is set, all three are required), stops the connector with an error naming the offending property.
 
 .Business Domains Configuration
 [cols="35,40,10,15", options="header"]
@@ -37,18 +43,18 @@ NOTE: The configuration is validated at startup. A blank `identifier` or `descri
 | `Default business domain`
 
 | `connector.business-domains.defaults[n].enabled`
-| Whether the domain accepts messages. Defaults to `false`.
+| Whether the domain accepts messages. Defaults to `true`. Only applied when the domain is created.
 | Yes
 | `true`
 
 | `connector.business-domains.defaults[n].pmode.file`
 | Processing mode definition (XML, as exported from the gateway) registered for the domain. When absent, no processing
-mode is registered and the remaining `+pmode.*+` properties are ignored. If the file cannot be read, startup is aborted.
+mode is registered (the three `+pmode.*+` properties are then all left out). If the file cannot be read, startup is aborted.
 | Yes
 | `file:./config/pmode/<your-pmode>.xml`
 
 | `connector.business-domains.defaults[n].pmode.truststore`
-| Truststore holding the certificates of the parties declared in the processing mode. It is also the truststore used to validate the signature of the ASiC-S containers and tokens of inbound messages, so it must contain the signing certificates of the partner connectors. The store type is derived from the file extension (`.jks`, `.keystore` = JKS; `.p12`, `.pfx` = PKCS12).
+| Truststore holding the certificates of the parties declared in the processing mode. It is also the truststore used to validate the signature of the ASiC-S containers and tokens of inbound messages, so it must contain the signing certificates of the partner connectors. The store type is derived from the file extension (`.jks`, `.keystore` = JKS; `.p12`, `.pfx` = PKCS12); any other extension stops the startup with `Cannot determine the keystore type of [<file name>]`.
 Required as soon as `pmode.file` is set.
 | Yes
 | `file:./config/pmode/<pmode-truststore>.jks`
@@ -61,7 +67,7 @@ Required as soon as `pmode.file` is set.
 
 [WARNING]
 ====
-In this version, messages received from the gateway, messages submitted through the SOAP backend API, inbound evidences and the routing rules are always assigned to the business domain `default_business_domain`.
+Messages received from the gateway, messages submitted through the SOAP backend API, inbound evidences and the routing rules are assigned to the business domain `default_business_domain`.
 Keep this identifier for your main domain and attach your P-Mode to it. Additional business domains can only be used by backends submitting through the REST API with an explicit business domain identifier.
 ====
 
@@ -94,7 +100,7 @@ are security-relevant.
 
 [WARNING]
 ====
-A location without a prefix is resolved from the *classpath*, not the filesystem.
+A location without a prefix is not resolved against the filesystem (it is resolved by the application context, like a `classpath:` location), so a relative path such as `./config/pmode/<your-pmode>.xml` fails with `Could not read the processing mode configured for business domain [...]`.
 Filesystem paths must be written as `file:./config/pmode/<your-pmode>.xml`. Deployments
 migrating from connector 6.x, where bare paths were treated as filesystem paths, must
 add the prefix.
@@ -185,7 +191,8 @@ TOKEN=$(curl -s -X POST https://<connector-host>/api/v1/auth/login \
 ----
 
 NOTE: The login response also contains `refreshToken`, `expiresIn`, `refreshExpiresIn` and `mustChangePassword`.
-When `mustChangePassword` is `true` (first login with the configured admin password), change the password with `POST /api/v1/auth/change-password` before using the administration API.
+When `mustChangePassword` is `true` (first login with the configured admin password), change the password with `POST /api/v1/auth/change-password`.
+`jq` is used only to extract the token; copy it by hand if `jq` is not installed.
 `<connector-host>` is the address of your reverse proxy (or `localhost:<server.port>` on the Connector host).
 
 .Step 2 — Register the processing mode
@@ -199,3 +206,6 @@ curl -X POST https://<connector-host>/api/v1/admin/processing-modes \
   -F "truststore.truststoreFile=@./config/pmode/<pmode-truststore>.jks" \
   -F "truststore.password=<truststore-password>"
 ----
+
+The response is HTTP 201 with the registered processing mode. The response contains the truststore password in clear text; do not log or share it.
+A second upload for the same business domain is rejected with HTTP 409 (`The business domain [...] already has a processing mode`).

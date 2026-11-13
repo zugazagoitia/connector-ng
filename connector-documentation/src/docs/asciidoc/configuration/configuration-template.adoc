@@ -31,7 +31,7 @@ Each property of the template falls into one of the following categories:
 | Technical setting with a value suitable for a test set-up. Check it against your requirements (security, sizing) and change it if needed.
 
 | *Keep*
-| Must keep the template value in the current version, because the Connector relies on it internally (see <<template-fixed-values>>).
+| Must keep the template value (see <<template-fixed-values>>).
 |===
 
 == Checklist of the template
@@ -62,7 +62,7 @@ Each property of the template falls into one of the following categories:
 
 | `+spring.jms.*+`, `+spring.jta.*+`, `+spring.servlet.multipart.*+`, `+server.tomcat.*+`
 | Review
-| Concurrency, pool sizes, transaction timeouts and upload limits must match your expected volumes and largest messages. `spring.jta.log-file` must point to persistent storage.
+| Concurrency, pool sizes, transaction timeouts and upload limits must match your expected volumes and largest messages. Set `spring.jta.atomikos.properties.log-base-dir` to a directory on persistent storage, for example `./data/jtalog`, to hold the Atomikos transaction log (`tmlog<N>.log`, `tmlog.lck`); see the transaction section of the platform chapter.
 
 | `+connector.cors.*+`
 | Replace
@@ -82,15 +82,15 @@ Each property of the template falls into one of the following categories:
 
 | `connector.business-domains.defaults[0].description`, `.enabled`
 | Replace
-| Your own description; `enabled=true` for the domain to accept messages.
+| Your own description. `enabled` defaults to `true`. These values are applied when the domain is created; once the domain exists, it is managed through the administration API.
 
 | `+connector.business-domains.defaults[0].pmode.*+`
 | Replace
-| Path of the P-Mode file exported from *your* gateway, and the truststore holding the certificates of the gateways and partner connectors declared in it (also used to validate the containers of inbound messages). The template refers to `pmode-blue.xml`, which is not shipped.
+| Path of the P-Mode file exported from *your* gateway, and the truststore holding the certificates of the gateways and partner connectors declared in it (also used to validate the containers of inbound messages). The template refers to `pmode-blue.xml`, which is not shipped: either provide the file, or remove the three `pmode.*` lines and upload the P-Mode later through the administration API (see the business domain chapter).
 
 | `+connector.queues.*+`
 | Keep
-| All queue properties must be present with the template values (see <<template-fixed-values>>). Only the gateway queue names must match the gateway JMS plugin configuration.
+| Keep all queue properties in the file. `backend-delivery-queue` and `gateway-reception-queue` have no default: removing them stops the startup. Keep the template values unless your broker set-up requires other names (see <<template-fixed-values>>). The gateway queue names must match the gateway JMS plugin configuration.
 
 | `+connector.message-processing.*-suffix+`
 | Replace
@@ -102,7 +102,7 @@ Each property of the template falls into one of the following categories:
 
 | `+connector.file.storage.s3.*+`
 | Environment
-| `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_REGION`, `S3_BUCKET`, `S3_ENDPOINT` of your object storage.
+| `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_REGION`, `S3_BUCKET`, `S3_ENDPOINT` of your object storage. `connector.file.storage.s3.auto-create-bucket` controls whether the bucket is created at startup (see the file storage chapter).
 
 | `+connector.evidences.signature.*+`
 | Replace
@@ -138,11 +138,11 @@ Each property of the template falls into one of the following categories:
 
 | `+connector.link.backend[0].link-partners[*]+`
 | Replace
-| One entry per backend application: its name, the alias of its certificate in the backend truststore, the *exact* DN of that certificate, its delivery mode and its push address. `backend_alice` / `cn=alice` / `+http://localhost:port/...+` are test values. See the backend link partner chapter.
+| One entry per backend application: its name, the alias of its certificate in the backend truststore, the *exact* DN of that certificate, its delivery mode and its push address. `backend_alice` / `cn=alice` / `+http://localhost:port/...+` are test values. The template push address is not a valid URL and stops the startup (`push-address must be an absolute http(s) URL`): replace it with a real URL even for a first test, for example `+http://localhost:8080/services/domibusConnectorDeliveryWebservice+`. See the backend link partner chapter.
 
 | `+connector.routing.*+`
 | Replace
-| Rules matching *your* services and backends, and your default backend. The template routes the service `Test` to `backend_alice`.
+| Rules matching *your* services and backends, and your default backend. The template routes the service `Test` to `backend_alice`. Check every match clause against the grammar in the routing chapter, and send one inbound test message after each change.
 
 | `connector.auth.security.jwt.secret`
 | Environment
@@ -150,38 +150,45 @@ Each property of the template falls into one of the following categories:
 
 | `+connector.auth.security.jwt.*+` (expiration, issuer, cron)
 | Review
-| Token lifetimes according to your security policy; an issuer identifying your installation.
+| Token lifetimes according to your security policy; an issuer identifying your installation. `issuer`, `refresh-token.expiration` and `refresh-token.cleanup-cron` have no default: removing them stops the startup.
 
 | `+connector.admin.*+`
 | Replace
-| Administrator user name, a strong initial password (the template uses `123456`) and a real e-mail address.
+| Administrator user name, a strong initial password (the template uses `123456`) and a real e-mail address. The account is created only when neither the user name nor the e-mail address is already registered: changing these values after the first start does not change the existing account.
 
 | `+connector.c2ctests.*+`
 | Review
-| Commented out in the template, but the feature is *enabled by default*. Disable it unless you run connector-to-connector tests, or align the service and action with your P-Mode.
+| Commented out in the template; the built-in values (`Connector-TEST`, `urn:e-codex:services:`, `ConTest_Form`) apply. `connector.c2ctests.enabled=false` stops the *sending* of test messages. When `connector.routing.enabled=true`, inbound messages that match the test service or the test action are answered by the internal test backend. Align the service and action with your P-Mode and make sure no business action uses the test action name.
+
+| `connector.scheduling.enabled`, `+spring.task.scheduling.*+`
+| Review
+| `connector.scheduling.enabled` switches the scheduled jobs (file clean-up jobs and refresh-token clean-up). Keep the template value.
+
+| `+connector.file-deletion.*+`
+| Review
+| Thresholds and schedules of the clean-up jobs (see the file deletion chapter).
 |===
 
 [[template-fixed-values]]
-== Values the current version relies on
+== Values that must keep their template value
 
-The following values look configurable but are assumed by the Connector code in this version.
-Changing them breaks message processing.
+The following values are fixed. Changing them breaks message processing.
 
 [cols="2,4", options="header"]
 |===
-| Value | Reason
+| Value | Requirement
 
 | Business domain identifier `default_business_domain`
-| Messages received from the gateway and from the SOAP backend API, inbound evidences and the routing rules are always assigned to the business domain `default_business_domain`. The domain that carries this traffic, and its P-Mode, must keep this identifier. Additional business domains can only be addressed by the REST API, which accepts an explicit business domain identifier.
+| Messages received from the gateway and from the SOAP backend API, inbound evidences and the routing rules belong to the business domain `default_business_domain`. The domain that carries this traffic, and its P-Mode, must keep this identifier. Additional business domains are addressed through the REST API, which accepts an explicit business domain identifier.
 
 | `cxf.path=/services` and `publish-address=/backend`
 | Only `/services/backend` is excluded from JWT authentication. Any other SOAP address is rejected with HTTP 401.
 
 | `+connector.queues.*+` names
-| The listeners read the names from the properties, but the producers always use the built-in names. All properties must be present and keep the template values. Only `gateway-reception-queue` and `gateway-submission-reply-queue` may be renamed to match the gateway; `gateway-submission-queue` is always `domibus.backend.jms.inQueue`.
+| Keep `connector.queues.resolved-message-cleanup-processing-queue` unchanged. `backend-delivery-queue` and `gateway-reception-queue` have no default and must be present.
 
-| Link partner with `certificate-dn=cn=alice` (REST API only)
-| The REST backend API (`/api/v1/messages/outbound`, `/api/v1/messages/evidence-trigger`) does not authenticate the caller yet: it always looks up the link partner whose `certificate-dn` is `cn=alice`. Once the template partners are replaced (as required), the REST backend API rejects submissions with "No link partner found". Use the SOAP backend API, which identifies the backend from its signing certificate.
+| REST backend API (`/api/v1/messages/outbound`, `/api/v1/messages/evidence-trigger`)
+| The REST backend API does not authenticate the caller in this release. Use the SOAP backend API for production backends; it identifies the backend from its signing certificate.
 |===
 
 == Values that must match other components
@@ -215,4 +222,5 @@ Changing them breaks message processing.
 == Keeping secrets out of the file
 
 All passwords and secrets can be supplied as environment variables instead of being written in the file, either through an explicit placeholder (`connector.admin.password=${ADMIN_PASSWORD}`) or through Spring Boot relaxed binding (an environment variable `CONNECTOR_ADMIN_PASSWORD` overrides `connector.admin.password`).
+Note that `connector.admin.*` values are used when the administrator account is created, that is when neither the user name nor the e-mail address is registered yet.
 Protect the file itself with restrictive file permissions (readable by the Connector user only).

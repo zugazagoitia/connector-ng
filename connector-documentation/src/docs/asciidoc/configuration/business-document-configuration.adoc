@@ -65,7 +65,7 @@ that does not exist stops the connector with an error naming the offending prope
 | By default, set to `true`
 
 | `connector.business-document.signature.validation.trusted-list-source`
-| Name of a trusted list source declared under `connector.dss.trust-list-sources.<name>` (see <<dss-trust-list-sources>>). When set, certificates are also trusted if they chain to a service listed in that trusted list.
+| Name of a trusted list source declared under `connector.dss.trust-list-sources.<name>` (see <<dss-trust-list-sources>>). When set, certificates are also trusted if they chain to a service listed in that trusted list. The name must be declared.
 | Yes
 | `eu`
 
@@ -82,7 +82,7 @@ that does not exist stops the connector with an error naming the offending prope
 
 | `connector.business-document.authentication-validation.identity-provider`
 | Name of the identity provider recorded in the token for `AUTHENTICATION_BASED` documents. The template value `ERV` comes from the Austrian test set-up; use the identity provider of your use case.
-| Required when `AUTHENTICATION_BASED` is used. The `authentication-validation` block is optional, but `identity-provider` is required when the block is present.
+| No. The property is required even when only `SIGNATURE_BASED` is used.
 | `<identity provider>`
 |===
 
@@ -117,7 +117,7 @@ verification options below. They are the same as for the container signature val
 | By default, set to *true*
 
 | `ignore-store-enabled`
-| Whether the configured ignore store is used. If `true`, the `ignore-store.*` block must be configured.
+| Whether the configured ignore store is used. If `true`, the `ignore-store.*` block must be configured, otherwise the startup stops (`ignore-store must be configured when ignore-store-enabled is true`).
 | Yes
 | By default, set to *false*
 

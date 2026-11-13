@@ -31,12 +31,12 @@ All properties are optional: when a property is not set, its default value is us
 | `true/false`. By default, set to *true*
 
 | `connector.message-processing.auto-trigger-delivery-evidences`
-| Whether the connector automatically generates a `DELIVERY` evidence once an inbound message has been delivered to (pushed to, or downloaded by) the backend. When disabled, the backend must trigger the delivery evidence itself.
+| Whether the connector automatically generates a `DELIVERY` evidence once an inbound message has been pushed successfully to a `push` backend. For `pull` and `passive` backends, the backend must trigger the delivery evidence itself.
 | Yes
-| `true/false`. By default, set to *false* when the property is absent; the template sets *true*.
+| `true/false`. Effectively *false* when the property is absent. The template sets *true*; set the property explicitly.
 
 | `connector.message-processing.ebms-id-generator-enabled`
-| Whether the connector auto-generates ebMS message IDs itself rather than relying on IDs supplied by the backend.
+| Whether the connector generates the ebMS message ID of outbound messages. When `false`, the outbound message keeps the ebMS ID supplied by the backend, if any.
 | Yes
 | `true/false`. By default, set to *true*
 
@@ -58,23 +58,19 @@ All properties are optional: when a property is not set, its default value is us
 | `connector.message-processing.outbound-verification-mode`
 | How strictly outbound messages (backend → gateway) are verified against the processing mode before being sent.
 | Yes
-| `STRICT/RELAXED`. By default, set to *STRICT*.
+| `STRICT` or `RELAXED`. By default, set to *STRICT*.
 
 | `connector.message-processing.inbound-verification-mode`
 | How strictly inbound messages (gateway → backend) are verified against the processing mode upon receipt.
 | Yes
-| `STRICT/RELAXED`. By default, set to *RELAXED*.
+| `STRICT` or `RELAXED`. By default, set to *RELAXED*.
 |===
 
 For verification mode:
 
-* *STRICT* — the service and action of the message must be declared in the processing mode of the business domain.
-* *RELAXED* — same checks as *STRICT*, plus the `fromParty` and `toParty` (identifier and role) must be declared in the processing mode. An empty party identifier type is accepted with a warning.
-* *CREATE* — accepted by the configuration but not supported: every message is rejected.
-
-NOTE: In the current implementation *RELAXED* performs more checks than *STRICT* (party verification). This is expected to be revisited; check the release notes before relying on it.
-
-WARNING: Do not write the names as `outbound-message-verification-mode` or `inbound-message-verification-mode`: the connector does not bind them and silently ignores them.
+* *RELAXED* — the service (by name) and the action of the message must be declared in the processing mode of the business domain.
+* *STRICT* — same checks as *RELAXED*, plus the `fromParty` and `toParty` (identifier and role type) must be declared in the processing mode. An empty party identifier type is accepted with a warning.
+WARNING: Use the exact property names shown in the table, `outbound-verification-mode` and `inbound-verification-mode`; for example, not `outbound-message-verification-mode`.
 
 The three suffix properties default to `connector.ecodex.eu`, which is also the value of the template. Replace it with a domain name of your organisation, so that generated identifiers are unique across connectors and traceable to your deployment.
 

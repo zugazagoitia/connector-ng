@@ -5,17 +5,45 @@ endif::header[]
 = Connector-to-Connector (C2C) Test
 
 The C2C test feature allows two connector instances to verify end-to-end AS4 connectivity without involving a real backend on either side.
-When enabled, any inbound message whose AS4 service/action pair matches the configured combination is intercepted and short-circuited: the connector generates synthetic REM evidence responses internally and never forwards the message to the backend.
-When disabled, such messages are handled like any other inbound message and forwarded to the backend.
+It has two parts:
 
-Test messages can be sent from the administration portal or with `POST /api/v1/admin/messages/outbound/test` (authenticated).
+Receiving test messages::
+Whenever `connector.routing.enabled=true`, the Connector adds a built-in routing rule (with high priority) that sends an inbound message to the internal backend `default_test_backend` when its service name *and* service type match `connector.c2ctests.service.*`, *or* its action matches `connector.c2ctests.action` (rule `|(&(equals(ServiceName, ...), equals(ServiceType, ...)), equals(Action, ...))`).
+Such a message is not forwarded to any real backend: the Connector marks it as delivered and, when `connector.message-processing.auto-trigger-delivery-evidences=true`, answers with a `DELIVERY` evidence (the `RELAY_REMMD_ACCEPTANCE` evidence is generated for every inbound message).
+The interception is switched off when routing is disabled; with routing disabled, test messages go to the default backend like any other message.
+
+Sending test messages::
+`POST /api/v1/admin/messages/outbound/test` (administration API, JWT required, not shown in Swagger UI) sends a test message with the configured service and action to the partner gateway. `connector.c2ctests.enabled=false` blocks only this endpoint: it then answers `409` with `C2C Test message is disabled`.
 
 [IMPORTANT]
 ====
-* The C2C test mode is *enabled by default*. Set `connector.c2ctests.enabled=false` if you do not run connector-to-connector tests.
-* Inbound test messages are routed through the routing rules: `connector.routing.enabled` must be `true` for them to be intercepted.
+* The C2C test mode is *enabled by default*. Make sure that no production service or action uses the test values, in particular the action `ConTest_Form`: a business message with this action is treated as a test message even if its service is a production service.
 * The service and action must be declared in the P-Mode of both connectors and gateways.
 ====
+
+== Sending a test message
+
+The endpoint takes a `multipart/form-data` request with the same parts as `POST /api/v1/messages/outbound` (see the backend API description in the architecture guide), without `as4Properties.service.*` and `as4Properties.action.*`, which come from the configuration:
+
+[source,bash]
+----
+curl -X POST https://<connector-host>/api/v1/admin/messages/outbound/test \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -F "businessDomainIdentifier=default_business_domain" \
+  -F "backendMessageIdentifier=<unique id>" \
+  -F "businessContent.xmlContent=@content.xml;type=application/xml" \
+  -F "businessContent.businessDocument.document=@document.pdf;type=application/pdf" \
+  -F "businessContent.businessDocument.aesType=SIGNATURE_BASED" \
+  -F "as4Properties.conversationIdentifier=<conversation id>" \
+  -F "as4Properties.originalSender=<sender>" \
+  -F "as4Properties.finalRecipient=<recipient>" \
+  -F "as4Properties.fromParty.identifier=<your party id>" \
+  -F "as4Properties.fromParty.identifierType=<party id type>" \
+  -F "as4Properties.fromParty.role=<role>" \
+  -F "as4Properties.toParty.identifier=<partner party id>" \
+  -F "as4Properties.toParty.identifierType=<party id type>" \
+  -F "as4Properties.toParty.role=<role>"
+----
 
 == Basic configuration
 Configuration is provided via `application.properties` under the `+connector.c2ctests.*+` prefix.
@@ -27,7 +55,7 @@ All properties are optional: when a property is not set, its default value is us
 | Property | Description | Optional | Example
 
 | `connector.c2ctests.enabled`
-| Activates connector-to-connector test mode. When enabled, messages matching the configured service/action combination are intercepted and handled entirely within the connector.
+| Allows sending test messages with `POST /api/v1/admin/messages/outbound/test`. It does not affect the interception of inbound test messages, which happens whenever `connector.routing.enabled=true`.
 | Yes
 | By default, set to `true`
 
@@ -37,7 +65,7 @@ All properties are optional: when a property is not set, its default value is us
 | By default, set to `ConTest_Form`
 
 | `connector.c2ctests.service.name`
-| The AS4 service name used to identify C2C test messages, paired with `connector.c2ctests.action` to form the matching combination. Must match the service name in the P-Mode. Must not be blank.
+| The AS4 service name used to identify C2C test messages (together with the service type; the action alone is also enough, see above). Must match the service name in the P-Mode. Must not be blank.
 | Yes
 | By default, set to `Connector-TEST`
 
@@ -72,7 +100,7 @@ In 6.x these properties used the prefix `c2ctests.*`. In 7.x they are renamed as
 | `c2ctests.enabled`
 | `connector.c2ctests.enabled`
 
-| `c2ctests.action`
+| `c2ctests.action` (bound to `c2ctests.action.action`)
 | `connector.c2ctests.action`
 
 | `c2ctests.service.name`
@@ -82,4 +110,4 @@ In 6.x these properties used the prefix `c2ctests.*`. In 7.x they are renamed as
 | `connector.c2ctests.service.type`
 |===
 
-WARNING: The 6.x property names are no longer recognized in 7.x and are silently ignored.
+Use the 7.x property names in `application.properties`.

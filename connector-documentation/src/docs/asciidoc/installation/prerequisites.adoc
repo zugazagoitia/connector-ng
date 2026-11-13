@@ -25,7 +25,7 @@ Requirements specific to one option are described in the corresponding chapter.
 
 | Relational database
 | See <<database-versions>>
-| MySQL, MariaDB, PostgreSQL or Oracle. An empty schema and a dedicated user with XA privileges are required.
+| MySQL, MariaDB, PostgreSQL or Oracle. An empty schema and a dedicated user are required; MySQL, PostgreSQL and Oracle need additional XA settings (see <<database-configuration>>).
 
 | Apache ActiveMQ Classic
 | 6.x (tested with 6.2.0 and 6.2.7)
@@ -33,7 +33,7 @@ Requirements specific to one option are described in the corresponding chapter.
 
 | S3-compatible object storage
 | Amazon S3, MinIO or any S3-compatible service
-| A dedicated bucket must exist before the Connector starts.
+| The Connector creates the bucket named by `connector.file.storage.s3.bucket` at its first start if it does not exist (unless automatic creation is switched off); the credentials must therefore be allowed to create buckets. If you create the bucket yourself, it must exist before the start.
 
 | e-CODEX gateway (Domibus)
 | 5.1.x (tested with 5.1.9)

@@ -20,13 +20,59 @@ The application has been tested against the following database versions (see als
 | Oracle | 23 | `dbscripts/initial/oracle.sql`
 |===
 
-The JDBC drivers for all four databases are bundled with the application; no additional driver installation is required.
+The JDBC drivers for all four databases are bundled inside `bin/connector-ng.jar` (`BOOT-INF/lib`); no additional driver installation is required.
+Do not add drivers to the `lib` folder of the distribution.
+The driver versions inside the JAR can differ from the ones named in the compatibility matrix; list the content of `BOOT-INF/lib` in the JAR to see the exact versions of a release.
 
 An empty schema and a dedicated database user must exist before the first start.
 
 == Create a database user with appropriate privileges
 
 Create an empty schema (database) and a dedicated user that owns it.
+The following statements were used to prepare the databases for the tests of this guide; replace the names and the password:
+
+[cols="1,3", options="header"]
+|===
+| Database | Statements
+
+| MySQL
+a|
+[source,sql]
+----
+CREATE DATABASE connector;
+CREATE USER 'connector'@'%' IDENTIFIED BY '<password>';
+GRANT ALL PRIVILEGES ON connector.* TO 'connector'@'%';
+GRANT XA_RECOVER_ADMIN ON *.* TO 'connector'@'%';
+----
+
+| MariaDB
+a|
+[source,sql]
+----
+CREATE DATABASE connector;
+CREATE USER 'connector'@'%' IDENTIFIED BY '<password>';
+GRANT ALL PRIVILEGES ON connector.* TO 'connector'@'%';
+----
+
+| PostgreSQL
+a|
+[source,sql]
+----
+CREATE USER connector PASSWORD '<password>';
+CREATE DATABASE connector OWNER connector;
+----
+
+| Oracle
+a|
+[source,sql]
+----
+CREATE USER connector IDENTIFIED BY "<password>" QUOTA UNLIMITED ON USERS;
+GRANT CREATE SESSION, CREATE TABLE, CREATE SEQUENCE TO connector;
+----
+|===
+
+The `CREATE SEQUENCE` privilege on Oracle is required because the tables use identity columns.
+With these privileges the Oracle initialization script creates all 19 tables.
 
 Because the application relies on distributed (XA) transactions between the database and the JMS broker, the database must support XA and the user must be allowed to recover in-doubt XA transactions:
 
@@ -34,17 +80,27 @@ Because the application relies on distributed (XA) transactions between the data
 |===
 | Database | Requirement
 
-| MySQL / MariaDB
-| Grant `XA_RECOVER_ADMIN` to the connector user (MySQL 8+, MariaDB 10.5+), e.g. `+GRANT XA_RECOVER_ADMIN ON *.* TO 'connector'@'%';+`
+| MySQL
+| Grant `XA_RECOVER_ADMIN` to the connector user (MySQL 8+), as in the statements above.
+Without this privilege the Connector logs the warning `XARecoveryManager - Error while retrieving xids` every 10 seconds, and in-doubt transactions cannot be recovered after a crash.
+For a running installation run, as a user who may grant privileges: `+GRANT XA_RECOVER_ADMIN ON *.* TO 'connector'@'%';+`
+
+| MariaDB
+| No grant is needed. On MariaDB 12.3.2 `XA RECOVER` works for an ordinary user, and `GRANT XA_RECOVER_ADMIN` is rejected with a syntax error because that privilege does not exist in MariaDB.
+Only this version was tested; for other MariaDB versions check the MariaDB documentation if the Connector logs `Error while retrieving xids` warnings.
 
 | PostgreSQL
 | Prepared transactions must be enabled on the server: set `max_prepared_transactions` to a value greater than `0` (e.g. `100`) and restart PostgreSQL.
+With the default `0`, a message that uses the database and the broker in one transaction (for example an outbound message sent through the REST API) fails with the server error `prepared transactions are disabled` (hint: `Set "max_prepared_transactions" to a nonzero value`).
 
 | Oracle
-| Grant the privileges required by the transaction manager to recover XA transactions, typically `SELECT` on `SYS.DBA_PENDING_TRANSACTIONS`, `SYS.PENDING_TRANS$` and `SYS.DBA_2PC_PENDING`, and `EXECUTE` on `SYS.DBMS_XA`. Check with your DBA.
+| Grant the privileges required by the transaction manager to recover XA transactions: `SELECT` on `SYS.DBA_PENDING_TRANSACTIONS`, `SYS.PENDING_TRANS$` and `SYS.DBA_2PC_PENDING`, and `EXECUTE` on `SYS.DBMS_XA`.
+These grants must be issued by `SYS` (connected `AS SYSDBA`); a normal administrator such as `SYSTEM` receives `ORA-01031: insufficient privileges`.
+Without them the Connector logs `XARecoveryManager - Error while retrieving xids from resource: the XA resource detected an internal error` every 10 seconds; with them the warning stops.
+Some roles already contain these privileges (for example the `DB_DEVELOPER_ROLE` that the `gvenzl/oracle-free` image gives to its application user).
 |===
 
-NOTE: Some managed database offerings do not expose root/superadmin access and therefore cannot grant the XA recovery privileges (this is the case for some managed MariaDB instances).
+NOTE: Some managed database offerings do not expose root/superadmin access and therefore cannot grant the XA recovery privileges (this applies, for example, to managed MySQL instances).
 The Connector still runs in that situation, but in-doubt transactions cannot be recovered automatically after a crash and may require manual resolution.
 
 == Database initialization
@@ -67,6 +123,9 @@ Execute the script matching your database against the empty schema *before* star
 spring.jpa.hibernate.ddl-auto=none
 ----
 
+With `spring.jpa.hibernate.ddl-auto=validate` the application checks at startup that the tables match its entities and refuses to start otherwise.
+This setting is a useful check after running a script.
+
 === Let the application initialize the database
 
 Set the following property and launch the application:
@@ -77,6 +136,7 @@ spring.jpa.hibernate.ddl-auto=update
 ----
 
 The connector creates the necessary tables on startup.
+This works with all four databases and also creates the first administrator user.
 
 WARNING: This option is intended for development and testing only, and it is the value used in the sample `application.properties`.
 Change it before going to production — `ddl-auto=update` is not a reliable mechanism for managing schema evolution over time.
@@ -86,26 +146,36 @@ Change it before going to production — `ddl-auto=update` is not a reliable mec
 The datasource must use the XA-capable driver of your database. In the Docker deployment these values are set with the
 `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `DB_DRIVER_CLASSNAME` and `DB_DIALECT` variables.
 
-[cols="1,2,2", options="header"]
+[cols="1,2,2,3", options="header"]
 |===
-| Database | Driver class name | Hibernate dialect
+| Database | Driver class name | Hibernate dialect | Example `DB_URL`
 
 | MySQL
 | `com.mysql.cj.jdbc.MysqlXADataSource`
 | `org.hibernate.dialect.MySQLDialect`
+| `+jdbc:mysql://db-host:3306/connector?pinGlobalTxToPhysicalConnection=true+`
 
 | MariaDB
 | `org.mariadb.jdbc.MariaDbDataSource`
 | `org.hibernate.dialect.MariaDBDialect`
+| `+jdbc:mariadb://db-host:3306/connector?pinGlobalTxToPhysicalConnection=true+`
 
 | PostgreSQL
 | `org.postgresql.xa.PGXADataSource`
 | `org.hibernate.dialect.PostgreSQLDialect`
+| `+jdbc:postgresql://db-host:5432/connector+`
 
 | Oracle
 | `oracle.jdbc.xa.client.OracleXADataSource`
 | `org.hibernate.dialect.OracleDialect`
+| `+jdbc:oracle:thin:@//db-host:1521/<service-name>+`
 |===
+
+IMPORTANT: With MySQL and MariaDB the JDBC URL *must* contain the parameter `pinGlobalTxToPhysicalConnection=true`.
+The parameter is not needed for PostgreSQL and Oracle.
+
+All four combinations of driver class and dialect in the table start the application; the log of Hibernate then notes (message `HHH90000025`) that the dialect does not need to be set explicitly.
+This is only a hint and can be ignored.
 
 == Upgrading
 

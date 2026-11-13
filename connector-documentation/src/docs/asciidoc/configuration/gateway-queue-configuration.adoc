@@ -17,7 +17,7 @@ The gateway queues handle:
 Configuration is provided via `application.properties` under the `+connector.queues.*+` prefix.
 Queue names must not be blank.
 
-NOTE: The message listeners resolve the queue names from the Spring environment, so keep every property of the table in `application.properties`, as in the shipped template. Removing one can prevent the Connector from starting, even though the binding class has a default value for most of them.
+NOTE: All properties of the table must be present in `application.properties`, as in the shipped template.
 
 .Gateway Queue Configuration Properties
 [cols="35,40,10,15", options="header"]
@@ -26,7 +26,7 @@ NOTE: The message listeners resolve the queue names from the Spring environment,
 
 | `connector.queues.gateway-submission-queue`
 | JMS queue used to submit outbound messages into the Domibus gateway for transmission over AS4. Maps to Domibus's standard backend "in" queue.
-| No
+| Yes
 | `domibus.backend.jms.inQueue`
 
 | `connector.queues.gateway-submission-reply-queue`
@@ -42,7 +42,8 @@ NOTE: The message listeners resolve the queue names from the Spring environment,
 |===
 
 IMPORTANT: The names must match the queue names configured in the gateway's `jms-plugin.properties`.
-All three properties must be present. In the current version `gateway-submission-queue` cannot be renamed (messages are always submitted to `domibus.backend.jms.inQueue`), and the administration API reports the default name of `gateway-submission-reply-queue` even when it is overridden.
+The names can be changed (verified for `gateway-submission-queue`: messages were submitted to the configured queue).
+In the sample gateway configuration (`docker/gateway/config/conf/domibus/plugins/config/jms-plugin.properties`) the `jmsplugin.queue.in`, `jmsplugin.queue.reply` and `jmsplugin.queue.out` lines are commented out, so the Domibus defaults shown above apply.
 
 .Configuration Example
 [source,properties]

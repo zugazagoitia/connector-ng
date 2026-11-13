@@ -10,12 +10,11 @@ A backend application talks to the Connector through two interfaces:
 * the *REST API* (`/api/v1/...`) to submit outbound messages and evidence triggers;
 * the *SOAP API* (`/services/backend`) to submit messages and, depending on the link partner's `sender-mode`, to receive them.
 
-The OpenAPI description of the REST API is served by the running Connector at `/swagger-ui/index.html` and `/v3/api-docs`. This chapter explains the flows that the OpenAPI description cannot show.
+The running Connector serves an OpenAPI description at `/swagger-ui/index.html` and `/v3/api-docs`, covering the lookup, authentication and administration endpoints. The backend endpoints `POST /api/v1/attachments/upload`, `POST /api/v1/messages/outbound` and `POST /api/v1/messages/evidence-trigger` are documented in this chapter.
 
 [IMPORTANT]
 ====
-The REST message endpoints do not identify the calling backend yet: the Connector attributes every submission to the link partner with the DN `cn=alice` (hard-coded in `ConnectorMessageController`). They also do not require a JWT token.
-See <<public-endpoints>>. Until this is changed, put the REST API behind a reverse proxy that authenticates your backend, or use the SOAP API, which identifies the caller from its WS-Security certificate.
+The REST backend API does not authenticate the caller in this release. Use the SOAP backend API for production backends.
 ====
 
 == REST API
@@ -24,8 +23,17 @@ See <<public-endpoints>>. Until this is changed, put the REST API behind a rever
 
 The submission is a two-step flow when the message has attachments.
 
-. *(Optional) Upload the attachments.* `POST /api/v1/attachments/upload` with `multipart/form-data`, one part per file. The response is the list of attachment identifiers, in the order of the files.
-. *Submit the message.* `POST /api/v1/messages/outbound` with `multipart/form-data`. The response is `201 Created` and contains the identifier assigned by the Connector.
+. *(Optional) Upload the attachments.* `POST /api/v1/attachments/upload` with `multipart/form-data` and one part named `attachments` per file (a part with any other name is rejected with `400`). The response is `201 Created` with the JSON list of the attachment identifiers, in the order of the files.
+. *Submit the message.* `POST /api/v1/messages/outbound` with `multipart/form-data`. The response is `201 Created` with the identifier assigned by the Connector, for example `{"identifier":"<uuid>@connector.ecodex.eu","backendMessageIdentifier":"<your-message-id>","direction":"BACKEND_TO_GATEWAY"}`.
+
+An upload with `curl`:
+
+[source,shell]
+----
+curl -X POST "http://<connector-host>:<port>/api/v1/attachments/upload" \
+  -F "attachments=@annex-1.pdf;type=application/pdf" \
+  -F "attachments=@annex-2.xml;type=application/xml"
+----
 
 The parts of the outbound request are bound by name:
 
@@ -35,7 +43,7 @@ The parts of the outbound request are bound by name:
 
 | `businessDomainIdentifier`
 | Yes
-| Identifier of the business domain (the P-Mode lane). `default_business_domain` for a standard installation.
+| Identifier of the business domain (the P-Mode lane). `default_business_domain` for a standard installation. An unknown business domain returns `404`.
 
 | `backendMessageIdentifier`
 | Yes
@@ -49,13 +57,17 @@ The parts of the outbound request are bound by name:
 | Yes
 | The business document, usually a PDF (a file; must not be empty).
 
-| `businessContent.businessDocument.detachedSignature.*`
-| No
-| A detached signature of the business document.
-
 | `businessContent.businessDocument.aesType`
+| See the requirement below the table
+| The advanced-electronic-signature type of the document: `SIGNATURE_BASED` or `AUTHENTICATION_BASED`. Any other value returns `400`.
+
+| `businessContent.businessDocument.detachedSignature.signature`
 | No
-| The advanced-electronic-signature type of the document. Must be allowed by `connector.business-document.allowed-advanced-system-types`.
+| A detached signature of the business document (a file; must not be empty when the detached signature is sent).
+
+| `businessContent.businessDocument.detachedSignature.mimeType`
+| No
+| The type of the detached signature: `BINARY` or `XML` (the enumeration names, not MIME types). Sending this part without `detachedSignature.signature` returns `400`.
 
 | `as4Properties.originalSender`, `as4Properties.finalRecipient`
 | Yes
@@ -69,20 +81,24 @@ The parts of the outbound request are bound by name:
 | Yes
 | The action of the P-Mode.
 
-| `as4Properties.fromParty.{identifier,identifierType,role}`, `as4Properties.toParty.{identifier,identifierType,role}`
+| `as4Properties.fromParty.identifier`, `as4Properties.fromParty.identifierType`, `as4Properties.fromParty.role`, `as4Properties.toParty.identifier`, `as4Properties.toParty.identifierType`, `as4Properties.toParty.role`
 | Yes
 | The parties of the P-Mode.
 
 | `as4Properties.ebmsIdentifier`, `as4Properties.conversationIdentifier`
 | No
-| Set only when you must choose these identifiers yourself.
+| Set only when you must choose these identifiers yourself. When `ebmsIdentifier` is not set, the Connector generates it.
 
 | `attachments`
 | No
-| Identifiers returned by the upload call. Repeat the part for each attachment.
+| Identifiers returned by the upload call. Repeat the part for each attachment. An unknown identifier returns `404`.
 |===
 
-The values of service, action and parties are checked against the P-Mode of the business domain (see <<message-processing-configuration>>). The lookups `GET /api/v1/services`, `GET /api/v1/link-partners` and `GET /api/v1/processing-modes/{businessDomainIdentifier}/{services|actions|parties}` return the values that are configured.
+Send at least one of the text parts `businessContent.businessDocument.aesType` or `businessContent.businessDocument.detachedSignature.mimeType` together with the business document; sending `aesType` is the simplest way.
+
+The values of service, action and parties are checked against the P-Mode of the business domain, according to `connector.message-processing.outbound-verification-mode` (see the message processing chapter of the configuration guide). With the default mode `STRICT`, a service or action that is not in the P-Mode returns `409` with `Message verification failed`, and an unknown party returns `409` with `Message toParty [...] is not configured on the connector!` (or `fromParty`).
+
+The lookups `GET /api/v1/processing-modes/<businessDomainIdentifier>/services`, `.../actions` and `.../parties` return the values of the registered P-Mode (an empty list for an unknown business domain), and `GET /api/v1/link-partners` returns the configured link partners. These lookups do not require a token.
 
 An example with `curl`:
 
@@ -93,6 +109,7 @@ curl -X POST "http://<connector-host>:<port>/api/v1/messages/outbound" \
   -F "backendMessageIdentifier=<your-message-id>" \
   -F "businessContent.xmlContent=@content.xml;type=application/xml" \
   -F "businessContent.businessDocument.document=@document.pdf;type=application/pdf" \
+  -F "businessContent.businessDocument.aesType=SIGNATURE_BASED" \
   -F "as4Properties.originalSender=<original-sender>" \
   -F "as4Properties.finalRecipient=<final-recipient>" \
   -F "as4Properties.service.name=<service>" \
@@ -103,51 +120,107 @@ curl -X POST "http://<connector-host>:<port>/api/v1/messages/outbound" \
   -F "as4Properties.fromParty.role=<from-role>" \
   -F "as4Properties.toParty.identifier=<to-id>" \
   -F "as4Properties.toParty.identifierType=<to-id-type>" \
-  -F "as4Properties.toParty.role=<to-role>"
+  -F "as4Properties.toParty.role=<to-role>" \
+  -F "attachments=<attachment-identifier-1>" \
+  -F "attachments=<attachment-identifier-2>"
 ----
 
-Validation errors (a missing or blank part, a value that is too long) return `400`.
+Leave out the two `attachments` lines when the message has no attachments.
+
+Error responses have the form `{"status":<code>,"message":"<text>"}`:
+
+[cols="1,4", options="header"]
+|===
+| Status | Cause
+
+| `400`
+| A missing or blank part, an empty file, a value that is too long, an invalid enumeration value (`aesType`, `detachedSignature.mimeType`). The message lists every violated rule, for example `The [xmlContent] file must not be empty., The [role] must not be blank`.
+
+| `404`
+| Unknown business domain or unknown attachment identifier.
+
+| `409`
+| The service, action or a party does not match the P-Mode.
+|===
+
+The `201` response only means that the message was accepted and queued. The processing (container, signature, submission to the gateway) is asynchronous; follow it with the administration API described below.
 
 === Trigger an evidence
 
-`POST /api/v1/messages/evidence-trigger` with a JSON body asks the Connector to create an evidence for a message that the backend received:
+`POST /api/v1/messages/evidence-trigger` with a JSON body asks the Connector to create an evidence for a message that the backend *received* from the gateway:
 
-[source,json]
+[source,shell]
 ----
-{
-  "evidenceType": "DELIVERY",
-  "referenceToMessageIdentifier": "<ebms-message-identifier>"
-}
+curl -X POST "http://<connector-host>:<port>/api/v1/messages/evidence-trigger" \
+  -H "Content-Type: application/json" \
+  -d '{"evidenceType":"DELIVERY","referenceToMessageIdentifier":"<message-reference>"}'
 ----
 
-`evidenceType` is one of `SUBMISSION_ACCEPTANCE`, `SUBMISSION_REJECTION`, `RELAY_REMMD_ACCEPTANCE`, `RELAY_REMMD_REJECTION`, `RELAY_REMMD_FAILURE`, `DELIVERY`, `NON_DELIVERY`, `RETRIEVAL` and `NON_RETRIEVAL`. The response is `201 Created` and contains the identifier of the evidence message. `400`, `404` and `409` are returned for an invalid request, an unknown message and a conflicting state.
+`referenceToMessageIdentifier` is looked up first as the ebMS identifier of a received message, then as a backend message identifier, then as the identifier assigned by the Connector.
 
-=== Download an evidence
+`evidenceType` accepts the names `SUBMISSION_ACCEPTANCE`, `SUBMISSION_REJECTION`, `RELAY_REMMD_ACCEPTANCE`, `RELAY_REMMD_REJECTION`, `RELAY_REMMD_FAILURE`, `DELIVERY`, `NON_DELIVERY`, `RETRIEVAL` and `NON_RETRIEVAL`. A backend normally triggers `DELIVERY`, `NON_DELIVERY`, `RETRIEVAL` or `NON_RETRIEVAL`. When `connector.message-processing.auto-trigger-delivery-evidences` is enabled, the Connector itself triggers the `DELIVERY` evidence after a successful `push` delivery.
 
-`GET /api/v1/evidences/{uuid}/download` returns the evidence document, or `404` if the evidence does not exist.
+[cols="1,4", options="header"]
+|===
+| Status | Meaning
+
+| `201`
+| The trigger is accepted and queued. The body contains the identifier of the trigger, for example `{"identifier":"<uuid>@connector.ecodex.eu"}`.
+
+| `400`
+| `evidenceType` is missing or not one of the names above, or `referenceToMessageIdentifier` is blank.
+
+| `404`
+| No message matches `referenceToMessageIdentifier`.
+
+| `409`
+| The referenced message was not received from the gateway (for example it is a message that the backend sent).
+|===
+
+Like the submission, the evidence is created asynchronously. If it cannot be created (for example because an evidence that must precede it is missing), the error is only visible in the log of the Connector (`Failed to process evidence trigger`).
+
+=== Follow a message
+
+The administration endpoints need a JWT access token (`POST /api/v1/auth/login`):
+
+* `GET /api/v1/admin/messages` (filters such as `direction`, `backendName`, `service`, `action`, `from`, `to`; paging with `page` and `size`) and `GET /api/v1/admin/messages/<identifier>` show the status of a message, its evidences and its attachments;
+* `GET /api/v1/admin/messages/<identifier>/transport-steps` shows the transport of the message to a link partner, with the status history (`SUBMITTED`, `DELIVERED`, `FAILED`, `READY_FOR_PULL`, `PULLED`); it returns `404` as long as the message has not been handed over to a link partner;
+* `GET /api/v1/admin/evidences/<uuid>/download` returns the XML of an evidence (the `uuid` is listed in the evidences of the message), or `404` if the evidence does not exist. Without a token it returns `401`.
 
 === Authentication and administration
 
-`POST /api/v1/auth/login`, `/refresh`, `/change-password` and `/logout` handle JWT tokens for users; see <<user-authentication>>. The endpoints under `/api/v1/admin/**` serve the administration portal (messages, reports and statistics, transport steps, business domains, P-Modes, users, queues and configuration) and require an authenticated user.
+`POST /api/v1/auth/login` and `POST /api/v1/auth/refresh` are public; `POST /api/v1/auth/change-password` and `POST /api/v1/auth/logout` need an access token. They handle the JWT tokens of the users of the administration portal; see the user authentication chapter of the configuration guide. The endpoints under `/api/v1/admin/**` serve the administration portal (messages, reports and statistics, transport steps, business domains, P-Modes, users, queue statistics and the configuration views under `/api/v1/admin/configurations/...`) and require an authenticated user; user management and the creation of business domains and P-Modes require the `ADMIN` role.
 
 == SOAP API
 
-The SOAP API is described by two WSDL files in the `connector-soap-api` module:
+The SOAP API is described by two WSDL files in the `connector-soap-api` module (`src/main/resources/wsdl/v1/`):
 
 [cols="2,3", options="header"]
 |===
 | WSDL | Role
 
 | `DomibusConnectorBackendWebService.wsdl`
-| Implemented by the *Connector*, at `/services/backend` (the WSDL is available at `/services/backend?wsdl`). Operations: `submitMessage`, `requestMessages`, `listPendingMessageIds`, `getMessageById`, `acknowledgeMessage`.
+| Implemented by the *Connector*, at `/services/backend` (the WSDL is available at `/services/backend?wsdl`). Operations: `submitMessage`, `requestMessages`, `listPendingMessageIds`, `getMessageById`, `acknowledgeMessage`. Target namespace `+http://connector.ecodex.eu/ws/backend/webservice+`.
 
 | `DomibusConnectorBackendDeliveryWebService.wsdl`
-| Implemented by the *backend*, for `push` delivery. The Connector calls `deliverMessage` at the `push-address` of the link partner.
+| Implemented by the *backend*, for `push` delivery. The Connector calls `deliverMessage` at the `push-address` of the link partner. Target namespace `+http://connector.ecodex.eu/ws/backend/delivery/webservice/+`.
 |===
 
-Messages are protected with WS-Security (signature and encryption) according to the policy in `backend.policy.xml`. The Connector identifies the caller by the DN of its certificate and looks it up among the configured link partners (<<certificate-dn-format>>).
+Messages are protected with WS-Security according to the policy file set in `connector.link.backend[n].link-config.properties.ws-policy`. The template uses `classpath:/policy/backend.policy.xml`, shipped in the `connector-soap-api` module: an asymmetric binding with a timestamp, the SOAP body signed and encrypted. The Connector identifies the caller by the DN of its signing certificate and looks it up among the configured link partners (`certificate-dn`; see the format of `certificate-dn` in the link partner chapter of the configuration guide).
 
-The delivery modes and the acknowledged pull mechanism are described in <<backend-delivery-modes>>.
+`submitMessage` does not return a SOAP fault when the message is refused: the acknowledgement has `result=false` and the reason in `resultMessage`. With `result=true`, `messageId` contains the identifier assigned by the Connector.
+
+A `submitMessage` request is an *evidence trigger* when it has no message content and exactly one confirmation with an empty payload. The confirmation type gives the evidence type, and `messageDetails/refToMessageId` the referenced message.
+
+A backend whose `sender-mode` is `pull` or `passive` retrieves the messages and evidences waiting for it as follows:
+
+. `listPendingMessageIds` returns the transport identifiers of the messages in status `READY_FOR_PULL` for this backend;
+. `getMessageById` downloads one message; after the response is sent, its transport step is set to `PULLED`;
+. `acknowledgeMessage` reports the result of the processing of that message: `result=true` sets the transport step to `DELIVERED`, `result=false` to `FAILED` (with the errors sent by the backend).
+
+`requestMessages` downloads all pending messages in one call and sets their transport steps to `PULLED`; there is no acknowledgement in this mode. A backend can only list, download and acknowledge its own messages.
+
+The SOAP operations are covered by the integration tests in `connector-integrationtest/src/test/java/eu/ecodex/connector/soap/backend/`.
 
 == Lifecycle of a message sent by the backend
 
@@ -156,16 +229,16 @@ The delivery modes and the acknowledged pull mechanism are described in <<backen
 | Step | What happens
 
 | 1
-| The backend submits the message (REST or SOAP). The Connector validates it against the P-Mode and registers it.
+| The backend submits the message (REST or SOAP). The Connector checks the business domain, the P-Mode and the attachment identifiers, registers the message and queues it.
 
 | 2
-| The Connector builds the ASiC-S container and publishes the message to the gateway.
+| The Connector validates the message, builds the ASiC-S container and the trust-ok token, creates the `SUBMISSION_ACCEPTANCE` evidence and publishes the message to the gateway (status `SUBMITTED`). The `SUBMISSION_ACCEPTANCE` evidence is sent back to the backend. If a step fails, the Connector creates a `SUBMISSION_REJECTION` evidence for the backend.
 
 | 3
-| The gateway sends the message. Evidences for it come back and are delivered to the backend according to its `sender-mode`.
+| The gateway sends the message. The evidences returned by the other side (`RELAY_REMMD_ACCEPTANCE`, then `DELIVERY` or `NON_DELIVERY`, and so on) update the status of the message (`RECEIVED_BY_OPPOSITE_CONNECTOR`, then `CONFIRMED` or `REJECTED`) and are delivered to the backend according to its `sender-mode`.
 
 | 4
-| The administration endpoints and the transport steps show the state of the message.
+| When the message is confirmed or rejected, the Connector deletes its files from the storage and sets its status to `DELETED`; `confirmedAt` or `rejectedAt` keeps the outcome. The administration endpoints and the transport steps show the state of the message at every step.
 |===
 
 An evidence trigger can also be submitted through the SOAP API. The detailed processing steps are described in <<message-processing-outgoing-evidence>> and <<message-processing-incoming-evidence>>.

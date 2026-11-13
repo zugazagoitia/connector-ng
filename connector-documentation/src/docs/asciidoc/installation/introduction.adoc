@@ -16,7 +16,7 @@ As an installation guide, this document does not describe the features or the da
 Configuration properties are described in the configuration guide, and changes between versions in the changelog.
 
 NOTE: If you are upgrading from connector 6.x, first read the configuration migration guide.
-Several configuration properties were renamed or removed, and properties with an old name are silently ignored.
+Several configuration properties were renamed or removed, so check every property you carry over from an earlier version.
 
 == e-CODEX building blocks
 
@@ -36,7 +36,7 @@ running and reachable before the first start:
 
 | Database (MySQL, MariaDB, PostgreSQL or Oracle)
 | Stores message state and processing history. An empty schema and a dedicated user are required.
-The Connector creates its own tables if *spring.jpa.hibernate.ddl-auto* is set to *update* or *create*.
+The Connector creates its own tables if *spring.jpa.hibernate.ddl-auto* is set to *update* (development and testing only; the value *create* would recreate the tables at every start).
 
 | Apache ActiveMQ Classic
 | External JMS message broker shared with the e-CODEX Gateway. The embedded broker of earlier versions is no longer used.

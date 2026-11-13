@@ -13,12 +13,12 @@ The same content is published in the documentation (`connector-documentation/src
 - **Breaking — Authentication**: the REST API now requires a JWT bearer token (see *Security* below). The configuration must contain `connector.auth.security.jwt.*` and `connector.admin.*`.
 - **Configuration**: the message processing properties can now be overridden. The verification modes are bound as `connector.message-processing.outbound-verification-mode` and `connector.message-processing.inbound-verification-mode`.
 - **Database**: new tables (users, roles, refresh tokens), columns and indexes were added. Only initial scripts are provided (`dbscripts/initial`); compare them with your schema before upgrading.
-- **Transactions**: Narayana was replaced by Atomikos; the JTA transaction log is written to `spring.jta.log-file` (default `./data/jtalog`), which must be on persistent storage.
+- **Transactions**: Narayana was replaced by Atomikos; the transaction log (`tmlog*.log`) is written to the working directory unless `spring.jta.atomikos.properties.log-base-dir` is set; keep it on persistent storage.
 
 ### Added
 
 - **Delivery evidence** — Automatic `DELIVERY` evidence submission once a message is delivered to the backend (`connector.message-processing.auto-trigger-delivery-evidences`).
-- **Pull mode** — Backend link partners with `sender-mode=pull` retrieve inbound messages through the API ("ready for download" status, bulk download and acknowledgement).
+- **Pull mode** — Backend link partners with `sender-mode=pull` retrieve inbound messages through the API ("ready for pull" status, bulk download and acknowledgement).
 - **Statistics and reporting** — Message statistics and reports, exportable as `csv`, `json` and `xlsx`, filterable by business domain.
 - **Search** — Filter messages by business domain, direction, service, action and date range; filter attachments and transport steps by status, identifier and date range.
 - **Message security** — Validity check of incoming business message containers.

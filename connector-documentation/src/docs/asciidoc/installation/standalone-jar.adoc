@@ -12,13 +12,13 @@ endif::distributiondir[]
 Use this installation option to run the Connector natively on a host, without a container runtime.
 
 NOTE: When upgrading from connector 6.x, first read the configuration migration guide.
-Several property names changed, and old names are silently ignored.
+Several property names changed, so check every property you carry over from an earlier version.
 
 == Prerequisites
 
 In addition to the common <<prerequisites>>, this option requires a Java **21** runtime (JRE) on the host. A full JDK is only needed to build from source.
 
-The Connector also needs a local directory for temporary upload files, a database, an ActiveMQ Classic broker and an S3-compatible object store (Amazon S3, MinIO or Silo). The bucket is created at startup unless `connector.file.storage.s3.auto-create-bucket=false`, in which case it must exist beforehand.
+The Connector also needs a local directory for temporary upload files, a database, an ActiveMQ Classic broker and an S3-compatible object store (Amazon S3, MinIO or Silo). The Connector checks the bucket at startup and creates it if it does not exist, so the S3 credentials need permission to create buckets (or the bucket must exist beforehand).
 
 To check the Java version of the target server:
 [source,bash]
@@ -33,8 +33,8 @@ The output must report version `21.x.x` or higher.
 
 The distribution is published as a ZIP archive named `connector-distribution-<version>.zip`.
 
-* **Option A — Download from the e-CODEX Artifactory** (an account is required):
-** Release versions: `+https://scm.ecodex.eu/artifactory/libs-release/eu/ecodex/connector/connector-distribution/<version>/+`
+* **Option A — Download from the e-CODEX Artifactory** (no account is needed):
+** Release versions: `+https://scm.ecodex.eu/artifactory/ecodex-releases/eu/ecodex/connector/connector-distribution/<version>/connector-distribution-<version>.zip+`
 ** Snapshot versions: `+https://scm.ecodex.eu/artifactory/libs-snapshot/eu/ecodex/connector/connector-distribution/<version>-SNAPSHOT/+`
 * **Option B — Build from source.** Requires JDK 21 and internet access to download the dependencies. Docker is additionally required to run the integration tests.
 +
@@ -50,10 +50,11 @@ The distribution is generated in `connector-distribution/build/`:
 
 === Step 2 — Unpack the distribution
 
-The package has the following layout:
+Unpack the archive, for example with `unzip connector-distribution-<version>.zip -d connector`.
+The archive has no top-level folder: it unpacks the three directories below directly into the target directory.
 
 ----
-connector-distribution/
+<target directory>/
 ├── standalone/
 │   ├── bin/
 │   │   └── connector-ng.jar
@@ -66,20 +67,24 @@ connector-distribution/
 │   │       ├── connector-truststore.jks
 │   │       ├── backend-keystore.jks
 │   │       └── backend-truststore.jks
-│   ├── lib/                     (JDBC drivers)
+│   ├── lib/                     (see step 4)
 │   ├── start.sh
 │   └── start.bat
 ├── dbscripts/
 │   └── initial/                 (mysql.sql, mariadb.sql, postgres.sql, oracle.sql)
-└── documentation/               (this documentation, HTML and PDF)
+└── documentation/               (this documentation: html/ and pdf/)
 ----
 
 The `standalone/` directory is the working directory of the application: all relative paths in `application.properties` (`./config/...`, `./data/...`) are resolved from it.
-The application creates `./data/` at runtime for the JTA transaction log and the DSS trusted list cache.
+The application creates `./data/` at runtime for the DSS trusted list cache (`data/tlcache`).
+
+IMPORTANT: Store the JTA transaction log in `data/jtalog`: set `spring.jta.atomikos.properties.log-base-dir=./data/jtalog` in `application.properties`.
+Without this setting the JTA transaction log (the files `tmlog<N>.log` and `tmlog.lck`) is written to the working directory `standalone/`.
+Include the transaction log in your backups, and never start two instances with the same log directory (the second one stops with `The specified log seems to be in use already`).
 
 Then create the directory for temporary upload files, outside the distribution directory, and
 export its location. The connector does not create it. At startup, it checks that the directory
-exists, is writable, is not a symbolic link, and is not writable by group or others.
+exists, is writable, is not a symbolic link, and is not writable by group or others (mode `700`; `755` is also accepted).
 
 [source,bash]
 ----
@@ -113,7 +118,16 @@ through environment variables or a secrets manager instead of writing them in th
 | `connector.admin.username`, `password`, `email`
 
 | JWT
-| `connector.auth.security.jwt.secret`, `issuer`, `refresh-token.expiration`, `refresh-token.cleanup-cron`
+| `connector.auth.security.jwt.secret` (at least 32 bytes), `issuer` (no default), `refresh-token.expiration`, `refresh-token.cleanup-cron`
+
+| Link partners
+| For every partner, also for `pull` and `passive` partners: `properties.push-address` (an absolute http(s) URL; the template value `+http://localhost:port/...+` is invalid) and `properties.encryption-alias`
+
+| Business document
+| `connector.business-document.authentication-validation.identity-provider`
+
+| DSS
+| At least one `connector.dss.cache.*` property
 
 | Keystores
 | Passwords of the keystores and private keys for evidences, container signature, backend links and truststores
@@ -128,6 +142,9 @@ Edit `standalone/config/application.properties`. The shipped file is a template:
 * The template reads several values from environment variables (`DB_URL`, `BROKER_URL`, `S3_ENDPOINT`, `JWT_SECRET_KEY`, ...).
 Either export them in the shell or service definition that starts the Connector, or replace the placeholders with literal values.
 The complete list is given in the platform chapter of the configuration guide.
+If a variable is not defined, the text `${VARIABLE}` stays in the value and the startup fails with a message about that value (see the troubleshooting table below).
+* With MySQL, the JDBC URL must contain `?pinGlobalTxToPhysicalConnection=true` (for example `+jdbc:mysql://localhost:3306/connector?pinGlobalTxToPhysicalConnection=true+`). See the database chapter for the other databases.
+* Set a real URL in `connector.link.backend[0].link-partners[0].properties.push-address`. The template value `+http://localhost:port/services/domibusConnectorDeliveryWebservice+` is rejected (`push-address must be an absolute http(s) URL`). For a first start, for example `+http://localhost:8080/services/domibusConnectorDeliveryWebservice+` is accepted.
 * Replace the test keystores with your own key material (see <<certificates-setup>>).
 * Create `config/pmode/` and place your P-Mode file there, or remove the `+connector.business-domains.defaults[0].pmode.*+` properties and upload the P-Mode after startup.
 If `pmode.file` points to a file that does not exist, the Connector aborts the startup.
@@ -154,12 +171,13 @@ On Linux, from the `standalone/` directory:
 ./start.sh
 ----
 
-`start.sh` is shipped with execute permission. If the permission was lost while copying the files, restore it with `chmod +x start.sh`.
+Make `start.sh` executable once with `chmod +x start.sh`.
 
 On Windows, run `start.bat`.
 
 `start.sh` runs `java -Dloader.path=./lib -jar ./bin/connector-ng.jar --spring.config.location=./config/`; `start.bat` runs the same command without `-Dloader.path`.
-To pass JVM options (memory, proxy, ...), edit the script or set the `JAVA_TOOL_OPTIONS` environment variable.
+The JDBC drivers of MySQL, MariaDB, PostgreSQL and Oracle are already part of `bin/connector-ng.jar`, so no driver needs to be placed in `lib/`.
+To pass JVM options (memory, proxy, ...), edit the script or set the `JAVA_TOOL_OPTIONS` environment variable (the JVM prints `Picked up JAVA_TOOL_OPTIONS: ...` at start).
 
 TIP: For production, run the Connector as a service (for example a `systemd` unit) under a dedicated, unprivileged user, with `standalone/` as working directory.
 
@@ -170,7 +188,6 @@ Once running, the following endpoints are available (replace `30000` with your `
 [cols="2,3", options="header"]
 |===
 | Endpoint | URL
-| Root URL | `http://localhost:30000`
 | Health | `http://localhost:30000/actuator/health`
 | Application info | `http://localhost:30000/actuator/info`
 | Swagger UI | `http://localhost:30000/swagger-ui/index.html`
@@ -178,27 +195,47 @@ Once running, the following endpoints are available (replace `30000` with your `
 |===
 
 The health endpoint must report `"status":"UP"`.
-Log in to the administration API with the admin account configured in `+connector.admin.*+`; you will be asked to change the password at first login.
+The root URL `http://localhost:30000/` has no page and answers `401`; this is expected.
+Log in to the administration API (`POST /api/v1/auth/login`) with the admin account configured in `+connector.admin.*+`.
+The login response contains `"mustChangePassword": true` for the initial password. The administration portal asks for the change; the API does not block other calls while the flag is set.
+Change the password yourself (`POST /api/v1/auth/change-password`) before the Connector is reachable by others.
 
 [[jar-troubleshooting]]
 == Troubleshooting startup errors
+
+The messages below were observed with the executable JAR of this version.
 
 [cols="2,3", options="header"]
 |===
 | Symptom | Likely cause
 
-| `Binding to target ... failed`, followed by `Property: ... Reason: must not be blank`
+| `./start.sh: Permission denied`
+| The script has no execute permission. Run `chmod +x start.sh`.
+
+| `APPLICATION FAILED TO START` with `Binding to target ... failed`, followed by `Property: ...` and `Reason: must not be blank` (or `must not be null`)
 | A mandatory property is missing or empty. Set it, or remove the line to use the default.
 
-| `Could not resolve placeholder 'TEMP_DIR_LOCATION'` (or another variable)
-| The environment variable used in `application.properties` is not defined for the user running the connector.
+| The failure names a value that still contains `${...}`, for example `Value: "${S3_BUCKET}"`, `'url' must start with "jdbc"`, `password authentication failed for user "${DB_USERNAME}"` or `Illegal character in path at index 1: ${BROKER_URL}`
+| The environment variable used in `application.properties` is not defined for the user running the connector. The placeholder is not resolved and stays in the value. Check all of them, for example `S3_REGION`, `S3_ACCESS_KEY` or `DB_DRIVER_CLASSNAME`.
 
-| The startup stops with a message about the temporary directory
-| The directory does not exist, is a symbolic link, or is accessible by group or others. Recreate it as in step 2.
+| `Property: connector.file.storage.uploadTempDirectoryUsable` with `Reason: upload-temp-directory must be a writable directory`
+| `TEMP_DIR_LOCATION` is not defined, or the directory does not exist or is not writable. Recreate it as in step 2.
 
-| Errors about S3 access denied or an unreachable endpoint
-| Wrong credentials or endpoint. If the bucket does not exist, either the credentials need permission to create it, or create it manually and set `auto-create-bucket=false`.
+| `Property: connector.file.storage.uploadTempDirectory` with `Reason: must not be null`
+| `TEMP_DIR_LOCATION` is defined but empty.
 
-| Connection refused to the broker
-| ActiveMQ is not running or `spring.activemq.broker-url` is wrong.
+| `Upload directory must not be a symlink` or `Upload directory must not be writable by group or others`
+| The temporary directory is a symbolic link, or its mode allows writing by group or others. Recreate it as in step 2.
+
+| `WeakKeyException: The specified key byte array is ... bits which is not secure enough` (shown as `Unable to start web server`)
+| `JWT_SECRET_KEY` (`connector.auth.security.jwt.secret`) is shorter than 32 bytes, or is not defined (the text `${JWT_SECRET_KEY}` is then used as key).
+
+| `Application run failed` with `S3Exception: Forbidden (Service: S3, Status Code: 403 ...)` or `SdkClientException: Unable to execute HTTP request: Connect to ... failed`
+| Wrong S3 credentials, or an unreachable endpoint. The message appears after the line `Started ConnectorApplication`, and the process then exits: the S3 check runs at the end of the startup. If the bucket does not exist, the credentials need permission to create it, or create it manually.
+
+| `Could not connect to broker URL: tcp://...` (repeated in the log)
+| ActiveMQ is not running or `spring.activemq.broker-url` is wrong. The Connector keeps running and retries.
+
+| `XAER_INVAL: Invalid arguments (or unsupported command)` while the administrator is created
+| MySQL URL without `?pinGlobalTxToPhysicalConnection=true`.
 |===

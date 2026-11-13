@@ -13,11 +13,26 @@ This chapter lists frequent errors after a new installation, most of them caused
 |===
 | Message in the log | Cause and solution
 
-| `Could not resolve placeholder 'DB_URL' in value "${DB_URL}"` (or `BROKER_URL`, `S3_ENDPOINT`, `JWT_SECRET_KEY`, ...)
-| The template reads this value from an environment variable that is not defined. Define the variable, or replace the placeholder in `application.properties`.
+| A failure that names a value still containing `${...}`, for example `Value: "${S3_BUCKET}"`, `'url' must start with "jdbc"`, `password authentication failed for user "${DB_USERNAME}"` or `Illegal character in path at index 1: ${BROKER_URL}`
+| The template reads this value from an environment variable that is not defined. The placeholder stays in the value and the startup fails later because of that value. Define the variable, or replace the placeholder in `application.properties`. Check also `S3_REGION`, `S3_ACCESS_KEY`, `DB_DRIVER_CLASSNAME` and `DB_DIALECT`.
+
+| `WeakKeyException: The specified key byte array is ... bits which is not secure enough ...`, shown as `Unable to start web server`
+| `JWT_SECRET_KEY` (`connector.auth.security.jwt.secret`) is shorter than 32 bytes, or is not defined (the text `${JWT_SECRET_KEY}` is then used as key). Use at least 32 random bytes, for example `openssl rand -base64 32`.
+
+| `Property: connector.link.backend[0].linkPartners[0].properties.pushAddressValid` with `Reason: push-address must be an absolute http(s) URL` (or `pushAddress ... must not be null` when it is missing)
+| The template value `+http://localhost:port/...+` was not replaced. Every link partner needs a `push-address`, also the partners of mode `pull` or `passive`. Set a real URL, for example `+http://localhost:8080/services/domibusConnectorDeliveryWebservice+`.
 
 | `Could not resolve placeholder 'connector.queues....'`
-| A queue property was removed. All `+connector.queues.*+` properties of the template must be present.
+| The property `connector.queues.backend-delivery-queue` or `connector.queues.gateway-reception-queue` was removed. Keep all `+connector.queues.*+` properties of the template with their values; the Connector uses these names for its own queues.
+
+| `Property: connector.file.storage.uploadTempDirectoryUsable`, `Reason: upload-temp-directory must be a writable directory`; `Reason: must not be null`; `Upload directory must not be a symlink`; `Upload directory must not be writable by group or others`
+| The temporary upload directory (`TEMP_DIR_LOCATION`) does not exist, is not writable, is a symbolic link or can be written by group or others, or the variable is defined but empty. Create it with `install -d -m 700`.
+
+| `Application run failed` with `S3Exception: Forbidden (Service: S3, Status Code: 403 ...)` or `SdkClientException: Unable to execute HTTP request: Connect to ... failed`
+| Wrong S3 credentials or endpoint. The message appears after the log line `Started ConnectorApplication`, and the process then exits: the bucket check is the last startup step. The bucket check can be switched off with `connector.file.storage.s3.auto-create-bucket=false`, a property that is not part of the template; with it, a missing bucket is not detected at startup.
+
+| `Could not connect to broker URL: tcp://...` (repeated in the log)
+| ActiveMQ is not reachable. The Connector keeps running and retries; check `spring.activemq.broker-url` (or `BROKER_URL`) and the credentials.
 
 | `No processing mode file found at [file:./config/pmode/pmode-blue.xml]` (or `No truststore found at ...`)
 | `+connector.business-domains.defaults[n].pmode.*+` still points to the template file, which is not shipped. Set the path of your P-Mode and truststore, or remove these properties and upload the P-Mode after startup.
@@ -28,11 +43,19 @@ This chapter lists frequent errors after a new installation, most of them caused
 | `Binding to target ... failed` / `Property: connector.... Reason: must not be blank`
 | A mandatory property is missing or empty (for example the evidence issuer address, or the business document country). Set it as described in the configuration guide.
 
-| Keystore errors (`Keystore was tampered with, or password was incorrect`, alias not found)
-| Path, password, type or alias of a keystore does not match the file. List the content with `keytool -list -v -keystore <file>`.
+| `Keystore was tampered with, or password was incorrect` / `Password verification failed`
+| The password of a keystore (for example `connector.evidences.signature.keystore.password`) does not match the file. List the content with `keytool -list -v -keystore <file>`.
+| `XAER_INVAL: Invalid arguments (or unsupported command)`, `Application run failed`, while the administrator is created (MySQL)
+| The JDBC URL lacks `?pinGlobalTxToPhysicalConnection=true`. Add it to `DB_URL` (see the database chapter).
 
-| Database errors at startup (`XAER_RMERR`, `XA_RECOVER`, prepared transactions)
-| The database user lacks the XA privileges, or PostgreSQL `max_prepared_transactions` is `0` (see the database chapter).
+| `XAER_RMERR ... XARecoveryManager - Error while retrieving xids`, repeated every 10 seconds (MySQL)
+| The database user lacks the `XA_RECOVER_ADMIN` privilege. The Connector keeps working; grant the privilege as described in the database chapter. MariaDB has no such privilege and needs no grant.
+
+| Prepared-transaction errors at startup (PostgreSQL)
+| PostgreSQL `max_prepared_transactions` is `0` (see the database chapter).
+
+| `The specified log seems to be in use already: tmlog in ...`
+| Another Connector instance uses the same JTA log directory, or the directory is not writable by the user that runs the Connector.
 |===
 
 == Runtime errors
@@ -48,7 +71,7 @@ This chapter lists frequent errors after a new installation, most of them caused
 | No link partner has a `certificate-dn` equal to the lower-cased subject DN of the backend signing certificate. Write the full DN in lower case (see the link partner chapter).
 
 | `No link partner found for certificateDn: cn=alice` on REST calls
-| The REST backend API is not usable with your own partners in this version (see the security guidance). Use the SOAP backend API.
+| The REST backend API does not authenticate the calling backend in this release, so it cannot be used with your own link partners. Use the SOAP backend API (see the security guidance).
 
 | `Link partner ... not found` when delivering an inbound message
 | The routing (or `connector.routing.default-backend-name`, which defaults to `default_backend`) points to a name that is not a declared link partner.
@@ -67,4 +90,5 @@ This chapter lists frequent errors after a new installation, most of them caused
 
 * Increase the log level of `eu.ecodex.connector` to `DEBUG` in `config/log4j2.xml` (temporarily: debug logs can contain personal data).
 * Check the health endpoint `/actuator/health` (database, broker and disk status).
-* The administration portal shows the effective configuration (`/api/v1/admin/configurations`), which helps to detect properties that were not taken into account.
+* Follow a message with `GET /api/v1/admin/messages` (authenticated). On the sending Connector an outbound message has the status `SUBMITTED` once it is handed to the gateway and `RECEIVED_BY_OPPOSITE_CONNECTOR` once the Connector of the partner has accepted it. On the receiving Connector an inbound message for a `pull` backend has the status `READY_FOR_PULL` until the backend has downloaded and acknowledged it. A message that stays in `SUBMITTED` (sender) or `CREATED` (receiver) was not processed: look for its identifier in the logs of both Connectors and of both gateways.
+* The administration API shows the effective configuration of several areas under `/api/v1/admin/configurations/` (for example `queues`, `message-processing`, `evidence`, `business-domains`, `routing`, `backend-link-partners`; a JWT is required), which helps to verify the values that are in effect.

@@ -8,6 +8,8 @@ By default, the Domibus gateway embeds an Apache ActiveMQ broker for JMS messagi
 With connector 7.x, the gateway and the connector share an *external* ActiveMQ Classic broker instead.
 Consequently, the gateway must be configured with the connection parameters of the external broker (URL, credentials and related JMS settings).
 
+WARNING: The gateway image referenced by the `docker-compose.yml` file of the source repository (`scm.ecodex.eu/docker/gateway:edge`) is provided for development and evaluation only. It is not supported for production: install and operate the production gateway according to the gateway documentation.
+
 NOTE: This chapter describes properties of the *gateway* (Domibus), not of the connector.
 They are set in the gateway's `domibus.properties` file (for a multitenant gateway, in the domain-specific properties file), not in the connector's `application.properties`.
 The connector side is configured with `+spring.activemq.*+` (see the platform configuration chapter).
@@ -114,7 +116,7 @@ spring.activemq.user=${ACTIVEMQ_USERNAME}
 spring.activemq.password=${ACTIVEMQ_PASSWORD}
 ----
 
-The Domibus backend queues (`domibus.backend.jms.inQueue`, `domibus.backend.jms.replyQueue`) are shared
+The Domibus backend queues (`domibus.backend.jms.inQueue`, `domibus.backend.jms.replyQueue`, `domibus.backend.jms.outQueue`) are shared
 between the gateway and the connector. Their names are configurable on the connector side with
-`connector.queues.gateway-submission-queue` and `connector.queues.gateway-submission-reply-queue`.
-Keep them identical to the queue names configured in Domibus.
+`connector.queues.gateway-submission-queue`, `connector.queues.gateway-submission-reply-queue` and `connector.queues.gateway-reception-queue`.
+Keep them identical to the queue names configured in the Domibus JMS plugin (`jmsplugin.queue.in`, `jmsplugin.queue.reply`, `jmsplugin.queue.out`).

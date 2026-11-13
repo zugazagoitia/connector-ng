@@ -10,7 +10,8 @@ Generated evidences are electronically signed (XAdES) and include mandatory issu
 Configuration is provided via `application.properties` under the `+connector.evidences.*+` prefix.
 
 NOTE: The configuration is validated at startup. A missing or blank mandatory value stops the
-connector with an error naming the offending property.
+connector with an error naming the offending property. The signing keystore is also loaded at startup: a keystore file that does not exist stops the startup (`Failed to load JKS keystore: file:...`).
+Check the private key alias and key password with `keytool -list` before starting.
 
 == Signature configuration
 
@@ -58,7 +59,7 @@ Use the `file:` or `classpath:` prefix.
 | `${EVIDENCES_KEY_PASSWORD}`
 |===
 
-NOTE: The digest algorithm (`SHA256`) and the encryption algorithm (`RSA`) are set with `digest-algorithm` and `encryption-algorithm`. The property `payload-digest-algorithm` found in earlier samples is not bound and has no effect.
+NOTE: The digest algorithm (`SHA256`) and the encryption algorithm (`RSA`) are set with `digest-algorithm` and `encryption-algorithm`.
 
 .Configuration Example
 [source,properties]
@@ -144,7 +145,7 @@ connector.evidences.issuer.postal-address.country=<XX>
 | `connector.message-processing.auto-trigger-delivery-evidences`
 | When `true`, a `DELIVERY` evidence is generated automatically once the message has been delivered to the backend.
 | Yes
-| `false` (the template sets `true`)
+| The template sets `true`. Set the property explicitly.
 
 | `connector.queues.inbound-evidence-trigger-queue`
 | JMS queue for inbound evidence trigger messages.
