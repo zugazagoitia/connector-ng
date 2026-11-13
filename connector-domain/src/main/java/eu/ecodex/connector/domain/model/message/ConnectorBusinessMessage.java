@@ -79,6 +79,7 @@ public record ConnectorBusinessMessage(
     @Nullable String gatewayName,
     @Nonnull ConnectorMessageAS4Properties as4Properties,
     @Nonnull ConnectorMessageDirection direction,
+    @Nonnull ConnectorBusinessMessageStatus status,
     @Nullable Instant createdAt,
     @Nullable Instant updatedAt,
     @Nullable Instant deletedAt,

@@ -13,9 +13,13 @@ package eu.ecodex.connector.application.service.message;
 import eu.ecodex.connector.application.exception.evidence.ConnectorEvidenceException;
 import eu.ecodex.connector.application.exception.evidence.ConnectorEvidenceNotRelevantException;
 import eu.ecodex.connector.application.port.api.message.ConnectorMessageEvidenceVerifier;
+import eu.ecodex.connector.application.port.spi.ConnectorMessageEventPublisher;
 import eu.ecodex.connector.application.port.spi.message.ConnectorMessageRepository;
 import eu.ecodex.connector.domain.model.ConnectorErrorCode;
 import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessage;
+import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessageStatus;
+import eu.ecodex.connector.domain.model.message.ConnectorMessageDirection;
+import eu.ecodex.connector.domain.model.message.ConnectorMessageResolvedEvent;
 import eu.ecodex.connector.domain.model.message.evidence.ConnectorEvidenceType;
 import eu.ecodex.connector.domain.model.message.evidence.ConnectorMessageEvidence;
 import java.util.Comparator;
@@ -23,13 +27,16 @@ import java.util.EnumSet;
 import java.util.List;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Default implementation of {@link ConnectorMessageEvidenceVerifier}.
  */
 @Slf4j
 @Component
+@Transactional
 public class ConnectorMessageEvidenceVerifierService implements ConnectorMessageEvidenceVerifier {
     private static final EnumSet<ConnectorEvidenceType> NEGATIVE_EVIDENCE_TYPES = EnumSet.of(
         ConnectorEvidenceType.SUBMISSION_REJECTION,
@@ -44,22 +51,42 @@ public class ConnectorMessageEvidenceVerifierService implements ConnectorMessage
     );
 
     private final ConnectorMessageRepository messageRepository;
+    private final ConnectorMessageEventPublisher<ConnectorMessageResolvedEvent>
+        attachmentCleanupPublisher;
 
-    public ConnectorMessageEvidenceVerifierService(ConnectorMessageRepository messageRepository) {
+    /**
+     * Creates the verifier.
+     *
+     * @param messageRepository          the repository used to read and update the messages the
+     *                                   evidences refer to (must not be null)
+     * @param attachmentCleanupPublisher the publisher used to send a
+     *                                   {@link ConnectorMessageResolvedEvent} when a message
+     *                                   becomes resolved, which triggers the cleanup of its
+     *                                   attachments (must not be null)
+     */
+    public ConnectorMessageEvidenceVerifierService(
+        ConnectorMessageRepository messageRepository,
+        @Qualifier("connectorJmsResolvedMessagePublisher")
+        ConnectorMessageEventPublisher<ConnectorMessageResolvedEvent>
+            attachmentCleanupPublisher) {
         this.messageRepository = messageRepository;
+        this.attachmentCleanupPublisher =
+            attachmentCleanupPublisher;
     }
 
     @Override
     public void verify(
         @NonNull ConnectorEvidenceType evidenceType,
         @NonNull ConnectorBusinessMessage message) {
-        log.debug("Processing message [{}] with evidence [{}]", message.identifier(), evidenceType);
+        var messageIdentifier = message.identifier();
+
+        log.debug("Processing message [{}] with evidence [{}]", messageIdentifier, evidenceType);
 
         var transportedEvidences = message.transportedEvidences();
 
-        if (transportedEvidences.isEmpty()) {
+        if (transportedEvidences == null || transportedEvidences.isEmpty()) {
             throw new ConnectorEvidenceException(
-                "Message [{" + message.identifier() + "}] has no evidences!"
+                "Message [{" + messageIdentifier + "}] has no evidences!"
             );
         }
 
@@ -71,7 +98,7 @@ public class ConnectorMessageEvidenceVerifierService implements ConnectorMessage
                     + "[{}] because it has lower priority than the already received evidences. "
                     + "error_code=[{}]",
                 evidenceType,
-                message.identifier(),
+                messageIdentifier,
                 ConnectorErrorCode.EVIDENCE_IGNORED_DUE_HIGHER_PRIORITY.getCode()
             );
 
@@ -80,10 +107,25 @@ public class ConnectorMessageEvidenceVerifierService implements ConnectorMessage
             );
         }
 
-        if (NEGATIVE_EVIDENCE_TYPES.contains(evidenceType)) {
-            log.warn("Message [{}] has been rejected by evidence [{}]", message, evidenceType);
+        if (evidenceType == ConnectorEvidenceType.RELAY_REMMD_ACCEPTANCE
+            && message.direction() == ConnectorMessageDirection.BACKEND_TO_GATEWAY) {
+            messageRepository.updateStatus(
+                messageIdentifier,
+                ConnectorBusinessMessageStatus.RECEIVED_BY_OPPOSITE_CONNECTOR
+            );
+        }
 
-            this.messageRepository.setAsRejected(message.identifier());
+        if (NEGATIVE_EVIDENCE_TYPES.contains(evidenceType)) {
+            log.warn(
+                "Message [{}] has been rejected by evidence [{}]",
+                messageIdentifier,
+                evidenceType
+            );
+
+            this.messageRepository.setAsRejected(messageIdentifier);
+            this.attachmentCleanupPublisher.publish(
+                new ConnectorMessageResolvedEvent(messageIdentifier)
+            );
 
             return;
         }
@@ -94,7 +136,7 @@ public class ConnectorMessageEvidenceVerifierService implements ConnectorMessage
                 log.warn(
                     "Message [{}] has already been rejected by an negative evidence! "
                         + "The positive evidence of type [{}] will be ignored!",
-                    message, evidenceType
+                    messageIdentifier, evidenceType
                 );
 
                 throw new ConnectorEvidenceNotRelevantException(
@@ -103,8 +145,15 @@ public class ConnectorMessageEvidenceVerifierService implements ConnectorMessage
             }
 
             this.messageRepository.setAsConfirmed(message.identifier());
+            this.attachmentCleanupPublisher.publish(
+                new ConnectorMessageResolvedEvent(messageIdentifier)
+            );
 
-            log.info("Message [{}] has been confirmed by evidence [{}]", message, evidenceType);
+            log.info(
+                "Message [{}] has been confirmed by evidence [{}]",
+                messageIdentifier,
+                evidenceType
+            );
         }
     }
 

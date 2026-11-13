@@ -18,7 +18,7 @@ include::{basepath}/configuration/configuration-template.adoc[leveloffset=+1]
 // Infrastructure the connector depends on
 include::{basepath}/configuration/platform-configuration.adoc[leveloffset=+1]
 
-include::{basepath}/configuration/s3-configuration.adoc[leveloffset=+1]
+include::{basepath}/configuration/file-storage-configuration.adoc[leveloffset=+1]
 
 include::{basepath}/configuration/user.adoc[leveloffset=+1]
 
@@ -39,6 +39,8 @@ include::{basepath}/configuration/container-configuration.adoc[leveloffset=+1]
 include::{basepath}/configuration/business-document-configuration.adoc[leveloffset=+1]
 
 include::{basepath}/configuration/dss-configuration.adoc[leveloffset=+1]
+
+include::{basepath}/configuration/file-deletion.adoc[leveloffset=+1]
 
 // Messaging
 include::{basepath}/configuration/connector-queue-configuration.adoc[leveloffset=+1]

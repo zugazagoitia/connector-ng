@@ -13,13 +13,14 @@ package eu.ecodex.connector.infrastructure.adapter.out.provider;
 import eu.ecodex.connector.application.port.spi.ConnectorFileStorageProvider;
 import eu.ecodex.connector.domain.model.message.attachment.ConnectorAttachmentStorage;
 import eu.ecodex.connector.domain.model.message.attachment.ConnectorMessageAttachment;
-import eu.ecodex.connector.infrastructure.config.property.ConnectorS3ProviderProperties;
+import eu.ecodex.connector.infrastructure.config.property.filestorage.ConnectorFileStorageProperties;
 import java.nio.file.Path;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
@@ -30,13 +31,13 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 @Component
 public class ConnectorS3FileStorageProvider implements ConnectorFileStorageProvider {
     private final S3Client s3Client;
-    private final ConnectorS3ProviderProperties s3ProviderProperties;
+    private final ConnectorFileStorageProperties storageProperties;
 
     public ConnectorS3FileStorageProvider(
         S3Client s3Client,
-        ConnectorS3ProviderProperties s3ProviderProperties) {
+        ConnectorFileStorageProperties storageProperties) {
         this.s3Client = s3Client;
-        this.s3ProviderProperties = s3ProviderProperties;
+        this.storageProperties = storageProperties;
     }
 
     @Override
@@ -70,7 +71,7 @@ public class ConnectorS3FileStorageProvider implements ConnectorFileStorageProvi
         log.debug("Downloading attachment [{}] from s3", identifier);
 
         var getObjectRequest = GetObjectRequest.builder()
-                                               .bucket(this.s3ProviderProperties.getBucket())
+                                               .bucket(this.storageProperties.s3().bucket())
                                                .key(identifier)
                                                .build();
 
@@ -88,9 +89,21 @@ public class ConnectorS3FileStorageProvider implements ConnectorFileStorageProvi
         return ConnectorAttachmentStorage.S3_BUCKET;
     }
 
+    @Override
+    public void deleteByIdentifier(@NonNull String identifier) {
+        log.debug("Deleting attachment [{}] from s3", identifier);
+
+        var deleteObjectRequest = DeleteObjectRequest.builder()
+                                                     .bucket(this.storageProperties.s3().bucket())
+                                                     .key(identifier)
+                                                     .build();
+
+        this.s3Client.deleteObject(deleteObjectRequest);
+    }
+
     private PutObjectRequest buildObjectRequest(ConnectorMessageAttachment attachment) {
         return PutObjectRequest.builder()
-                               .bucket(this.s3ProviderProperties.getBucket())
+                               .bucket(this.storageProperties.s3().bucket())
                                .key(attachment.identifier())
                                .build();
     }

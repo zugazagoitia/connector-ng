@@ -23,4 +23,6 @@ import org.springframework.stereotype.Repository;
 public interface ConnectorMessageAS4PropertiesJpaRepository extends
     JpaRepository<ConnectorMessageAS4PropertiesEntity, Long> {
     ConnectorMessageAS4PropertiesEntity findByMessageIdentifier(String messageIdentifier);
+
+    void deleteByMessageIdentifier(String messageIdentifier);
 }

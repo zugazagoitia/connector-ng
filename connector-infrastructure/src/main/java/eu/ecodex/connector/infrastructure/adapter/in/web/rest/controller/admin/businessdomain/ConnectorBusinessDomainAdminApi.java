@@ -14,7 +14,6 @@ import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.ConnectorBusin
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.ConnectorBusinessDomainCreationRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -42,20 +41,16 @@ public interface ConnectorBusinessDomainAdminApi {
     @PostMapping("")
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Creates a new business domain.")
-    @ApiResponses({
-        @ApiResponse(responseCode = "400", description = "Bad Request"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "403", description = "Forbidden"),
-        @ApiResponse(responseCode = "409", description = "Conflict")
-    })
+    @ApiResponse(responseCode = "400", description = "Bad Request")
+    @ApiResponse(responseCode = "401", description = "Unauthorized")
+    @ApiResponse(responseCode = "403", description = "Forbidden")
+    @ApiResponse(responseCode = "409", description = "Conflict")
     ConnectorBusinessDomainDto registerBusinessDomain(
         @Valid @RequestBody ConnectorBusinessDomainCreationRequest request);
 
     @GetMapping("")
     @ResponseStatus(HttpStatus.OK)
     @Operation(summary = "Get all business domains.")
-    @ApiResponses({
-        @ApiResponse(responseCode = "401", description = "Unauthorized")
-    })
+    @ApiResponse(responseCode = "401", description = "Unauthorized")
     List<ConnectorBusinessDomainDto> listBusinessDomains();
 }

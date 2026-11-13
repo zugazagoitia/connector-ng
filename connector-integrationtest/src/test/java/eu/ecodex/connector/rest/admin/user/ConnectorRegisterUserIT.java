@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import eu.ecodex.connector.AbstractIntegrationTest;
 import eu.ecodex.connector.application.port.spi.auth.user.ConnectorUserRepository;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.user.ConnectorUserDto;
-import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.user.ConnectorUserCreationOrUpdateRequest;
+import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.user.ConnectorCreateUserRequest;
 import java.util.Set;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -41,12 +41,46 @@ class ConnectorRegisterUserIT extends AbstractIntegrationTest {
 
     @Test
     @Sql({"classpath:sql/user.sql"})
+    void register_should_succeeded_and_create_user_default_role_when_no_roles_provided() {
+        var username = "new_user_it";
+        var existing = userRepository.findByUsername(username);
+        assertThat(existing).isEmpty();
+
+        var request = ConnectorCreateUserRequest.builder()
+            .username(username)
+            .password("password")
+            .email("test@email.com")
+            .enabled(true)
+            .build();
+
+        var registeredUser = apiClient.post()
+            .uri(PATH)
+            .header(HttpHeaders.AUTHORIZATION, "Bearer " + generateDefaultAdminToken())
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(request)
+            .exchange()
+            .expectStatus()
+            .isCreated()
+            .returnResult(ConnectorUserDto.class)
+            .getResponseBody();
+
+        assertThat(registeredUser).isNotNull();
+
+        existing = userRepository.findByUsername(username);
+        assertThat(existing).isNotEmpty();
+        assertThat(existing.get().roles()).hasSize(1);
+        assertThat(existing.get().roleNames()).containsExactly("ROLE_USER");
+        assertThat(existing.get().mustChangePassword()).isTrue();
+    }
+
+    @Test
+    @Sql({"classpath:sql/user.sql"})
     void register_should_succeeded_when_valid_credentials_are_provided() {
         var username = "new_user_it";
         var existing = userRepository.findByUsername(username);
         assertThat(existing).isEmpty();
 
-        var request = ConnectorUserCreationOrUpdateRequest.builder()
+        var request = ConnectorCreateUserRequest.builder()
             .username(username)
             .password("password")
             .email("test@email.com")
@@ -79,7 +113,7 @@ class ConnectorRegisterUserIT extends AbstractIntegrationTest {
         var existing = userRepository.findByUsername(username);
         assertThat(existing).isEmpty();
 
-        var request = ConnectorUserCreationOrUpdateRequest
+        var request = ConnectorCreateUserRequest
             .builder()
             .username(username)
             .password("password")
@@ -106,7 +140,7 @@ class ConnectorRegisterUserIT extends AbstractIntegrationTest {
         var existing = userRepository.findByUsername(username);
         assertThat(existing).isNotEmpty();
 
-        var request = ConnectorUserCreationOrUpdateRequest
+        var request = ConnectorCreateUserRequest
             .builder()
             .username(username)
             .password("password")
@@ -134,7 +168,7 @@ class ConnectorRegisterUserIT extends AbstractIntegrationTest {
         var existing = userRepository.findByUsername(username);
         assertThat(existing).isEmpty();
 
-        var request = ConnectorUserCreationOrUpdateRequest
+        var request = ConnectorCreateUserRequest
             .builder()
             .username(username)
             .password(StringUtils.EMPTY)

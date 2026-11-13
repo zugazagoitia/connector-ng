@@ -43,7 +43,6 @@ import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -87,7 +86,6 @@ public class ConnectorTokenSignatureBasedTechnicalValidationGenerator implements
     private final ConnectorDssCertificateVerifier dssCertificateVerifier;
     private final ConnectorDssCertificateSourceLoader dssCertificateSourceLoader;
     private final ConnectorBusinessDocumentProperties businessDocumentProperties;
-    private final ResourceLoader resourceLoader;
     private final CertificateSource ignoredCertificateStore;
 
     /**
@@ -97,18 +95,14 @@ public class ConnectorTokenSignatureBasedTechnicalValidationGenerator implements
      * @param dssCertificateSourceLoader the source loader responsible for loading certificate
      *                                   sources.
      * @param businessDocumentProperties the business document properties configuration.
-     * @param resourceLoader             the resource loader for accessing resources, such as files
-     *                                   and properties.
      */
     public ConnectorTokenSignatureBasedTechnicalValidationGenerator(
         ConnectorDssCertificateVerifier dssCertificateVerifier,
         ConnectorDssCertificateSourceLoader dssCertificateSourceLoader,
-        ConnectorBusinessDocumentProperties businessDocumentProperties,
-        ResourceLoader resourceLoader) {
+        ConnectorBusinessDocumentProperties businessDocumentProperties) {
         this.dssCertificateVerifier = dssCertificateVerifier;
         this.dssCertificateSourceLoader = dssCertificateSourceLoader;
         this.businessDocumentProperties = businessDocumentProperties;
-        this.resourceLoader = resourceLoader;
         this.ignoredCertificateStore = loadIgnoredCertificateStore();
     }
 
@@ -131,9 +125,9 @@ public class ConnectorTokenSignatureBasedTechnicalValidationGenerator implements
             // Validate the document and generate the validation report
             log.debug("Validating the document");
 
-            var policy = this.resourceLoader.getResource(
-                businessDocumentProperties.getSignature().getValidation().getConstraintsXml()
-            );
+            var policy = businessDocumentProperties.getSignature()
+                                                   .getValidation()
+                                                   .getConstraintsXml();
             var reports = validator.validateDocument(policy.getInputStream());
             var simpleReport = reports.getSimpleReport();
             var detailedReport = reports.getDetailedReport();

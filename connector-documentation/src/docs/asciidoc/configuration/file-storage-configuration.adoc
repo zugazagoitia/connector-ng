@@ -1,0 +1,165 @@
+ifndef::header[]
+include::{basepath}/header.adoc[]
+endif::header[]
+
+= File Storage Configuration
+
+This configuration defines the connector file storage backend.
+
+NOTE: S3-compatible object storage is the only supported storage backend.
+Support for local filesystem storage is planned for a future release.
+
+The storage backend holds all connector-managed file types:
+
+* Message business content
+* Message business document
+* Message attachments (including large files)
+* ASIC-S containers
+* Temporary file storage
+
+The following S3-compatible providers are supported:
+
+* Amazon S3
+* MinIO
+* Silo
+* Other S3-compatible object storage services
+
+== Temporary File Storage Configuration
+
+Configuration is provided via `application.properties` under the
+`connector.file.storage.*` prefix.
+
+.File Storage Configuration Properties
+[cols="35,40,10,15"]
+|===
+| Property | Description | Optional | Example
+
+| `connector.file.storage.upload-temp-directory`
+| Local directory used for temporary files while uploads are being processed.
+The directory must already exist and meet the requirements listed below.
+The connector fails at startup if the value is blank, the placeholder cannot be resolved
+or the directory does not meet the requirements.
+| No
+| `${TEMP_DIR_LOCATION}`
+|===
+
+=== Directory Requirements
+
+The connector does not create the temporary directory. It must be created beforehand,
+and at startup the connector checks that the directory:
+
+* exists and is writable by the user running the connector,
+* is not a symbolic link,
+* is not writable by group or others (for example, mode `700`).
+
+If one of these checks fails, the connector does not start.
+
+Temporary files are created inside this directory with random names and owner-only
+permissions (`600`). Only a sanitized extension of the uploaded file name is kept in the
+temporary file name, so client-supplied names never influence the location of the file.
+Temporary files are deleted once the upload has been processed, whether it succeeds or fails.
+
+WARNING: Do not point `connector.file.storage.upload-temp-directory` at a shared, world-writable
+directory such as `/tmp`. Use a dedicated directory owned by the user running the connector.
+
+When running the connector outside Docker, create the directory before starting it:
+
+[source,shell]
+----
+install -d -m 700 -o <connector-user> /path/to/connector/temp
+export TEMP_DIR_LOCATION=/path/to/connector/temp
+----
+
+The Docker image provides `/app/temp`, owned by the `connector` user with mode `700`, and the
+image sets `TEMP_DIR_LOCATION` to this path.
+
+NOTE: When a volume or host folder is mounted on `/app/temp`, the owner and permissions of the mount
+replace the ones set in the image. Make sure the mounted folder is owned by the container user
+(UID `1000` by default) and has mode `700`, otherwise the connector does not start.
+
+== S3 Storage Configuration
+
+Configuration is provided under the `connector.file.storage.s3.*` prefix.
+All properties below, including the automatic bucket creation, share this prefix.
+
+.S3 File Storage Configuration Properties
+[cols="35,40,10,15"]
+|===
+| Property | Description | Optional | Example
+
+| `connector.file.storage.s3.auto-create-bucket`
+| Whether the connector creates the configured bucket at startup when it does not exist.
+Defaults to `true`. If set to `false`, the bucket must be created manually beforehand.
+| Yes
+| `false`
+
+| `connector.file.storage.s3.access-key`
+| S3 access key ID.
+| No
+| `${S3_ACCESS_KEY}`
+
+| `connector.file.storage.s3.secret-key`
+| S3 secret access key.
+| No
+| `${S3_SECRET_KEY}`
+
+| `connector.file.storage.s3.region`
+| AWS region the bucket lives in. For non-AWS providers this may be
+an arbitrary placeholder value required by the S3 client.
+| No
+| `eu-west-1`
+
+| `connector.file.storage.s3.bucket`
+| Name of the S3 bucket used to store connector files.
+Must be a valid S3 bucket name: 3 to 63 characters, lowercase letters, digits, dots and hyphens,
+starting and ending with a letter or digit.
+If `connector.file.storage.s3.auto-create-bucket` is `true` (the default), the bucket is created at startup
+when it does not exist yet. If it is `false`, the bucket must be created manually before starting
+the connector, otherwise the connector cannot store any data.
+| No
+| `attachments`
+
+| `connector.file.storage.s3.endpoint`
+| S3 endpoint URL. Must be an absolute `http` or `https` URL including a host and, if needed, a port.
+Required for non-AWS providers (MinIO, Silo, OVH Object Storage, etc.) or when targeting a specific
+regional/VPC endpoint. When omitted, the standard AWS endpoint for the configured region is used.
+| Yes
+| `https://s3.eu-west-1.amazonaws.com`
+|===
+
+NOTE: The configuration is validated at startup. A missing mandatory property, an invalid bucket name
+or an endpoint without a scheme (for example `localhost:9000`) stops the connector with an error
+naming the offending property.
+
+=== Automatic Bucket Creation
+
+By default (`connector.file.storage.s3.auto-create-bucket=true`), the connector checks at startup whether the configured bucket exists:
+
+* If the bucket exists, nothing is changed.
+* If the bucket does not exist, the connector creates it.
+* If several connector instances start at the same time and another instance creates the bucket first, the conflict is ignored and the startup continues.
+* Any other error (for example, access denied or an unreachable endpoint) stops the startup.
+
+The configured credentials need permission to check for and create buckets (`s3:ListBucket` and `s3:CreateBucket` on Amazon S3).
+The bucket is created with the provider's default settings, so versioning, encryption, lifecycle rules and access policies are not configured by the connector.
+
+WARNING: If automatic bucket creation is disabled (`connector.file.storage.s3.auto-create-bucket=false`), the connector does not check for or create the bucket.
+Make sure that the bucket configured in
+`connector.file.storage.s3.bucket` has been created manually before starting the connector.
+Otherwise, the connector will not be able to store any data (business content, business documents, attachments, ASiC-S containers and temporary files) in S3, and operations that write files will fail.
+
+NOTE: For production environments, it is recommended to provision the bucket yourself with the required settings and to set `connector.file.storage.s3.auto-create-bucket=false`.
+This also lets you run the connector with credentials that cannot create buckets.
+Remember that the bucket must then exist before the connector starts (see the warning above).
+
+.Configuration example
+[source,properties]
+----
+connector.file.storage.upload-temp-directory=${TEMP_DIR_LOCATION}
+connector.file.storage.s3.auto-create-bucket=true
+connector.file.storage.s3.access-key=${S3_ACCESS_KEY}
+connector.file.storage.s3.secret-key=${S3_SECRET_KEY}
+connector.file.storage.s3.region=eu-west-1
+connector.file.storage.s3.bucket=attachments
+connector.file.storage.s3.endpoint=https://localhost:9000
+----

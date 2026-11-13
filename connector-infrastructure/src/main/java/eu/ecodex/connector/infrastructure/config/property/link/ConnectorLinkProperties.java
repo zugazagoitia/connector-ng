@@ -10,12 +10,13 @@
 
 package eu.ecodex.connector.infrastructure.config.property.link;
 
+import jakarta.validation.Valid;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * Root configuration properties for the connector link module.
@@ -25,8 +26,9 @@ import org.springframework.context.annotation.Configuration;
  */
 @Getter
 @Setter
-@Configuration
+@Validated
 @ConfigurationProperties(prefix = "connector.link")
 public class ConnectorLinkProperties {
+    @Valid
     private List<BackendLinkProperties> backend = new ArrayList<>();
 }

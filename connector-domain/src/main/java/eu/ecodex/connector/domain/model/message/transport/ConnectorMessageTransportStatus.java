@@ -26,10 +26,10 @@ import lombok.Getter;
  * an error or system failure.</li>
  * <li><strong>SUBMITTED</strong>: Indicates that the message has been submitted to the gateway
  * system for further processing.</li>
- * <li><strong>DOWNLOADED</strong>: Indicates that the recipient or backend system has retrieved
+ * <li><strong>PULLED</strong>: Indicates that the recipient or backend system has retrieved
  * or pulled the message.</li>
- * <li><strong>READY_FOR_DOWNLOAD</strong>: Indicates that the message is available for the
- * recipient or backend system to download.</li>
+ * <li><strong>READY_FOR_PULL</strong>: Indicates that the message is available for the
+ * recipient or backend system to be pulled.</li>
  * </ul>
  *
  * <p>Each status is associated with a predefined priority, represented as an integer value.
@@ -41,8 +41,8 @@ public enum ConnectorMessageTransportStatus {
     DELIVERED(10), // when the message has been delivered to the recipient (backend/gateway)
     FAILED(10), // when the message could not be delivered
     SUBMITTED(9), // when the message has been submitted to the gateway system
-    DOWNLOADED(9), // when the backend system has pulled the message
-    READY_FOR_DOWNLOAD(1); // when the message is ready to be downloaded by the backend system
+    PULLED(9), // when the backend system has pulled the message
+    READY_FOR_PULL(1); // when the message is ready to be pulled by the backend system
 
     final int priority;
 

@@ -39,6 +39,6 @@ public class ConnectorRetrieveRoleByNameService implements ConnectorRetrieveRole
     @Override
     public ConnectorRole execute(@NonNull String roleName) {
         return repository.findByName(roleName).orElseThrow(() -> new ConnectorRoleNotFoundException(
-            String.format("User not found by username %s", roleName)));
+            String.format("No user role not found by name %s", roleName)));
     }
 }

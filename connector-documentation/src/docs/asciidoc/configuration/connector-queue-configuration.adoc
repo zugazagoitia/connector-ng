@@ -13,8 +13,10 @@ The queues coordinate the processing lifecycle for:
 * Evidence generation
 * Backend delivery
 * Message staging and transport
+* Cleanup of resolved messages
 
-The queues are JMS queues hosted on the shared Apache ActiveMQ Classic broker (see the platform configuration chapter).
+The queues are JMS queues provided by the external Apache ActiveMQ broker configured under
+`spring.activemq.*`.
 
 [IMPORTANT]
 ====
@@ -24,6 +26,9 @@ The queues are JMS queues hosted on the shared Apache ActiveMQ Classic broker (s
 ====
 == Basic configuration
 Configuration is provided via `application.properties` under the `+connector.queues.*+` prefix.
+Queue names must not be blank.
+
+NOTE: The message listeners resolve the queue names from the Spring environment, so keep every property of the table in `application.properties`, as in the shipped template. Removing one can prevent the Connector from starting, even though the binding class has a default value for most of them.
 
 .Connector Queue Configuration Properties
 [cols="35,40,10,15", options="header"]
@@ -65,7 +70,15 @@ Configuration is provided via `application.properties` under the `+connector.que
 | No
 | `connector.queues.backend-delivery-queue`
 
+| `connector.queues.resolved-message-cleanup-processing-queue`
+| JMS queue name used for the cleanup of messages that have been resolved (confirmed or rejected).
+| Yes
+| By default, set to `connector.queues.resolved-message-cleanup-processing-queue`
 |===
+
+NOTE: The configuration is validated at startup. An empty value (for example
+`connector.queues.backend-delivery-queue=`) counts as set to blank and stops the connector.
+Remove or comment out the line to use the default.
 
 .Configuration Example
 [source,properties]
@@ -77,4 +90,5 @@ connector.queues.inbound-message-staging-queue=connector.queues.inbound-message-
 connector.queues.inbound-message-processing-queue=connector.queues.inbound-message-processing-queue
 connector.queues.inbound-evidence-trigger-queue=connector.queues.inbound-evidence-trigger-queue
 connector.queues.backend-delivery-queue=connector.queues.backend-delivery-queue
+connector.queues.resolved-message-cleanup-processing-queue=connector.queues.resolved-message-cleanup-processing-queue
 ----

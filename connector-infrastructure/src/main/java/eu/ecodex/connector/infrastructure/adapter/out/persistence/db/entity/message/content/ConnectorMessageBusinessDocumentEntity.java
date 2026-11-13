@@ -14,6 +14,7 @@ import eu.ecodex.connector.domain.model.message.content.ConnectorBusinessDocumen
 import eu.ecodex.connector.domain.model.message.content.ConnectorMessageBusinessDocument;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.BaseEntity;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.message.ConnectorMessageAttachmentEntity;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -32,7 +33,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 import org.hibernate.annotations.UuidGenerator;
 
 /**
@@ -49,7 +49,10 @@ import org.hibernate.annotations.UuidGenerator;
     uniqueConstraints = {
         @UniqueConstraint(name = "UQ_CM_BD_UUID", columnNames = "UUID"),
         @UniqueConstraint(name = "UQ_CM_BD_CONTENT", columnNames = "BUSINESS_CONTENT_ID"),
-        @UniqueConstraint(name = "UQ_CM_BD_ATTACHMENT", columnNames = "ATTACHMENT_ID")
+        @UniqueConstraint(name = "UQ_CM_BD_ATTACHMENT", columnNames = "CONTENT_ATTACHMENT_ID"),
+        @UniqueConstraint(
+            name = "UQ_CM_BD_DS_ATTACHMENT", columnNames = "DETACHED_SIGNATURE_ATTACHMENT_ID"
+        )
     },
     indexes = {
         @Index(name = "IDX_CM_BD_AES_TYPE", columnList = "AES_TYPE")
@@ -77,15 +80,18 @@ public class ConnectorMessageBusinessDocumentEntity extends BaseEntity {
     )
     private ConnectorMessageBusinessContentEntity businessContent;
 
-    @OneToOne(fetch = FetchType.LAZY, optional = false)
+    @OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.REMOVE, optional = false)
     @JoinColumn(
-        name = "ATTACHMENT_ID",
+        name = "CONTENT_ATTACHMENT_ID",
         nullable = false,
-        foreignKey = @ForeignKey(name = "FK_CM_BD_ATTACHMENT")
+        foreignKey = @ForeignKey(name = "FK_CM_BD_ATT_CONTENT")
     )
-    private ConnectorMessageAttachmentEntity attachment;
+    private ConnectorMessageAttachmentEntity content;
 
-    @Setter
-    @OneToOne(mappedBy = "businessDocument")
-    private ConnectorMessageBusinessDocumentDetachedSignatureEntity detachedSignature;
+    @OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.REMOVE)
+    @JoinColumn(
+        name = "DETACHED_SIGNATURE_ATTACHMENT_ID",
+        foreignKey = @ForeignKey(name = "FK_CM_BD_DS_ATTACHMENT")
+    )
+    private ConnectorMessageAttachmentEntity detachedSignature;
 }

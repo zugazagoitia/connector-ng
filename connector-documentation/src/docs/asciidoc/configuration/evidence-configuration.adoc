@@ -9,6 +9,9 @@ Generated evidences are electronically signed (XAdES) and include mandatory issu
 
 Configuration is provided via `application.properties` under the `+connector.evidences.*+` prefix.
 
+NOTE: The configuration is validated at startup. A missing or blank mandatory value stops the
+connector with an error naming the offending property.
+
 == Signature configuration
 
 Properties under `+connector.evidences.signature.*+` control how REM evidence XML is signed.
@@ -18,15 +21,26 @@ Properties under `+connector.evidences.signature.*+` control how REM evidence XM
 |===
 | Property | Description | Optional | Example
 
+| `connector.evidences.signature.digest-algorithm`
+| Digest algorithm used when signing evidences.
+| Yes
+| By default, set to `SHA256`
+
+| `connector.evidences.signature.encryption-algorithm`
+| Encryption algorithm of the signing key.
+| Yes
+| By default, set to `RSA`
+
 | `connector.evidences.signature.keystore.path`
-| Classpath or filesystem path to the keystore holding the signing private key.
+| Classpath or filesystem location of the keystore holding the signing private key.
+Use the `file:` or `classpath:` prefix.
 | No
 | `file:./config/keystores/<connector-signing-keystore>.p12`
 
 | `connector.evidences.signature.keystore.password`
 | Password for the keystore.
 | No
-| *(secret)*
+| `${EVIDENCES_KEYSTORE_PASSWORD}`
 
 | `connector.evidences.signature.keystore.type`
 | Keystore type (for example `JKS` or `PKCS12`).
@@ -41,12 +55,10 @@ Properties under `+connector.evidences.signature.*+` control how REM evidence XM
 | `connector.evidences.signature.private-key.password`
 | Password to unlock the private key entry.
 | No
-| *(secret)*
-
+| `${EVIDENCES_KEY_PASSWORD}`
 |===
 
-NOTE: The digest algorithm (SHA-256) and the signature algorithm (RSA) used for evidences are fixed in the current version.
-The `connector.evidences.signature.digest-algorithm` and `connector.evidences.signature.payload-digest-algorithm` properties found in earlier samples are not bound and have no effect.
+NOTE: The digest algorithm (`SHA256`) and the encryption algorithm (`RSA`) are set with `digest-algorithm` and `encryption-algorithm`. The property `payload-digest-algorithm` found in earlier samples is not bound and has no effect.
 
 .Configuration Example
 [source,properties]
@@ -56,6 +68,7 @@ connector.evidences.signature.keystore.password=${SIGNING_KEYSTORE_PASSWORD}
 connector.evidences.signature.keystore.type=PKCS12
 connector.evidences.signature.private-key.alias=<signing-key-alias>
 connector.evidences.signature.private-key.password=${SIGNING_KEY_PASSWORD}
+connector.evidences.signature.digest-algorithm=SHA256
 ----
 
 == Issuer configuration
@@ -64,6 +77,8 @@ Properties under `+connector.evidences.issuer.*+` are embedded into every genera
 
 IMPORTANT: The template values (`Unknown Street 1`, `Connector NG`, `mailto:gateway@connector.example`, ...) are placeholders. Set the legal address of your organisation, and the party name and endpoint address of *your* gateway exactly as declared in your P-Mode.
 In connector 6.x, the AS4 party information was taken from the uploaded P-Mode; in 7.x it must be configured here.
+
+All issuer properties are mandatory and must not be blank.
 
 .Issuer Configuration Properties
 [cols="35,40,10,15", options="header"]
@@ -131,6 +146,10 @@ connector.evidences.issuer.postal-address.country=<XX>
 | Yes
 | `false` (the template sets `true`)
 
+| `connector.queues.inbound-evidence-trigger-queue`
+| JMS queue for inbound evidence trigger messages.
+| Yes
+| By default, set to `connector.queues.inbound-evidence-trigger-queue`
 |===
 
 See also the message processing and connector queue configuration chapters.

@@ -10,8 +10,14 @@
 
 package eu.ecodex.connector.infrastructure.config.property.link;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.boot.context.properties.NestedConfigurationProperty;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
 
 /**
  * Detailed configuration properties for a link configuration.
@@ -23,8 +29,16 @@ import lombok.Setter;
 @Getter
 @Setter
 public class LinkConfigDetailProperties {
+    @Valid
+    @NotNull
+    @NestedConfigurationProperty
     private LinkEndpointProperties endpoint;
+
+    @Pattern(regexp = "/.*", message = "must start with /")
     private String publishAddress = "/backend";
+
     private boolean loggingEnabled = false;
-    private String wsPolicy = "classpath:/policy/backend.policy.xml";
+
+    @NotNull
+    private Resource wsPolicy = new ClassPathResource("policy/backend.policy.xml");
 }

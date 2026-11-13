@@ -10,25 +10,34 @@
 
 package eu.ecodex.connector.infrastructure.config.property.auth;
 
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.Setter;
+import lombok.ToString;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * Configuration properties for the admin user.
  */
 @Getter
 @Setter
-@Configuration
+@Validated
+@ToString(exclude = "password")
 @ConfigurationProperties(prefix = "connector.admin")
 public class ConnectorAdminUserProperties {
-    @NonNull
+    @NotBlank
     private String username;
-    @NonNull
+
+    @NotBlank
     private String password;
-    @NonNull
+
+    @NotBlank
+    @Email
     private String email;
+
+    @NotNull
     private Boolean enabled = Boolean.TRUE;
 }

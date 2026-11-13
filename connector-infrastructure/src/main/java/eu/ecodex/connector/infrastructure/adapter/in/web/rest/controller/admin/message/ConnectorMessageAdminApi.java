@@ -20,9 +20,9 @@ import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.message.Connec
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.message.ConnectorMessageDto;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.transport.ConnectorMessageTransportStepDto;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.message.c2ctest.ConnectorTestMessageRequest;
+import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.io.IOException;
@@ -51,14 +51,13 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 )
 @RequestMapping("/api/v1/admin/messages")
 public interface ConnectorMessageAdminApi {
+    @Hidden
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping(value = "/outbound/test", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Submit a test message from this connector to another connector")
-    @ApiResponses({
-        @ApiResponse(responseCode = "400", description = "Bad Request"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "403", description = "Forbidden")
-    })
+    @ApiResponse(responseCode = "400", description = "Bad Request")
+    @ApiResponse(responseCode = "401", description = "Unauthorized")
+    @ApiResponse(responseCode = "403", description = "Forbidden")
     ConnectorOutboundMessageDto submitOutboundC2CTestMessage(
         @Valid @ModelAttribute ConnectorTestMessageRequest request
     ) throws IOException;
@@ -66,9 +65,7 @@ public interface ConnectorMessageAdminApi {
     @ResponseStatus(HttpStatus.OK)
     @GetMapping
     @Operation(summary = "Get paginated list of messages.")
-    @ApiResponses({
-        @ApiResponse(responseCode = "401", description = "Unauthorized")
-    })
+    @ApiResponse(responseCode = "401", description = "Unauthorized")
     ConnectorPageResult<ConnectorMessageDto> listMessages(
         @RequestParam(name = "page", defaultValue = "0") int page,
         @RequestParam(name = "size", defaultValue = "20") int size,
@@ -85,28 +82,22 @@ public interface ConnectorMessageAdminApi {
     @ResponseStatus(HttpStatus.OK)
     @GetMapping("/{identifier}")
     @Operation(summary = "Get a message by identifier.")
-    @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Message found"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "404", description = "Not Found")
-    })
+    @ApiResponse(responseCode = "200", description = "Message found")
+    @ApiResponse(responseCode = "401", description = "Unauthorized")
+    @ApiResponse(responseCode = "404", description = "Not Found")
     ConnectorMessageDetailDto retrieveMessage(@PathVariable String identifier);
 
     @ResponseStatus(HttpStatus.OK)
     @GetMapping("/{identifier}/transport-steps")
     @Operation(summary = "Get a message transport step by identifier.")
-    @ApiResponses({
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "404", description = "Not Found")
-    })
+    @ApiResponse(responseCode = "401", description = "Unauthorized")
+    @ApiResponse(responseCode = "404", description = "Not Found")
     ConnectorMessageTransportStepDto retrieveMessageTransportStep(@PathVariable String identifier);
 
     @ResponseStatus(HttpStatus.OK)
     @GetMapping("/stats")
     @Operation(summary = "Get message statistics.")
-    @ApiResponses({
-        @ApiResponse(responseCode = "401", description = "Unauthorized")
-    })
+    @ApiResponse(responseCode = "401", description = "Unauthorized")
     ConnectorMessageStats getStats(
         @RequestParam(name = "from", required = false) Instant from,
         @RequestParam(name = "to", required = false) Instant to,
@@ -116,9 +107,7 @@ public interface ConnectorMessageAdminApi {
     @ResponseStatus(HttpStatus.OK)
     @GetMapping("/reports")
     @Operation(summary = "Get message reporting.")
-    @ApiResponses({
-        @ApiResponse(responseCode = "401", description = "Unauthorized")
-    })
+    @ApiResponse(responseCode = "401", description = "Unauthorized")
     ConnectorMessageReportSummary getReports(
         @RequestParam(name = "from", required = false) Instant from,
         @RequestParam(name = "to", required = false) Instant to,
@@ -128,9 +117,7 @@ public interface ConnectorMessageAdminApi {
     @ResponseStatus(HttpStatus.OK)
     @GetMapping("/reports/export")
     @Operation(summary = "Export message reporting.")
-    @ApiResponses({
-        @ApiResponse(responseCode = "401", description = "Unauthorized")
-    })
+    @ApiResponse(responseCode = "401", description = "Unauthorized")
     ResponseEntity<byte[]> exportReports(
         @RequestParam(name = "from", required = false) Instant from,
         @RequestParam(name = "to", required = false) Instant to,

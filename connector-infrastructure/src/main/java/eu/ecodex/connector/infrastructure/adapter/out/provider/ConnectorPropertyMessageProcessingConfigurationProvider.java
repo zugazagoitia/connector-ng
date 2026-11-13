@@ -36,18 +36,18 @@ public class ConnectorPropertyMessageProcessingConfigurationProvider implements
     public ConnectorMessageProcessingConfiguration getConfiguration() {
         return ConnectorMessageProcessingConfiguration
             .builder()
-            .ebmsIdSuffix(messageProcessingProperties.getEbmsIdSuffix())
-            .identifierSuffix(messageProcessingProperties.getIdentifierSuffix())
-            .transportIdSuffix(messageProcessingProperties.getTransportIdSuffix())
+            .ebmsIdSuffix(messageProcessingProperties.ebmsIdSuffix())
+            .identifierSuffix(messageProcessingProperties.identifierSuffix())
+            .transportIdSuffix(messageProcessingProperties.transportIdSuffix())
             .sendGeneratedEvidencesToBackend(
-                messageProcessingProperties.isSendGeneratedEvidencesToBackend())
+                messageProcessingProperties.sendGeneratedEvidencesToBackend())
             .inboundMessageVerificationMode(
-                messageProcessingProperties.getInboundMessageVerificationMode())
+                messageProcessingProperties.inboundVerificationMode())
             .outboundMessageVerificationMode(
-                messageProcessingProperties.getOutboundMessageVerificationMode())
-            .ebmsIdGeneratorEnabled(messageProcessingProperties.isEbmsIdGeneratorEnabled())
+                messageProcessingProperties.outboundVerificationMode())
+            .ebmsIdGeneratorEnabled(messageProcessingProperties.ebmsIdGeneratorEnabled())
             .autoTriggerDeliveryEvidences(
-                messageProcessingProperties.isAutoTriggerDeliveryEvidences())
+                messageProcessingProperties.autoTriggerDeliveryEvidences())
             .build();
     }
 }

@@ -39,7 +39,7 @@ public class ConnectorJmsBackendLinkPublisher
     public void publish(@NonNull ConnectorMessage message) {
         log.info("Submitting message [{}] to backend link processing queue", message.identifier());
         this.jmsTemplate.convertAndSend(
-            this.queueProperties.getBackendDeliveryQueue(), message
+            this.queueProperties.backendDeliveryQueue(), message
         );
     }
 }

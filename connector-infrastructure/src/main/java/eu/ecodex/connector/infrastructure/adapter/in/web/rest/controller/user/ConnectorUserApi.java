@@ -16,7 +16,6 @@ import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.user.Conne
 import eu.ecodex.connector.infrastructure.adapter.out.auth.identity.ConnectorUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Nonnull;
 import jakarta.validation.Valid;
@@ -39,21 +38,17 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 public interface ConnectorUserApi {
     @Operation(summary = "Update partially the currently connected user profile.")
     @PatchMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
-    @ApiResponses({
-        @ApiResponse(responseCode = "400", description = "Bad Request"),
-        @ApiResponse(responseCode = "404", description = "Not Found"),
-        @ApiResponse(responseCode = "409", description = "Conflict")
-    })
+    @ApiResponse(responseCode = "400", description = "Bad Request")
+    @ApiResponse(responseCode = "404", description = "Not Found")
+    @ApiResponse(responseCode = "409", description = "Conflict")
     ConnectorUserDto editAuthenticatedUser(
         @AuthenticationPrincipal @Nonnull ConnectorUserDetails userDetails,
         @Valid @RequestBody @Nonnull ConnectorEditSelfRequest userRequest);
 
     @Operation(summary = "Get the currently authenticated user account.")
     @GetMapping
-    @ApiResponses({
-        @ApiResponse(responseCode = "400", description = "Bad Request"),
-        @ApiResponse(responseCode = "404", description = "Not Found")
-    })
+    @ApiResponse(responseCode = "400", description = "Bad Request")
+    @ApiResponse(responseCode = "404", description = "Not Found")
     ConnectorUserDto retrieveAuthenticatedUser(
         @AuthenticationPrincipal @Nonnull ConnectorUserDetails userDetails);
 
@@ -61,11 +56,9 @@ public interface ConnectorUserApi {
     @Operation(summary = "Update a connector user password after login, using access and refresh "
         + "tokens.")
     @PostMapping(path = "/change-password", consumes = MediaType.APPLICATION_JSON_VALUE)
-    @ApiResponses({
-        @ApiResponse(responseCode = "400", description = "Bad Request"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "404", description = "Not Found")
-    })
+    @ApiResponse(responseCode = "400", description = "Bad Request")
+    @ApiResponse(responseCode = "401", description = "Unauthorized")
+    @ApiResponse(responseCode = "404", description = "Not Found")
     void updateAuthenticatedUserPassword(
         @AuthenticationPrincipal @Nonnull ConnectorUserDetails userDetails,
         @Valid @RequestBody @Nonnull ConnectorUpdateUserPasswordRequest userPasswordRequest);

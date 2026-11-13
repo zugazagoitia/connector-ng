@@ -34,7 +34,6 @@ public final class TestDatabaseCleanup {
             jdbcTemplate.execute("TRUNCATE TABLE connector_message_transport_steps");
             jdbcTemplate.execute("TRUNCATE TABLE connector_message_evidences");
             jdbcTemplate.execute("TRUNCATE TABLE connector_message_errors");
-            jdbcTemplate.execute("TRUNCATE TABLE connector_message_business_document_signatures");
             jdbcTemplate.execute("TRUNCATE TABLE connector_message_business_documents");
             jdbcTemplate.execute("TRUNCATE TABLE connector_message_business_contents");
             jdbcTemplate.execute("TRUNCATE TABLE connector_message_as4_properties");
@@ -44,7 +43,7 @@ public final class TestDatabaseCleanup {
             jdbcTemplate.execute("TRUNCATE TABLE connector_services");
             jdbcTemplate.execute("TRUNCATE TABLE connector_actions");
             jdbcTemplate.execute("TRUNCATE TABLE connector_processing_modes");
-            jdbcTemplate.execute("TRUNCATE TABLE connector_keystores");
+            jdbcTemplate.execute("TRUNCATE TABLE connector_processing_mode_truststores");
             jdbcTemplate.execute("TRUNCATE TABLE connector_business_domains");
             jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS = 1");
         }

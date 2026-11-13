@@ -10,18 +10,36 @@
 
 package eu.ecodex.connector.infrastructure.config.property;
 
-import lombok.Getter;
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * Configuration properties for the default activemq settings.
  */
-@Getter
-@Configuration
+@Validated
 @ConfigurationProperties(prefix = "connector.activemq.address-settings")
-public class ActiveMQAddressSettingsProperties {
-    private final int maxDeliveryAttempts = 5;
-    private final int redeliveryDelay = 60000; // set 60s redelivery delay
-    private final int redeliveryMultiplier = 2;
+public record ActiveMQAddressSettingsProperties(
+    @Min(1)
+    @DefaultValue("5")
+    int maxDeliveryAttempts,
+
+    @NotNull
+    @DefaultValue("60s")
+    Duration redeliveryDelay,
+
+    @DecimalMin("1.0")
+    @DefaultValue("2.0")
+    double redeliveryMultiplier
+) {
+    @AssertTrue(message = "redelivery-delay must be positive")
+    public boolean isRedeliveryDelayPositive() {
+        return redeliveryDelay == null
+            || (!redeliveryDelay.isZero() && !redeliveryDelay.isNegative());
+    }
 }

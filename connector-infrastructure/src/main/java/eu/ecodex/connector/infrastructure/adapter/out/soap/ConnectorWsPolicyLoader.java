@@ -11,7 +11,6 @@
 package eu.ecodex.connector.infrastructure.adapter.out.soap;
 
 import eu.ecodex.connector.infrastructure.adapter.out.soap.exception.ConnectorWsPolicyLoaderException;
-import eu.ecodex.connector.infrastructure.helper.ResourceStreams;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.List;
@@ -19,6 +18,7 @@ import javax.xml.stream.XMLStreamException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.cxf.staxutils.StaxUtils;
 import org.apache.cxf.ws.policy.WSPolicyFeature;
+import org.springframework.core.io.Resource;
 
 /**
  * The WsPolicyLoader class is responsible for loading WS-Policy definitions from a specified path
@@ -26,9 +26,9 @@ import org.apache.cxf.ws.policy.WSPolicyFeature;
  */
 @Slf4j
 public class ConnectorWsPolicyLoader {
-    private final String wsPolicyPath;
+    private final Resource wsPolicyPath;
 
-    public ConnectorWsPolicyLoader(String wsPolicyPath) {
+    public ConnectorWsPolicyLoader(Resource wsPolicyPath) {
         this.wsPolicyPath = wsPolicyPath;
     }
 
@@ -46,7 +46,7 @@ public class ConnectorWsPolicyLoader {
     public WSPolicyFeature loadPolicyFeature() {
         log.debug("Loading WS policy from path: {}", wsPolicyPath);
 
-        try (var is = ResourceStreams.openStream(wsPolicyPath)) {
+        try (var is = wsPolicyPath.getInputStream()) {
             var element = StaxUtils.read(is).getDocumentElement();
 
             if (element == null) {
@@ -63,7 +63,9 @@ public class ConnectorWsPolicyLoader {
             policyFeature.setPolicyElements(List.of(element));
             return policyFeature;
         } catch (IOException e) {
-            throw new UncheckedIOException("WS policy '" + wsPolicyPath + "' cannot be read", e);
+            throw new UncheckedIOException(
+                "WS policy '" + wsPolicyPath.getDescription() + "' cannot be read", e
+            );
         } catch (XMLStreamException e) {
             throw new ConnectorWsPolicyLoaderException(
                 "Cannot parse WS policy '" + wsPolicyPath + "'",

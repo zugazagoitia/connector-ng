@@ -61,10 +61,10 @@ public class ConnectorRetrieveMessageByTransportIdService implements
             );
         }
 
-        if (transportStep.status() != ConnectorMessageTransportStatus.READY_FOR_DOWNLOAD) {
+        if (transportStep.status() != ConnectorMessageTransportStatus.READY_FOR_PULL) {
             throw new ConnectorMessageTransportStepException(
                 "The message with transport id ["
-                    + transportIdentifier + "] is not in READY_FOR_DOWNLOAD state!"
+                    + transportIdentifier + "] is not in READY_FOR_PULL state!"
             );
         }
 

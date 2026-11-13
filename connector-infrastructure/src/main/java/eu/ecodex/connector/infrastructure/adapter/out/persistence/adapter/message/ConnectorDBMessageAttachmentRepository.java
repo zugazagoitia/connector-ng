@@ -20,16 +20,21 @@ import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.mess
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.repository.message.ConnectorMessageAttachmentJpaRepository;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.repository.message.ConnectorMessageJpaRepository;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.repository.message.specification.AttachmentSpecification;
+import java.time.Instant;
 import java.util.List;
 import lombok.NonNull;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * RDBMS implementation of {@link ConnectorMessageAttachmentRepository}.
  */
 @Component
+@Transactional(readOnly = true)
 public class ConnectorDBMessageAttachmentRepository implements
     ConnectorMessageAttachmentRepository {
+    private static final int BATCH_SIZE = 500;
+
     private final ConnectorMessageAttachmentJpaRepository attachmentJpaRepository;
     private final ConnectorMessageJpaRepository messageJpaRepository;
     private final PaginationMapper paginationMapper;
@@ -68,10 +73,12 @@ public class ConnectorDBMessageAttachmentRepository implements
             .type(entity.getType())
             .createdAt(entity.getCreatedAt())
             .updatedAt(entity.getUpdatedAt())
+            .deletedAt(entity.getDeletedAt())
             .build();
     }
 
     @Override
+    @Transactional
     public ConnectorMessageAttachment save(ConnectorMessageAttachment attachment) {
         var attachmentToSave = toEntity(attachment);
         var savedAttachment = attachmentJpaRepository.save(attachmentToSave);
@@ -87,6 +94,20 @@ public class ConnectorDBMessageAttachmentRepository implements
     }
 
     @Override
+    public boolean existsByIdentifier(@NonNull String identifier) {
+        return this.attachmentJpaRepository.existsByIdentifier(identifier);
+    }
+
+    @Override
+    public List<ConnectorMessageAttachment> findAllActiveByMessageIdentifier(
+        @NonNull String messageIdentifier) {
+        var attachments = this.attachmentJpaRepository.findAllByMessageIdentifierAndDeletedAtIsNull(
+            messageIdentifier);
+
+        return attachments.stream().map(ConnectorDBMessageAttachmentRepository::toDomain).toList();
+    }
+
+    @Override
     public List<ConnectorMessageAttachment> findByMessageIdentifierAndTypes(
         @NonNull String messageIdentifier,
         @NonNull List<ConnectorAttachmentType> types) {
@@ -96,9 +117,9 @@ public class ConnectorDBMessageAttachmentRepository implements
         );
 
         return attachmentJpaRepository.findAll(specification)
-                                      .stream()
-                                      .map(ConnectorDBMessageAttachmentRepository::toDomain)
-                                      .toList();
+            .stream()
+            .map(ConnectorDBMessageAttachmentRepository::toDomain)
+            .toList();
     }
 
     @Override
@@ -116,6 +137,15 @@ public class ConnectorDBMessageAttachmentRepository implements
     }
 
     @Override
+    public List<ConnectorMessageAttachment> findAllOrphaned(Instant threshold) {
+        return attachmentJpaRepository.findOrphansToDelete(threshold)
+            .stream()
+            .map(ConnectorDBMessageAttachmentRepository::toDomain)
+            .toList();
+    }
+
+    @Override
+    @Transactional
     public void attachToMessage(
         @NonNull String attachmentIdentifier,
         @NonNull String messageIdentifier) {
@@ -131,11 +161,40 @@ public class ConnectorDBMessageAttachmentRepository implements
     }
 
     @Override
+    @Transactional
     public void updateType(
         @NonNull String attachmentIdentifier, @NonNull ConnectorAttachmentType type) {
         var attachment = this.attachmentJpaRepository.findByIdentifier(attachmentIdentifier);
         attachment.setType(type);
         this.attachmentJpaRepository.save(attachment);
+    }
+
+    @Override
+    @Transactional
+    public void markAsDeleted(List<String> identifiers, Instant deletedAt) {
+        if (identifiers.isEmpty()) {
+            return;
+        }
+
+        var list = List.copyOf(identifiers);
+        for (int from = 0; from < list.size(); from += BATCH_SIZE) {
+            var batch = list.subList(from, Math.min(from + BATCH_SIZE, list.size()));
+            attachmentJpaRepository.markAsDeleted(batch, deletedAt);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void deleteAllByIdentifiers(@NonNull List<String> identifiers) {
+        if (identifiers.isEmpty()) {
+            return;
+        }
+
+        var list = List.copyOf(identifiers);
+        for (int from = 0; from < list.size(); from += BATCH_SIZE) {
+            var batch = list.subList(from, Math.min(from + BATCH_SIZE, list.size()));
+            attachmentJpaRepository.deleteAllByIdentifiers(batch);
+        }
     }
 
     private ConnectorMessageAttachmentEntity toEntity(ConnectorMessageAttachment attachment) {

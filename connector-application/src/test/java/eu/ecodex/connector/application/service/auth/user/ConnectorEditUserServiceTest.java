@@ -35,7 +35,7 @@ class ConnectorEditUserServiceTest {
     @Mock
     private ConnectorUserRepository repository;
     @Mock
-    private ConnectorVerifyUniqueUserService verifyUniqueUser;
+    private ConnectorVerifyUniqueUserEmailService verifyUniqueUser;
     @Mock
     private ConnectorRetrieveUserByIdentifierService retrieveUserByIdentifier;
 
@@ -46,10 +46,8 @@ class ConnectorEditUserServiceTest {
     void edit_user_should_update_user_successfully() {
         // Given
         var identifier = "uuid";
-        var username = "user";
         var email = "email@test.com";
         var editUserCommand = ConnectorEditUserCommand.builder()
-            .username(username)
             .email(email)
             .build();
         var user = ConnectorEditUserCommand.toDomain(editUserCommand);
@@ -59,7 +57,7 @@ class ConnectorEditUserServiceTest {
             .build();
 
         when(retrieveUserByIdentifier.execute(any())).thenReturn(expected);
-        doNothing().when(verifyUniqueUser).execute(any(), any());
+        doNothing().when(verifyUniqueUser).execute(any());
         when(repository.save(any())).thenReturn(expected);
 
         // When
@@ -70,7 +68,7 @@ class ConnectorEditUserServiceTest {
         assertThat(registered).isEqualTo(expected);
 
         verify(retrieveUserByIdentifier).execute(identifier);
-        verify(verifyUniqueUser).execute(identifier, user);
+        verify(verifyUniqueUser).execute(user);
         verify(repository).save(expected);
 
         assertNoMoreInteractions();
@@ -80,11 +78,9 @@ class ConnectorEditUserServiceTest {
     void edit_should_throw_user_not_found_exception() {
         // Given
         var identifier = "uuid";
-        var username = "user";
         var email = "email@test.com";
 
         var user = ConnectorEditUserCommand.builder()
-            .username(username)
             .email(email)
             .build();
 
@@ -104,10 +100,8 @@ class ConnectorEditUserServiceTest {
     void edit_user_should_throw_exception_when_email_address_already_exists() {
         // Given
         var identifier = "uuid";
-        var username = "user";
         var email = "email@test.com";
         var editUserCommand = ConnectorEditUserCommand.builder()
-            .username(username)
             .email(email)
             .build();
 
@@ -117,7 +111,6 @@ class ConnectorEditUserServiceTest {
 
         when(retrieveUserByIdentifier.execute(any())).thenReturn(expected);
         doThrow(new ConnectorUserAlreadyExistsException(message)).when(verifyUniqueUser).execute(
-            any(),
             any());
 
         // When
@@ -128,7 +121,7 @@ class ConnectorEditUserServiceTest {
 
         verify(retrieveUserByIdentifier).execute(identifier);
 
-        verify(verifyUniqueUser).execute(identifier, user);
+        verify(verifyUniqueUser).execute(user);
         assertNoMoreInteractions();
     }
 
@@ -136,11 +129,9 @@ class ConnectorEditUserServiceTest {
     void edit_should_throw_exception_when_username_exists() {
         // Given
         var identifier = "uuid";
-        var username = "user";
         var email = "email@test.com";
 
         var editUserCommand = ConnectorEditUserCommand.builder()
-            .username(username)
             .email(email)
             .build();
         var user = ConnectorEditUserCommand.toDomain(editUserCommand);
@@ -149,7 +140,6 @@ class ConnectorEditUserServiceTest {
 
         when(retrieveUserByIdentifier.execute(any())).thenReturn(expected);
         doThrow(new ConnectorUserAlreadyExistsException(message)).when(verifyUniqueUser).execute(
-            any(),
             any());
 
         // When
@@ -159,7 +149,7 @@ class ConnectorEditUserServiceTest {
 
         // Then
         verify(retrieveUserByIdentifier).execute(identifier);
-        verify(verifyUniqueUser).execute(identifier, user);
+        verify(verifyUniqueUser).execute(user);
         assertNoMoreInteractions();
     }
 

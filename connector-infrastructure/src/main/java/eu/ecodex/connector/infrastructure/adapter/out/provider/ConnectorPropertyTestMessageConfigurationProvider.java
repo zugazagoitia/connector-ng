@@ -32,13 +32,13 @@ public class ConnectorPropertyTestMessageConfigurationProvider implements
     @Override
     public ConnectorTestMessageConfiguration getConfig() {
         var service = ConnectorTestMessageService.builder()
-                                                 .name(testMessageProperties.getService().getName())
-                                                 .type(testMessageProperties.getService().getType())
+                                                 .name(testMessageProperties.service().name())
+                                                 .type(testMessageProperties.service().type())
                                                  .build();
         return ConnectorTestMessageConfiguration.builder()
-                                                .enabled(testMessageProperties.isEnabled())
+                                                .enabled(testMessageProperties.enabled())
                                                 .service(service)
-                                                .action(testMessageProperties.getAction())
+                                                .action(testMessageProperties.action())
                                                 .build();
     }
 }

@@ -19,6 +19,8 @@ single built-in default domain so that it can start in a usable state.
 == Properties
 Configuration is provided via `application.properties` under the `+connector.business-domains.*+` prefix.
 
+NOTE: The configuration is validated at startup. A blank `identifier` or `description`, or a `pmode` block with a missing or blank value, stops the connector with an error naming the offending property.
+
 .Business Domains Configuration
 [cols="35,40,10,15", options="header"]
 |===
@@ -53,9 +55,8 @@ Required as soon as `pmode.file` is set.
 
 | `connector.business-domains.defaults[n].pmode.truststore-password`
 | Password protecting the truststore. Required as soon as `pmode.file` is set.
-| Yes
+| Yes (No if `pmode.file` is set)
 | `${PMODE_TRUSTSTORE_PASSWORD}`
-
 |===
 
 [WARNING]
@@ -87,7 +88,8 @@ determines where the resource is read from:
 | The application classpath — useful for bundling a default configuration.
 
 | `http:`, `https:`
-| A remote endpoint, read once at startup.
+| A remote endpoint, read once at startup. Prefer `https:`, since the PMode and its truststore
+are security-relevant.
 |===
 
 [WARNING]

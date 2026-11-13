@@ -17,19 +17,18 @@ import eu.ecodex.connector.domain.model.businessdomain.ConnectorBusinessDomainId
 import eu.ecodex.connector.domain.model.message.attachment.ConnectorMessageAttachment;
 import eu.ecodex.connector.domain.model.message.content.ConnectorMessageBusinessContent;
 import eu.ecodex.connector.domain.model.message.content.ConnectorMessageBusinessDocument;
-import eu.ecodex.connector.domain.model.message.content.DetachedSignature;
 import eu.ecodex.connector.domain.model.pmode.ConnectorPartyRoleType;
 import eu.ecodex.connector.domain.model.pmode.ConnectorProcessingModeParty;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.exception.ConnectorAttachmentUploadException;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.message.outbound.ConnectorOutboundMessageBusinessContent;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.message.outbound.ConnectorOutboundMessageDetachedSignature;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.message.outbound.ConnectorOutboundMessageParty;
+import eu.ecodex.connector.infrastructure.helper.ConnectorTempFilesHelper;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.UUID;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -41,9 +40,13 @@ import org.springframework.web.multipart.MultipartFile;
 @Component
 public class ConnectorRestOutboundMessageParser {
     private final ConnectorUploadAttachments uploadAttachmentsService;
+    private final ConnectorTempFilesHelper tempFilesHelper;
 
-    public ConnectorRestOutboundMessageParser(ConnectorUploadAttachments uploadAttachmentsService) {
+    public ConnectorRestOutboundMessageParser(
+        ConnectorUploadAttachments uploadAttachmentsService,
+        ConnectorTempFilesHelper tempFilesHelper) {
         this.uploadAttachmentsService = uploadAttachmentsService;
+        this.tempFilesHelper = tempFilesHelper;
     }
 
     /**
@@ -81,54 +84,46 @@ public class ConnectorRestOutboundMessageParser {
         var businessDocumentRequest = businessContent.businessDocument();
         var businessDocument = ConnectorMessageBusinessDocument
             .builder()
-            .attachment(toAttachment(businessContent.businessDocument().document()))
+            .content(toAttachment(
+                businessContent.businessDocument().document(),
+                "Business document"
+            ))
             .detachedSignature(toDetachedSignature(businessDocumentRequest.detachedSignature()))
             .aesType(businessDocumentRequest.aesType())
             .build();
 
         return ConnectorMessageBusinessContent
             .builder()
-            .xmlContent(toAttachment(businessContent.xmlContent()))
+            .xmlContent(toAttachment(businessContent.xmlContent(), "Business content"))
             .businessDocument(businessDocument)
             .build();
     }
 
-    private DetachedSignature toDetachedSignature(
+    private ConnectorMessageAttachment toDetachedSignature(
         ConnectorOutboundMessageDetachedSignature detachedSignature) throws IOException {
         if (detachedSignature == null || detachedSignature.signature() == null) {
             return null;
         }
 
-        return DetachedSignature
-            .builder()
-            .name(
-                StringUtils.cleanPath(
-                    Objects.requireNonNull(detachedSignature.signature()
-                                                            .getOriginalFilename()))
-            )
-            .signature(detachedSignature.signature().getBytes())
-            .mimeType(detachedSignature.mimeType())
-            .build();
+        return toAttachment(detachedSignature.signature(), "Business document detached signature");
     }
 
     /**
      * Uploads a multipart file and converts it into a connector message attachment.
      *
-     * @param file the multipart file to upload
+     * @param file        the multipart file to upload
+     * @param description the attachment description
      *
      * @return the resulting connector message attachment
      *
-     * @throws IOException                        if the file cannot be read or the temporary file
-     *                                            cannot be deleted
+     * @throws IOException                        if the temporary file cannot be created or
+     *                                            deleted
      * @throws ConnectorAttachmentUploadException if the attachment upload fails
      */
-    public ConnectorMessageAttachment toAttachment(MultipartFile file) throws IOException {
+    public ConnectorMessageAttachment toAttachment(MultipartFile file, String description)
+        throws IOException {
         var filename = StringUtils.cleanPath(Objects.requireNonNull(file.getOriginalFilename()));
-
-        var tempLocation = Files.createTempFile(
-            "upload-%s".formatted(UUID.randomUUID()),
-            filename
-        );
+        var tempLocation = tempFilesHelper.create("upload-", filename);
 
         try {
             file.transferTo(tempLocation);
@@ -138,7 +133,7 @@ public class ConnectorRestOutboundMessageParser {
                 .filename(filename)
                 .tempFileLocation(tempLocation)
                 .size(file.getSize())
-                .description("Registered business content/document")
+                .description(description)
                 .build();
 
             return uploadAttachmentsService.execute(List.of(uploadCommand)).getFirst();
@@ -146,7 +141,7 @@ public class ConnectorRestOutboundMessageParser {
             throw new ConnectorAttachmentUploadException(
                 "Failed to upload attachment: " + file.getName(), e);
         } finally {
-            // Always runs — covers both success and failure paths
+            // Always runs, covering both success and failure paths
             Files.deleteIfExists(tempLocation);
         }
     }

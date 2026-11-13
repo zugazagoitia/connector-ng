@@ -12,9 +12,13 @@ package eu.ecodex.connector.infrastructure.adapter.out.persistence.db.repository
 
 import eu.ecodex.connector.domain.model.message.ConnectorMessageDirection;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.message.ConnectorMessageEntity;
+import java.time.Instant;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -35,4 +39,29 @@ public interface ConnectorMessageJpaRepository extends
     ConnectorMessageEntity findByBackendMessageIdentifier(String backendMessageIdentifier);
 
     List<ConnectorMessageEntity> findByIdentifierIn(List<String> identifiers);
+
+    @Query("""
+        SELECT m
+        FROM ConnectorMessageEntity m
+        WHERE m.confirmedAt IS NULL
+            AND m.rejectedAt IS NULL
+            AND m.createdAt <= :threshold
+        """
+    )
+    List<ConnectorMessageEntity> findUnresolveToDelete(@Param("threshold") Instant threshold);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+        UPDATE ConnectorMessageEntity m
+        SET m.deletedAt = :deletedAt,
+           m.updatedAt = :deletedAt,
+           m.status = DELETED
+        WHERE m.identifier = :identifier
+            AND m.deletedAt IS NULL
+        """
+    )
+    void markAsDeleted(@Param("identifier") String identifier,
+                      @Param("deletedAt") Instant deletedAt);
+
+    void deleteByIdentifier(String identifier);
 }

@@ -19,7 +19,8 @@ insert into connector_message_attachments (
     type,
     message_id,
     created_at,
-    updated_at
+    updated_at,
+    deleted_at
 )
 values
     (
@@ -33,7 +34,8 @@ values
         'ATTACHMENT',
         null,
         now(),
-        now()
+        now(),
+        null
     ),
     (
         2,
@@ -46,7 +48,8 @@ values
         'ATTACHMENT',
         1,
         now(),
-        now()
+        now(),
+        null
     ),
     (
         3,
@@ -59,7 +62,8 @@ values
         'ATTACHMENT',
         1,
         now(),
-        now()
+        now(),
+        null
     ),
     (
         4,
@@ -72,7 +76,8 @@ values
         'ASICS',
         2,
         now(),
-        now()
+        now(),
+        null
     ),
     (
         5,
@@ -85,7 +90,8 @@ values
         'XML_TOKEN',
         2,
         now(),
-        now()
+        now(),
+        null
     ),
     (
         6,
@@ -98,7 +104,8 @@ values
         'EVIDENCE_XML',
         2,
         now(),
-        now()
+        now(),
+        null
     ),
     -- Business content
     (
@@ -112,7 +119,8 @@ values
         'BUSINESS_CONTENT',
         2,
         now(),
-        now()
+        now(),
+        null
     ),
     (
         8,
@@ -125,7 +133,8 @@ values
         'BUSINESS_CONTENT',
         1,
         now(),
-        now()
+        now(),
+        null
     ),
     (
         9,
@@ -138,7 +147,8 @@ values
         'BUSINESS_CONTENT',
         3,
         now(),
-        now()
+        now(),
+        null
     ),
     (
         10,
@@ -151,7 +161,8 @@ values
         'BUSINESS_CONTENT',
         4,
         now(),
-        now()
+        now(),
+        null
     ),
     -- Business document
     (
@@ -165,7 +176,8 @@ values
         'BUSINESS_DOCUMENT',
         1,
         now(),
-        now()
+        now(),
+        null
     ),
     (
         12,
@@ -178,7 +190,8 @@ values
         'BUSINESS_DOCUMENT',
         2,
         now(),
-        now()
+        now(),
+        null
     ),
     (
         13,
@@ -191,7 +204,8 @@ values
         'BUSINESS_DOCUMENT',
         3,
         now(),
-        now()
+        now(),
+        null
     ),
     (
         14,
@@ -203,6 +217,21 @@ values
         'S3_BUCKET',
         'BUSINESS_DOCUMENT',
         4,
+        now(),
+        now(),
+        null
+    ),
+    (
+        15,
+        'f07d1bfd-685a-4fee-b70d-a582cd0711c7_test_attachment',
+        'application/pdf',
+        'Persisting file to S3 bucket',
+        'fake_file.pdf',
+        300000000,
+        'S3_BUCKET',
+        'ATTACHMENT',
+        null,
+        now(),
         now(),
         now()
     );

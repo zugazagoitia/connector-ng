@@ -11,15 +11,15 @@
 package eu.ecodex.connector.infrastructure.adapter.in.web.rest.controller.admin.auth.roleassignment;
 
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.user.ConnectorUserDto;
+import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.user.ConnectorEditUserRolesRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Nonnull;
+import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 
@@ -36,26 +36,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 @Tag(name = "AssignUsersRoles", description = "API for managing connector's users")
 public interface ConnectorRoleAssignmentAdminApi {
     @Operation(summary = "Assign an existing role to user.")
-    @PostMapping(path = "/{uuid}/roles")
-    @ApiResponses({
-        @ApiResponse(responseCode = "400", description = "Bad Request"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "403", description = "Forbidden"),
-        @ApiResponse(responseCode = "404", description = "Not Found")
-    })
-    ConnectorUserDto assignRole(
-        @PathVariable("uuid") @Nonnull String identifier,
-        @RequestBody String role);
-
-    @Operation(summary = "Unassign a user role.")
-    @DeleteMapping(path = "/{uuid}/roles")
-    @ApiResponses({
-        @ApiResponse(responseCode = "400", description = "Bad Request"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "403", description = "Forbidden"),
-        @ApiResponse(responseCode = "404", description = "Not Found")
-    })
-    ConnectorUserDto unassignRole(
-        @PathVariable("uuid") @Nonnull String identifier,
-        @RequestBody @Nonnull String role);
+    @PatchMapping(path = "/{uuid}/roles")
+    @ApiResponse(responseCode = "400", description = "Bad Request")
+    @ApiResponse(responseCode = "401", description = "Unauthorized")
+    @ApiResponse(responseCode = "403", description = "Forbidden")
+    @ApiResponse(responseCode = "404", description = "Not Found")
+    ConnectorUserDto editUserRoles(
+        @PathVariable("uuid") @Nonnull String userIdentifier,
+        @Valid @RequestBody ConnectorEditUserRolesRequest roles);
 }

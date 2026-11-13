@@ -21,25 +21,25 @@ values (
            1
        ),
        (
-           'READY_FOR_DOWNLOAD',
+           'READY_FOR_PULL',
            now(),
            now(),
            2
        ),
        (
-           'READY_FOR_DOWNLOAD',
+           'READY_FOR_PULL',
            now(),
            now(),
            3
        ),
        (
-           'DOWNLOADED',
+           'PULLED',
            now(),
            now(),
            3
        ),
        (
-           'READY_FOR_DOWNLOAD',
+           'READY_FOR_PULL',
            now(),
            now(),
            4

@@ -13,21 +13,11 @@ package eu.ecodex.connector.infrastructure.adapter.in.web.rest.controller.admin.
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.user.ConnectorRoleDto;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.annotation.Nonnull;
-import jakarta.validation.Valid;
 import java.util.List;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
 
 /**
  * API interface for managing connector user roles.
@@ -41,56 +31,9 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 @RequestMapping(path = "/api/v1/admin/users/roles", produces = MediaType.APPLICATION_JSON_VALUE)
 @Tag(name = "AdministrateRoles", description = "API for managing connector's users roles")
 public interface ConnectorRoleAdminApi {
-    @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Register a connector user role.")
-    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
-    @ApiResponses({
-        @ApiResponse(responseCode = "400", description = "Bad Request"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "403", description = "Forbidden"),
-        @ApiResponse(responseCode = "409", description = "Conflict")
-    })
-    ConnectorRoleDto registerRole(@Valid @RequestBody @Nonnull ConnectorRoleDto usrRoleDto);
-
-    @Operation(summary = "Update a connector user role.")
-    @PutMapping(path = "/{uuid}", consumes = MediaType.APPLICATION_JSON_VALUE)
-    @ApiResponses({
-        @ApiResponse(responseCode = "400", description = "Bad Request"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "403", description = "Forbidden"),
-        @ApiResponse(responseCode = "404", description = "Not Found"),
-        @ApiResponse(responseCode = "409", description = "Conflict")
-    })
-    ConnectorRoleDto editRole(
-        @PathVariable("uuid") @Nonnull String identifier,
-        @Valid @RequestBody ConnectorRoleDto userRoleDto);
-
-
-    @Operation(summary = "Retrieve a connector user role by uuid identifier.")
-    @GetMapping(path = "/{uuid}")
-    @ApiResponses({
-        @ApiResponse(responseCode = "400", description = "Bad Request"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "403", description = "Forbidden"),
-        @ApiResponse(responseCode = "404", description = "Not Found")
-    })
-    ConnectorRoleDto retrieveRole(@PathVariable("uuid") @Nonnull String identifier);
-
     @Operation(summary = "Retrieve all connector's user roles.")
     @GetMapping
-    @ApiResponses({
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "403", description = "Forbidden")
-    })
+    @ApiResponse(responseCode = "401", description = "Unauthorized")
+    @ApiResponse(responseCode = "403", description = "Forbidden")
     List<ConnectorRoleDto> listRoles();
-
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Delete a connector user role by uuid identifier.")
-    @DeleteMapping(path = "/{uuid}")
-    @ApiResponses({
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "403", description = "Forbidden"),
-        @ApiResponse(responseCode = "404", description = "Not Found")
-    })
-    Void removeRole(@PathVariable("uuid") @Nonnull String identifier);
 }

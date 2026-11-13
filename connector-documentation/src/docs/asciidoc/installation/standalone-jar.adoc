@@ -11,9 +11,14 @@ endif::distributiondir[]
 
 Use this installation option to run the Connector natively on a host, without a container runtime.
 
+NOTE: When upgrading from connector 6.x, first read the configuration migration guide.
+Several property names changed, and old names are silently ignored.
+
 == Prerequisites
 
 In addition to the common <<prerequisites>>, this option requires a Java **21** runtime (JRE) on the host. A full JDK is only needed to build from source.
+
+The Connector also needs a local directory for temporary upload files, a database, an ActiveMQ Classic broker and an S3-compatible object store (Amazon S3, MinIO or Silo). The bucket is created at startup unless `connector.file.storage.s3.auto-create-bucket=false`, in which case it must exist beforehand.
 
 To check the Java version of the target server:
 [source,bash]
@@ -72,7 +77,51 @@ connector-distribution/
 The `standalone/` directory is the working directory of the application: all relative paths in `application.properties` (`./config/...`, `./data/...`) are resolved from it.
 The application creates `./data/` at runtime for the JTA transaction log and the DSS trusted list cache.
 
+Then create the directory for temporary upload files, outside the distribution directory, and
+export its location. The connector does not create it. At startup, it checks that the directory
+exists, is writable, is not a symbolic link, and is not writable by group or others.
+
+[source,bash]
+----
+install -d -m 700 -o <connector-user> /path/to/connector/temp
+export TEMP_DIR_LOCATION=/path/to/connector/temp
+----
+
+WARNING: Do not use a shared, world-writable directory such as `/tmp`. Use a dedicated directory
+owned by the user running the connector.
+
+
 === Step 3 — Configure the application
+
+The following values have no usable default and must be set before the first start. Inject secrets
+through environment variables or a secrets manager instead of writing them in the file:
+
+[cols="2,3", options="header"]
+|===
+| Area | Properties
+
+| Database
+| The datasource URL, user and password of the empty schema.
+
+| ActiveMQ
+| `spring.activemq.broker-url`, `spring.activemq.user`, `spring.activemq.password`
+
+| File storage
+| `connector.file.storage.upload-temp-directory`, `connector.file.storage.s3.access-key`, `secret-key`, `region`, `bucket`, and `endpoint` for MinIO/Silo
+
+| Administrator
+| `connector.admin.username`, `password`, `email`
+
+| JWT
+| `connector.auth.security.jwt.secret`, `issuer`, `refresh-token.expiration`, `refresh-token.cleanup-cron`
+
+| Keystores
+| Passwords of the keystores and private keys for evidences, container signature, backend links and truststores
+
+| Evidence issuer
+| `connector.evidences.issuer.*`
+|===
+
 
 Edit `standalone/config/application.properties`. The shipped file is a template: its values are placeholders and test values. Replace them by following the checklist in the chapter "Preparing application.properties" of the configuration guide. In particular:
 
@@ -92,7 +141,11 @@ include::{distributiondir}/src/main/resources/config/application.properties[]
 
 TIP: For the meaning of every property, see the configuration guide, and apply the <<security-checklist,security checklist>> before going to production.
 
+NOTE: The configuration is validated at startup. A missing or invalid value stops the connector with an error naming the offending property (see <<jar-troubleshooting>>).
+
 === Step 4 — Run the application
+
+Run the connector as a dedicated, non-root user.
 
 On Linux, from the `standalone/` directory:
 
@@ -125,3 +178,27 @@ Once running, the following endpoints are available (replace `30000` with your `
 |===
 
 The health endpoint must report `"status":"UP"`.
+Log in to the administration API with the admin account configured in `+connector.admin.*+`; you will be asked to change the password at first login.
+
+[[jar-troubleshooting]]
+== Troubleshooting startup errors
+
+[cols="2,3", options="header"]
+|===
+| Symptom | Likely cause
+
+| `Binding to target ... failed`, followed by `Property: ... Reason: must not be blank`
+| A mandatory property is missing or empty. Set it, or remove the line to use the default.
+
+| `Could not resolve placeholder 'TEMP_DIR_LOCATION'` (or another variable)
+| The environment variable used in `application.properties` is not defined for the user running the connector.
+
+| The startup stops with a message about the temporary directory
+| The directory does not exist, is a symbolic link, or is accessible by group or others. Recreate it as in step 2.
+
+| Errors about S3 access denied or an unreachable endpoint
+| Wrong credentials or endpoint. If the bucket does not exist, either the credentials need permission to create it, or create it manually and set `auto-create-bucket=false`.
+
+| Connection refused to the broker
+| ActiveMQ is not running or `spring.activemq.broker-url` is wrong.
+|===

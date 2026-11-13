@@ -16,6 +16,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -23,11 +24,13 @@ import static org.mockito.Mockito.when;
 import eu.ecodex.connector.AS4PropertiesTestFixtures;
 import eu.ecodex.connector.BusinessDomainTestFixtures;
 import eu.ecodex.connector.MessageContentTestFixtures;
+import eu.ecodex.connector.application.exception.attachment.ConnectorMessageAttachmentNotFoundException;
 import eu.ecodex.connector.application.exception.businessdomain.ConnectorBusinessDomainNotEnabledException;
 import eu.ecodex.connector.application.exception.businessdomain.ConnectorBusinessDomainNotFoundException;
 import eu.ecodex.connector.application.exception.pmode.ConnectorProcessingModeInvalidTruststoreException;
 import eu.ecodex.connector.application.exception.pmode.ConnectorProcessingModeNotFoundException;
 import eu.ecodex.connector.application.exception.pmode.ConnectorProcessingModeVerificationException;
+import eu.ecodex.connector.application.port.api.attachment.ConnectorAttachmentVerifier;
 import eu.ecodex.connector.application.port.api.businessdomain.ConnectorBusinessDomainVerifier;
 import eu.ecodex.connector.application.port.api.message.ConnectorBusinessMessageVerifier;
 import eu.ecodex.connector.application.port.api.message.ConnectorMessageIdGenerator;
@@ -38,13 +41,18 @@ import eu.ecodex.connector.application.port.spi.ConnectorMessageEventPublisher;
 import eu.ecodex.connector.application.port.spi.ConnectorMessageProcessingConfigurationProvider;
 import eu.ecodex.connector.domain.model.ProcessingModeVerificationMode;
 import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessage;
+import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessageStatus;
 import eu.ecodex.connector.domain.model.message.ConnectorMessageDirection;
+import eu.ecodex.connector.domain.model.message.attachment.ConnectorMessageAttachment;
 import eu.ecodex.connector.domain.model.message.processing.ConnectorMessageProcessingConfiguration;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -67,6 +75,8 @@ public class ConnectorOutboundBusinessMessageReceiverServiceTest {
     @Mock
     private ConnectorMessageIdGenerator messageIdGeneratorService;
     @Mock
+    private ConnectorAttachmentVerifier attachmentVerifierService;
+    @Mock
     private ConnectorMessageEventPublisher<ConnectorBusinessMessage> stagingEventPublisher;
 
     private ConnectorOutboundBusinessMessageReceiver outboundBusinessMessageReceiver;
@@ -79,7 +89,8 @@ public class ConnectorOutboundBusinessMessageReceiverServiceTest {
             stagingEventPublisher,
             messageIdGeneratorService,
             businessDomainVerifierService,
-            processingModeVerifierService
+            processingModeVerifierService,
+            attachmentVerifierService
         );
     }
 
@@ -99,6 +110,16 @@ public class ConnectorOutboundBusinessMessageReceiverServiceTest {
             .build();
     }
 
+    private void stubConfiguration(ProcessingModeVerificationMode mode) {
+        when(configurationProvider.getConfiguration())
+            .thenReturn(
+                ConnectorMessageProcessingConfiguration
+                    .builder()
+                    .outboundMessageVerificationMode(mode)
+                    .build()
+            );
+    }
+
     @Nested
     @DisplayName("when the input is invalid")
     class WhenInputIsInvalid {
@@ -115,7 +136,8 @@ public class ConnectorOutboundBusinessMessageReceiverServiceTest {
                 configurationProvider,
                 messageVerifierService,
                 messageIdGeneratorService,
-                stagingEventPublisher
+                stagingEventPublisher,
+                attachmentVerifierService
             );
         }
     }
@@ -142,7 +164,8 @@ public class ConnectorOutboundBusinessMessageReceiverServiceTest {
                 configurationProvider,
                 messageVerifierService,
                 messageIdGeneratorService,
-                stagingEventPublisher
+                stagingEventPublisher,
+                attachmentVerifierService
             );
         }
 
@@ -165,7 +188,8 @@ public class ConnectorOutboundBusinessMessageReceiverServiceTest {
                 configurationProvider,
                 messageVerifierService,
                 messageIdGeneratorService,
-                stagingEventPublisher
+                stagingEventPublisher,
+                attachmentVerifierService
             );
         }
 
@@ -189,7 +213,8 @@ public class ConnectorOutboundBusinessMessageReceiverServiceTest {
                 configurationProvider,
                 messageVerifierService,
                 messageIdGeneratorService,
-                stagingEventPublisher
+                stagingEventPublisher,
+                attachmentVerifierService
             );
         }
 
@@ -213,6 +238,41 @@ public class ConnectorOutboundBusinessMessageReceiverServiceTest {
                 configurationProvider,
                 messageVerifierService,
                 messageIdGeneratorService,
+                stagingEventPublisher,
+                attachmentVerifierService
+            );
+        }
+
+        @Test
+        void should_fail_when_attachments_are_invalid() {
+            doNothing().when(businessDomainVerifierService).execute(any());
+            doNothing().when(processingModeVerifierService).execute(any());
+            doThrow(ConnectorMessageAttachmentNotFoundException.class)
+                .when(attachmentVerifierService).execute(any());
+
+            var outboundMessageCommand = createBusinessMessageCommand();
+            var outboundMessageCommandWithAttachment = outboundMessageCommand.toBuilder()
+                .attachments(List.of(ConnectorMessageAttachment.builder()
+                    .identifier("identifier")
+                    .build()))
+                .build();
+
+
+            assertThrows(
+                ConnectorMessageAttachmentNotFoundException.class,
+                () -> outboundBusinessMessageReceiver.execute(outboundMessageCommandWithAttachment)
+            );
+
+            verify(businessDomainVerifierService)
+                .execute(outboundMessageCommand.businessDomainIdentifier());
+            verify(processingModeVerifierService)
+                .execute(outboundMessageCommand.businessDomainIdentifier());
+            verify(attachmentVerifierService)
+                .execute(outboundMessageCommandWithAttachment.attachments());
+            verifyNoInteractions(
+                configurationProvider,
+                messageVerifierService,
+                messageIdGeneratorService,
                 stagingEventPublisher
             );
         }
@@ -221,14 +281,10 @@ public class ConnectorOutboundBusinessMessageReceiverServiceTest {
         void should_fail_when_the_message_verification_fails() {
             doNothing().when(businessDomainVerifierService).execute(any());
             doNothing().when(processingModeVerifierService).execute(any());
+            doNothing().when(attachmentVerifierService).execute(any());
+
             when(messageIdGeneratorService.execute()).thenReturn(MESSAGE_ID);
-            when(configurationProvider.getConfiguration())
-                .thenReturn(
-                    ConnectorMessageProcessingConfiguration
-                        .builder()
-                        .outboundMessageVerificationMode(ProcessingModeVerificationMode.STRICT)
-                        .build()
-                );
+            stubConfiguration(ProcessingModeVerificationMode.STRICT);
             doThrow(ConnectorProcessingModeVerificationException.class)
                 .when(messageVerifierService).verify(any(), any());
 
@@ -250,22 +306,35 @@ public class ConnectorOutboundBusinessMessageReceiverServiceTest {
         }
 
         @Test
-        void should_submit_the_message_to_the_staging_queue() {
-            doNothing().when(businessDomainVerifierService).execute(any());
-            doNothing().when(processingModeVerifierService).execute(any());
+        void should_propagate_the_failure_when_publishing_to_the_staging_queue_fails() {
             when(messageIdGeneratorService.execute()).thenReturn(MESSAGE_ID);
-            when(configurationProvider.getConfiguration())
-                .thenReturn(
-                    ConnectorMessageProcessingConfiguration
-                        .builder()
-                        .outboundMessageVerificationMode(ProcessingModeVerificationMode.STRICT)
-                        .build()
-                );
-            doNothing().when(messageVerifierService).verify(any(), any());
+            stubConfiguration(ProcessingModeVerificationMode.STRICT);
+            doThrow(new IllegalStateException("staging queue unavailable"))
+                .when(stagingEventPublisher).publish(any());
 
             var outboundMessageCommand = createBusinessMessageCommand();
 
-            outboundBusinessMessageReceiver.execute(outboundMessageCommand);
+            assertThrows(
+                IllegalStateException.class,
+                () -> outboundBusinessMessageReceiver.execute(outboundMessageCommand)
+            );
+
+            verify(messageVerifierService).verify(any(), eq(ProcessingModeVerificationMode.STRICT));
+            verify(stagingEventPublisher).publish(any());
+        }
+
+        @Test
+        void should_submit_the_message_to_the_staging_queue() {
+            doNothing().when(businessDomainVerifierService).execute(any());
+            doNothing().when(processingModeVerifierService).execute(any());
+            doNothing().when(attachmentVerifierService).execute(any());
+
+            when(messageIdGeneratorService.execute()).thenReturn(MESSAGE_ID);
+            stubConfiguration(ProcessingModeVerificationMode.STRICT);
+
+            var outboundMessageCommand = createBusinessMessageCommand();
+
+            var result = outboundBusinessMessageReceiver.execute(outboundMessageCommand);
 
             var messageCaptor = ArgumentCaptor.forClass(ConnectorBusinessMessage.class);
             verify(stagingEventPublisher).publish(messageCaptor.capture());
@@ -273,6 +342,7 @@ public class ConnectorOutboundBusinessMessageReceiverServiceTest {
             var message = messageCaptor.getValue();
             assertThat(message).isNotNull();
             assertThat(message.identifier()).isEqualTo(MESSAGE_ID);
+            assertThat(message.status()).isEqualTo(ConnectorBusinessMessageStatus.CREATED);
             assertThat(message.businessDomainIdentifier())
                 .isEqualTo(outboundMessageCommand.businessDomainIdentifier());
             assertThat(message.backendMessageIdentifier())
@@ -285,13 +355,66 @@ public class ConnectorOutboundBusinessMessageReceiverServiceTest {
                 .isEqualTo(outboundMessageCommand.businessContent());
             assertThat(message.attachments()).isEqualTo(outboundMessageCommand.attachments());
 
+            assertThat(result).isSameAs(message);
+
             verify(businessDomainVerifierService)
                 .execute(outboundMessageCommand.businessDomainIdentifier());
             verify(processingModeVerifierService)
                 .execute(outboundMessageCommand.businessDomainIdentifier());
             verify(messageVerifierService)
                 .verify(message, ProcessingModeVerificationMode.STRICT);
+            verify(attachmentVerifierService)
+                .execute(outboundMessageCommand.attachments());
+        }
+
+        @ParameterizedTest
+        @EnumSource(ProcessingModeVerificationMode.class)
+        void should_verify_the_message_with_the_configured_outbound_verification_mode(
+            ProcessingModeVerificationMode mode) {
+            when(messageIdGeneratorService.execute()).thenReturn(MESSAGE_ID);
+            stubConfiguration(mode);
+
+            var result = outboundBusinessMessageReceiver.execute(createBusinessMessageCommand());
+
+            verify(messageVerifierService).verify(result, mode);
+            verify(stagingEventPublisher).publish(result);
+        }
+
+        @ParameterizedTest
+        @EnumSource(ConnectorMessageDirection.class)
+        void should_keep_the_direction_of_the_command(ConnectorMessageDirection direction) {
+            when(messageIdGeneratorService.execute()).thenReturn(MESSAGE_ID);
+            stubConfiguration(ProcessingModeVerificationMode.STRICT);
+            var command = createBusinessMessageCommand().toBuilder()
+                                                        .direction(direction)
+                                                        .build();
+
+            var result = outboundBusinessMessageReceiver.execute(command);
+
+            assertThat(result.direction()).isEqualTo(direction);
+        }
+
+        @Test
+        void should_verify_the_message_before_publishing_it_to_the_staging_queue() {
+            when(messageIdGeneratorService.execute()).thenReturn(MESSAGE_ID);
+            stubConfiguration(ProcessingModeVerificationMode.STRICT);
+
+            var outboundMessageCommand = createBusinessMessageCommand();
+
+            outboundBusinessMessageReceiver.execute(outboundMessageCommand);
+
+            var orders = inOrder(
+                businessDomainVerifierService,
+                processingModeVerifierService,
+                messageVerifierService,
+                stagingEventPublisher
+            );
+            orders.verify(businessDomainVerifierService)
+                   .execute(outboundMessageCommand.businessDomainIdentifier());
+            orders.verify(processingModeVerifierService)
+                   .execute(outboundMessageCommand.businessDomainIdentifier());
+            orders.verify(messageVerifierService).verify(any(), any());
+            orders.verify(stagingEventPublisher).publish(any());
         }
     }
 }
-

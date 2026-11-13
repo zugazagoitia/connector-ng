@@ -86,6 +86,9 @@ val generatePropertyReference = tasks.register("generatePropertyReference") {
             out.appendLine("|===")
         }
 
+        // a blank line after the last table keeps Asciidoctor from reporting an unterminated table
+        out.appendLine()
+
         val target = outputFile.get().asFile
         target.parentFile.mkdirs()
         target.writeText(out.toString())

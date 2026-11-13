@@ -12,12 +12,12 @@ package eu.ecodex.connector.infrastructure.adapter.in.web.rest.controller.admin.
 
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.configuration.ConnectorBusinessDocumentPropertiesDto;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.configuration.ConnectorBusinessDomainPropertiesDto;
-import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.configuration.ConnectorContainerPropertiesDto;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.configuration.ConnectorEvidencesPropertiesDto;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.configuration.ConnectorLinkPropertiesDto;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.configuration.ConnectorMessageProcessingPropertiesDto;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.configuration.ConnectorMessageRoutingPropertiesDto;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.configuration.ConnectorQueuePropertiesDto;
+import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.configuration.container.ConnectorContainerPropertiesDto;
 import eu.ecodex.connector.infrastructure.config.property.ConnectorMessageProcessingProperties;
 import eu.ecodex.connector.infrastructure.config.property.ConnectorQueueProperties;
 import eu.ecodex.connector.infrastructure.config.property.businessdocument.ConnectorBusinessDocumentProperties;
@@ -82,23 +82,21 @@ public class ConnectorConfigurationAdminController implements ConnectorConfigura
 
     @Override
     public ConnectorContainerPropertiesDto listContainer() {
-        return ConnectorContainerPropertiesDto.builder()
-                                              .signature(containerProperties.getSignature())
-                                              .build();
+        return ConnectorContainerPropertiesDto.from(containerProperties);
     }
 
     @Override
     public ConnectorQueuePropertiesDto listQueues() {
         return ConnectorQueuePropertiesDto
             .builder()
-            .outboundMessageStagingQueue(queueProperties.getOutboundMessageStagingQueue())
-            .outboundEvidenceTriggerQueue(queueProperties.getOutboundEvidenceTriggerQueue())
-            .outboundMessageProcessingQueue(queueProperties.getOutboundMessageProcessingQueue())
-            .inboundMessageProcessingQueue(queueProperties.getInboundMessageProcessingQueue())
-            .inboundEvidenceTriggerQueue(queueProperties.getInboundEvidenceTriggerQueue())
-            .backendDeliveryQueue(queueProperties.getBackendDeliveryQueue())
-            .gatewaySubmissionQueue(queueProperties.getGatewaySubmissionQueue())
-            .gatewaySubmissionReplyQueue(queueProperties.getGatewaySubmissionReplyQueue())
+            .outboundMessageStagingQueue(queueProperties.outboundMessageStagingQueue())
+            .outboundEvidenceTriggerQueue(queueProperties.outboundEvidenceTriggerQueue())
+            .outboundMessageProcessingQueue(queueProperties.outboundMessageProcessingQueue())
+            .inboundMessageProcessingQueue(queueProperties.inboundMessageProcessingQueue())
+            .inboundEvidenceTriggerQueue(queueProperties.inboundEvidenceTriggerQueue())
+            .backendDeliveryQueue(queueProperties.backendDeliveryQueue())
+            .gatewaySubmissionQueue(queueProperties.gatewaySubmissionQueue())
+            .gatewaySubmissionReplyQueue(queueProperties.gatewaySubmissionReplyQueue())
             .build();
     }
 
@@ -106,18 +104,18 @@ public class ConnectorConfigurationAdminController implements ConnectorConfigura
     public ConnectorMessageProcessingPropertiesDto listMessageProcessing() {
         return ConnectorMessageProcessingPropertiesDto
             .builder()
-            .ebmsIdGeneratorEnabled(messageProcessingProperties.isEbmsIdGeneratorEnabled())
-            .identifierSuffix(messageProcessingProperties.getIdentifierSuffix())
-            .ebmsIdSuffix(messageProcessingProperties.getEbmsIdSuffix())
-            .transportIdSuffix(messageProcessingProperties.getTransportIdSuffix())
+            .ebmsIdGeneratorEnabled(messageProcessingProperties.ebmsIdGeneratorEnabled())
+            .identifierSuffix(messageProcessingProperties.identifierSuffix())
+            .ebmsIdSuffix(messageProcessingProperties.ebmsIdSuffix())
+            .transportIdSuffix(messageProcessingProperties.transportIdSuffix())
             .outboundMessageVerificationMode(
-                messageProcessingProperties.getOutboundMessageVerificationMode())
+                messageProcessingProperties.outboundVerificationMode())
             .inboundMessageVerificationMode(
-                messageProcessingProperties.getInboundMessageVerificationMode())
+                messageProcessingProperties.inboundVerificationMode())
             .sendGeneratedEvidencesToBackend(
-                messageProcessingProperties.isSendGeneratedEvidencesToBackend())
+                messageProcessingProperties.sendGeneratedEvidencesToBackend())
             .autoTriggerDeliveryEvidences(
-                messageProcessingProperties.isAutoTriggerDeliveryEvidences())
+                messageProcessingProperties.autoTriggerDeliveryEvidences())
             .build();
     }
 
@@ -131,15 +129,7 @@ public class ConnectorConfigurationAdminController implements ConnectorConfigura
 
     @Override
     public ConnectorBusinessDocumentPropertiesDto listBusinessDocument() {
-        return ConnectorBusinessDocumentPropertiesDto
-            .builder()
-            .country(businessDocumentProperties.getCountry())
-            .serviceProvider(businessDocumentProperties.getServiceProvider())
-            .defaultAdvancedSystemType(
-                businessDocumentProperties.getDefaultAdvancedSystemType())
-            .authenticationValidation(businessDocumentProperties.getAuthenticationValidation())
-            .signature(businessDocumentProperties.getSignature())
-            .build();
+        return ConnectorBusinessDocumentPropertiesDto.from(businessDocumentProperties);
     }
 
     @Override
@@ -154,8 +144,6 @@ public class ConnectorConfigurationAdminController implements ConnectorConfigura
 
     @Override
     public ConnectorLinkPropertiesDto listBackendLinkPartners() {
-        return ConnectorLinkPropertiesDto.builder()
-                                         .backend(linkProperties.getBackend())
-                                         .build();
+        return ConnectorLinkPropertiesDto.from(linkProperties);
     }
 }

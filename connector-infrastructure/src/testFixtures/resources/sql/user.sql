@@ -10,8 +10,10 @@
 
 INSERT IGNORE INTO connector_roles (id, uuid, name, created_at, updated_at)
 VALUES (2, 'd43bfa931-3c25-47e4-b377-bf4ce7b0d04c_fake_role_test', 'ROLE_TEST', now(), now()),
-       (3, '2c7f58331-be5f-463a-8b17-1bfe0eab7bd4_fake_role_user', 'ROLE_USER', now(), now()),
+       (3, '2c7f58331-be5f-463a-8b17-bf4ce7b0d04d_fake_role_load_testor', 'ROLE_LOAD_TESTER', now(), now()),
        (4, 'd43bfa931-3c25-47e4-b377-bf4ce7b0d04d_fake_role_admin', 'ROLE_ADMIN_IT', now(), now()),
+       (5, 'd43bfa931-3c25-47e4-b377-bf4ce7b0d04d_fake_role_user', 'ROLE_USER', now(), now()),
+       (6, 'd43bfa931-3c25-47e4-b377-bf4ce7b0d04d_fake_role_user_2', 'ROLE_USER_2', now(), now()),
        (1, 'd43bfa931-3c25-47e4-b377-bf4ce7b0d04c_default_role_admin', 'ROLE_ADMIN', now(), now())
 ON DUPLICATE KEY UPDATE name = VALUES(name),
                         uuid = VALUES(uuid);
@@ -31,9 +33,9 @@ ON DUPLICATE KEY UPDATE uuid     = VALUES(uuid),
 INSERT IGNORE INTO connector_users_roles(user_id, role_id)
 VALUES (1, 1),
        (2, 1),
-       (2, 3),
+       (2, 5),
        (3, 2),
-       (3, 3);
+       (3, 6);
 
 INSERT IGNORE INTO connector_refresh_tokens(id, token, user_id, expires_at, revoked, revoked_at, created_at, updated_at)
 VALUES(1,SHA2('test-refresh-token-1', 256), 1, '2026-08-01 15:37:03.160645', true, now(),now(), now()),

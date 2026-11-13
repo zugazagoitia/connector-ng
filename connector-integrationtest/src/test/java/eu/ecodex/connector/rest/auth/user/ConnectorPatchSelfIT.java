@@ -50,7 +50,6 @@ class ConnectorPatchSelfIT extends AbstractIntegrationTest {
         var newEmail = "my_new_email@test.com";
         var request = ConnectorEditSelfRequest
             .builder()
-            .username(username)
             .email(newEmail)
             .build();
 

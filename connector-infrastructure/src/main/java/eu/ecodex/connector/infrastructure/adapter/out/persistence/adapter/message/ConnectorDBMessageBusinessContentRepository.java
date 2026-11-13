@@ -13,24 +13,23 @@ package eu.ecodex.connector.infrastructure.adapter.out.persistence.adapter.messa
 import eu.ecodex.connector.application.port.spi.message.ConnectorMessageBusinessContentRepository;
 import eu.ecodex.connector.domain.model.message.content.ConnectorMessageBusinessContent;
 import eu.ecodex.connector.domain.model.message.content.ConnectorMessageBusinessDocument;
-import eu.ecodex.connector.domain.model.message.content.DetachedSignature;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.message.ConnectorMessageAttachmentEntity;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.message.ConnectorMessageEntity;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.message.content.ConnectorMessageBusinessContentEntity;
-import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.message.content.ConnectorMessageBusinessDocumentDetachedSignatureEntity;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.message.content.ConnectorMessageBusinessDocumentEntity;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.repository.message.ConnectorMessageAttachmentJpaRepository;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.repository.message.ConnectorMessageJpaRepository;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.repository.message.content.ConnectorMessageBusinessContentJpaRepository;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.repository.message.content.ConnectorMessageBusinessDocumentJpaRepository;
-import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.repository.message.content.ConnectorMessageBusinessDocumentSignatureJpaRepository;
 import lombok.NonNull;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * RDBMS implementation of {@link ConnectorMessageBusinessContentRepository}.
  */
 @Component
+@Transactional(readOnly = true)
 @SuppressWarnings("checkstyle:LineLength")
 public class ConnectorDBMessageBusinessContentRepository implements
     ConnectorMessageBusinessContentRepository {
@@ -38,36 +37,28 @@ public class ConnectorDBMessageBusinessContentRepository implements
     private final ConnectorMessageJpaRepository messageJpaRepository;
     private final ConnectorMessageBusinessDocumentJpaRepository businessDocumentJpaRepository;
     private final ConnectorMessageAttachmentJpaRepository attachmentJpaRepository;
-    private final ConnectorMessageBusinessDocumentSignatureJpaRepository detachedSignatureJpaRepository;
 
     /**
      * Constructs a new instance of ConnectorMessageBusinessContentRepositoryImpl.
      *
-     * @param businessContentJpaRepository   the repository for managing
-     *                                       {@link ConnectorMessageBusinessContentEntity} entities
-     * @param messageJpaRepository           the repository for managing
-     *                                       {@link ConnectorMessageEntity} entities
-     * @param businessDocumentJpaRepository  the repository for managing
-     *                                       {@link ConnectorMessageBusinessDocumentEntity}
-     *                                       entities
-     * @param attachmentJpaRepository        the repository for managing
-     *                                       {@link ConnectorMessageAttachmentEntity} entities
-     * @param detachedSignatureJpaRepository the repository for managing
-     *                                       {@link
-     *                                       ConnectorMessageBusinessDocumentDetachedSignatureEntity}
-     *                                       entities
+     * @param businessContentJpaRepository  the repository for managing
+     *                                      {@link ConnectorMessageBusinessContentEntity} entities
+     * @param messageJpaRepository          the repository for managing
+     *                                      {@link ConnectorMessageEntity} entities
+     * @param businessDocumentJpaRepository the repository for managing
+     *                                      {@link ConnectorMessageBusinessDocumentEntity} entities
+     * @param attachmentJpaRepository       the repository for managing
+     *                                      {@link ConnectorMessageAttachmentEntity} entities
      */
     public ConnectorDBMessageBusinessContentRepository(
         ConnectorMessageBusinessContentJpaRepository businessContentJpaRepository,
         ConnectorMessageJpaRepository messageJpaRepository,
         ConnectorMessageBusinessDocumentJpaRepository businessDocumentJpaRepository,
-        ConnectorMessageAttachmentJpaRepository attachmentJpaRepository,
-        ConnectorMessageBusinessDocumentSignatureJpaRepository detachedSignatureJpaRepository) {
+        ConnectorMessageAttachmentJpaRepository attachmentJpaRepository) {
         this.businessContentJpaRepository = businessContentJpaRepository;
         this.messageJpaRepository = messageJpaRepository;
         this.businessDocumentJpaRepository = businessDocumentJpaRepository;
         this.attachmentJpaRepository = attachmentJpaRepository;
-        this.detachedSignatureJpaRepository = detachedSignatureJpaRepository;
     }
 
     static ConnectorMessageBusinessContent toDomain(
@@ -94,26 +85,13 @@ public class ConnectorDBMessageBusinessContentRepository implements
             .builder()
             .uuid(entity.getUuid())
             .aesType(entity.getAesType())
-            .attachment(ConnectorDBMessageAttachmentRepository.toDomain(entity.getAttachment()))
-            .detachedSignature(toDomain(entity.getDetachedSignature()))
-            .build();
-    }
-
-    private static DetachedSignature toDomain(
-        ConnectorMessageBusinessDocumentDetachedSignatureEntity entity) {
-        if (entity == null) {
-            return null;
-        }
-
-        return DetachedSignature
-            .builder()
-            .name(entity.getName())
-            .signature(entity.getSignature())
-            .mimeType(entity.getMimeType())
+            .content(ConnectorDBMessageAttachmentRepository.toDomain(entity.getContent()))
+            .detachedSignature(ConnectorDBMessageAttachmentRepository.toDomain(entity.getDetachedSignature()))
             .build();
     }
 
     @Override
+    @Transactional
     public ConnectorMessageBusinessContent save(
         @NonNull ConnectorMessageBusinessContent businessContent,
         @NonNull String messageIdentifier) {
@@ -126,20 +104,13 @@ public class ConnectorDBMessageBusinessContentRepository implements
             var savedBusinessDocument = this.businessDocumentJpaRepository.save(
                 businessDocumentToSave);
             savedContent.setBusinessDocument(savedBusinessDocument);
-
-            var documentDetachedSignature = businessContent.businessDocument().detachedSignature();
-
-            if (documentDetachedSignature != null) {
-                var savedDetachedSignature = this.detachedSignatureJpaRepository.save(
-                    toEntity(documentDetachedSignature, savedBusinessDocument));
-                savedBusinessDocument.setDetachedSignature(savedDetachedSignature);
-            }
         }
 
         return toDomain(savedContent);
     }
 
     @Override
+    @Transactional
     public ConnectorMessageBusinessContent assignBusinessDocument(
         @NonNull String uuid,
         @NonNull ConnectorMessageBusinessDocument document) {
@@ -148,18 +119,16 @@ public class ConnectorDBMessageBusinessContentRepository implements
 
         var savedBusinessDocument = this.businessDocumentJpaRepository.save(businessDocumentToSave);
 
-        var detachedSignature = document.detachedSignature();
-
-        if (detachedSignature != null) {
-            var savedDetachedSignature = this.detachedSignatureJpaRepository.save(
-                toEntity(detachedSignature, savedBusinessDocument)
-            );
-            savedBusinessDocument.setDetachedSignature(savedDetachedSignature);
-        }
-
         content.setBusinessDocument(savedBusinessDocument);
 
         return toDomain(content);
+    }
+
+    @Override
+    @Transactional
+    public void deleteByMessageIdentifier(@NonNull String messageIdentifier) {
+        this.businessDocumentJpaRepository.deleteByMessageIdentifier(messageIdentifier);
+        this.businessContentJpaRepository.deleteByMessageIdentifier(messageIdentifier);
     }
 
     private ConnectorMessageBusinessContentEntity toEntity(
@@ -175,27 +144,25 @@ public class ConnectorDBMessageBusinessContentRepository implements
     }
 
     private ConnectorMessageBusinessDocumentEntity toEntity(
-        ConnectorMessageBusinessDocument document,
-        ConnectorMessageBusinessContentEntity content) {
-        var attachment = this.attachmentJpaRepository.findByIdentifier(
-            document.attachment().identifier());
+        ConnectorMessageBusinessDocument businessDocument,
+        ConnectorMessageBusinessContentEntity businessContent) {
+        var documentContent = this.attachmentJpaRepository.findByIdentifier(
+            businessDocument.content().identifier());
+
+        var detachedSignature = businessDocument.detachedSignature();
+        ConnectorMessageAttachmentEntity savedDetachedSignature = null;
+        if (detachedSignature != null) {
+            savedDetachedSignature = this.attachmentJpaRepository.findByIdentifier(
+                detachedSignature.identifier()
+            );
+        }
 
         return ConnectorMessageBusinessDocumentEntity
             .builder()
-            .aesType(document.aesType())
-            .businessContent(content)
-            .attachment(attachment)
-            .build();
-    }
-
-    private ConnectorMessageBusinessDocumentDetachedSignatureEntity toEntity(
-        DetachedSignature detachedSignature, ConnectorMessageBusinessDocumentEntity document) {
-        return ConnectorMessageBusinessDocumentDetachedSignatureEntity
-            .builder()
-            .signature(detachedSignature.signature())
-            .name(detachedSignature.name())
-            .mimeType(detachedSignature.mimeType())
-            .businessDocument(document)
+            .aesType(businessDocument.aesType())
+            .businessContent(businessContent)
+            .content(documentContent)
+            .detachedSignature(savedDetachedSignature)
             .build();
     }
 }

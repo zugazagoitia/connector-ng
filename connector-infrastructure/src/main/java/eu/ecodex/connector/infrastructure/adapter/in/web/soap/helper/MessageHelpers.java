@@ -19,8 +19,6 @@ import eu.ecodex.connector.domain.model.message.attachment.ConnectorMessageAttac
 import eu.ecodex.connector.domain.model.message.content.ConnectorBusinessDocumentAESType;
 import eu.ecodex.connector.domain.model.message.content.ConnectorMessageBusinessContent;
 import eu.ecodex.connector.domain.model.message.content.ConnectorMessageBusinessDocument;
-import eu.ecodex.connector.domain.model.message.content.DetachedSignature;
-import eu.ecodex.connector.domain.model.message.content.DetachedSignatureMimeType;
 import eu.ecodex.connector.domain.model.message.evidence.ConnectorEvidenceType;
 import eu.ecodex.connector.domain.model.pmode.ConnectorPartyRoleType;
 import eu.ecodex.connector.domain.model.pmode.ConnectorProcessingModeAction;
@@ -31,6 +29,7 @@ import eu.ecodex.connector.domain.transition.DomibusConnectorMessageConfirmation
 import eu.ecodex.connector.domain.transition.DomibusConnectorMessageContentType;
 import eu.ecodex.connector.domain.transition.DomibusConnectorMessageDetailsType;
 import eu.ecodex.connector.domain.transition.DomibusConnectorMessageType;
+import java.util.ArrayList;
 import java.util.List;
 import javax.xml.transform.stream.StreamSource;
 import lombok.experimental.UtilityClass;
@@ -64,6 +63,7 @@ public class MessageHelpers {
         List<String> attachments,
         String businessContentAttachmentIdentifier,
         String businessDocumentAttachmentIdentifier,
+        String businessDocDetachedSigAttachmentId,
         String backendClientName
     ) {
         var details = message.getMessageDetails();
@@ -78,7 +78,8 @@ public class MessageHelpers {
             .businessContent(toBusinessContent(
                 incomingBusinessContent,
                 businessContentAttachmentIdentifier,
-                businessDocumentAttachmentIdentifier
+                businessDocumentAttachmentIdentifier,
+                businessDocDetachedSigAttachmentId
             ))
             .direction(ConnectorMessageDirection.BACKEND_TO_GATEWAY)
             .attachments(toAttachments(attachments))
@@ -142,12 +143,16 @@ public class MessageHelpers {
     public static ConnectorMessageBusinessContent toBusinessContent(
         DomibusConnectorMessageContentType content,
         String businessContentAttachmentIdentifier,
-        String businessDocumentAttachmentIdentifier) {
+        String businessDocumentAttachmentIdentifier,
+        String businessDocDetachedSigAttachmentId) {
         var document = content.getDocument();
         var businessDocument = ConnectorMessageBusinessDocument
             .builder()
-            .attachment(toAttachment(businessDocumentAttachmentIdentifier))
-            .detachedSignature(toDetachedSignature(document.getDetachedSignature()))
+            .content(toAttachment(businessDocumentAttachmentIdentifier))
+            .detachedSignature(toDetachedSignature(
+                document.getDetachedSignature(),
+                businessDocDetachedSigAttachmentId
+            ))
             .aesType(ConnectorBusinessDocumentAESType.from(
                          document.getAesType() != null
                              ? document.getAesType().value()
@@ -193,18 +198,15 @@ public class MessageHelpers {
         return false;
     }
 
-    private static DetachedSignature toDetachedSignature(
-        DomibusConnectorDetachedSignatureType signature) {
+    private static ConnectorMessageAttachment toDetachedSignature(
+        DomibusConnectorDetachedSignatureType signature,
+        String businessDocDetachedSigAttachmentId) {
+
         if (signature == null) {
             return null;
         }
 
-        return DetachedSignature
-            .builder()
-            .name(signature.getDetachedSignatureName())
-            .signature(signature.getDetachedSignature())
-            .mimeType(DetachedSignatureMimeType.valueOf(signature.getMimeType().value()))
-            .build();
+        return toAttachment(businessDocDetachedSigAttachmentId);
     }
 
     private static ConnectorMessageAttachment toAttachment(String identifier) {
@@ -216,7 +218,7 @@ public class MessageHelpers {
 
     private static List<ConnectorMessageAttachment> toAttachments(List<String> identifiers) {
         if (identifiers == null) {
-            return null;
+            return new ArrayList<>();
         }
 
         return identifiers.stream()

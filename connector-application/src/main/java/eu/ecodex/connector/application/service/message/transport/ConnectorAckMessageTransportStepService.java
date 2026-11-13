@@ -19,10 +19,12 @@ import eu.ecodex.connector.application.port.spi.message.ConnectorMessageEvidence
 import eu.ecodex.connector.application.port.spi.message.ConnectorMessageRepository;
 import eu.ecodex.connector.application.port.spi.message.ConnectorMessageTransportStepRepository;
 import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessage;
+import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessageStatus;
 import eu.ecodex.connector.domain.model.message.ConnectorEvidenceMessage;
 import eu.ecodex.connector.domain.model.message.ConnectorMessage;
 import eu.ecodex.connector.domain.model.message.ConnectorMessageDirection;
 import eu.ecodex.connector.domain.model.message.ConnectorMessageError;
+import eu.ecodex.connector.domain.model.message.evidence.ConnectorMessageEvidence;
 import eu.ecodex.connector.domain.model.message.transport.ConnectorMessageTransportStatus;
 import eu.ecodex.connector.domain.model.message.transport.ConnectorMessageTransportStep;
 import java.util.List;
@@ -77,31 +79,18 @@ public class ConnectorAckMessageTransportStepService implements ConnectorAckMess
         @NonNull UpdateMessageTransportCommand command) {
         validateRequest(stepOrMessageOrRemoteSystemIdentifier, command);
 
-        var existingStep = this.transportStepRepository.findByStepOrMessageOrRemoteSystemIdentifier(
-            stepOrMessageOrRemoteSystemIdentifier);
-
-        if (existingStep == null) {
-            throw new ConnectorMessageTransportStepNotFoundException(
-                "No transport step found for identifier [%s]"
-                    .formatted(stepOrMessageOrRemoteSystemIdentifier)
-            );
-        }
-
-        if (!existingStep.linkPartnerName().equalsIgnoreCase(command.linkPartnerName())) {
-            throw new ConnectorLinkPartnerNotOwnerException(
-                ("The transport step with message/remote ID [%s] does not belong to "
-                    + "link partner [%s]")
-                    .formatted(stepOrMessageOrRemoteSystemIdentifier, command.linkPartnerName()
-                    )
-            );
-        }
+        var existingStep = findStepOrThrow(stepOrMessageOrRemoteSystemIdentifier);
+        assertOwnedBy(
+            existingStep,
+            command.linkPartnerName(),
+            stepOrMessageOrRemoteSystemIdentifier
+        );
 
         if (TERMINAL_STATUSES.contains(existingStep.status())) {
-            log.warn(
+            log.info(
                 "Message [{}] is already in terminal transport status [{}]",
                 stepOrMessageOrRemoteSystemIdentifier, existingStep.status()
             );
-
             return;
         }
 
@@ -109,12 +98,10 @@ public class ConnectorAckMessageTransportStepService implements ConnectorAckMess
         handlePostUpdate(existingStep, command);
     }
 
-    private void validateRequest(
-        String messageOrRemoteSystemIdentifier,
-        UpdateMessageTransportCommand command) {
-        if (!StringUtils.hasText(messageOrRemoteSystemIdentifier)) {
+    private void validateRequest(String identifier, UpdateMessageTransportCommand command) {
+        if (!StringUtils.hasText(identifier)) {
             throw new IllegalArgumentException(
-                "Transport message or remote system identifier must not be empty");
+                "Transported message or remote system identifier must not be empty");
         }
 
         if (command.status() == ConnectorMessageTransportStatus.FAILED
@@ -122,9 +109,31 @@ public class ConnectorAckMessageTransportStepService implements ConnectorAckMess
             throw new IllegalArgumentException("Errors must be provided for failed transport");
         }
 
-        if (command.status() == ConnectorMessageTransportStatus.READY_FOR_DOWNLOAD) {
+        if (command.status() == ConnectorMessageTransportStatus.READY_FOR_PULL) {
             throw new IllegalArgumentException(
-                "Ready for download status cannot be apply to an existing transport step");
+                "Status READY_FOR_PULL cannot be applied to an existing transport step");
+        }
+    }
+
+    private ConnectorMessageTransportStep findStepOrThrow(String identifier) {
+        var step = transportStepRepository.findByStepOrMessageOrRemoteSystemIdentifier(identifier);
+
+        if (step == null) {
+            throw new ConnectorMessageTransportStepNotFoundException(
+                "No transport step found for identifier [%s]".formatted(identifier));
+        }
+
+        return step;
+    }
+
+    private void assertOwnedBy(
+        ConnectorMessageTransportStep step,
+        String linkPartnerName,
+        String identifier) {
+        if (!step.linkPartnerName().equalsIgnoreCase(linkPartnerName)) {
+            throw new ConnectorLinkPartnerNotOwnerException(
+                "The transport step with message/remote ID [%s] doesn't belong to link partner [%s]"
+                    .formatted(identifier, linkPartnerName));
         }
     }
 
@@ -132,13 +141,11 @@ public class ConnectorAckMessageTransportStepService implements ConnectorAckMess
         ConnectorMessageTransportStep existingStep,
         UpdateMessageTransportCommand command) {
 
-        var update = ConnectorMessageTransportStep.builder()
-                                                  .identifier(existingStep.identifier())
-                                                  .status(command.status())
-                                                  .numberOfAttempts(existingStep.numberOfAttempts())
-                                                  .build();
-
-        transportStepRepository.update(existingStep.identifier(), update);
+        transportStepRepository.update(
+            existingStep.identifier(),
+            command.status(),
+            existingStep.numberOfAttempts()
+        );
     }
 
     private void handlePostUpdate(
@@ -146,35 +153,55 @@ public class ConnectorAckMessageTransportStepService implements ConnectorAckMess
         UpdateMessageTransportCommand command) {
 
         var transportedMessage = existingStep.transportedMessage();
+
         switch (command.status()) {
-            case DELIVERED -> updateMessage(
-                transportedMessage,
-                command.remoteMessageIdentifier()
-            );
-            case FAILED ->
-                registerErrors((ConnectorBusinessMessage) transportedMessage, command.errors());
+            case PULLED -> handlePulled(transportedMessage);
+            case DELIVERED ->
+                handleDelivered(transportedMessage, command.remoteMessageIdentifier());
+            case FAILED -> handleFailed(existingStep, command.errors());
             default -> log.debug("No action required for transport status [{}]", command.status());
         }
     }
 
-
-    private void updateMessage(
-        ConnectorMessage transportedMessage,
-        String remoteMessageIdentifier) {
-        var identifier = transportedMessage.identifier();
-
-        switch (transportedMessage) {
-            case ConnectorBusinessMessage businessMessage ->
-                updateBusinessMessage(businessMessage, identifier, remoteMessageIdentifier);
-            case ConnectorEvidenceMessage evidenceMessage ->
-                updateEvidenceMessage(evidenceMessage, identifier);
+    private void handlePulled(ConnectorMessage transportedMessage) {
+        if (transportedMessage instanceof ConnectorBusinessMessage businessMessage) {
+            messageRepository.updateStatus(
+                businessMessage.identifier(),
+                ConnectorBusinessMessageStatus.PULLED
+            );
         }
     }
 
-    private void updateBusinessMessage(
-        ConnectorBusinessMessage message,
-        String identifier,
+    private void handleDelivered(
+        ConnectorMessage transportedMessage,
         String remoteMessageIdentifier) {
+        switch (transportedMessage) {
+            case ConnectorBusinessMessage businessMessage ->
+                markBusinessMessageAsDelivered(businessMessage, remoteMessageIdentifier);
+            case ConnectorEvidenceMessage evidenceMessage ->
+                markEvidenceMessageAsDelivered(evidenceMessage);
+        }
+    }
+
+    private void handleFailed(
+        ConnectorMessageTransportStep step,
+        List<ConnectorMessageError> errors) {
+        if (step.transportedMessage() instanceof ConnectorBusinessMessage businessMessage) {
+            registerErrors(businessMessage, errors);
+        } else {
+            // TODO for evidence messages, the errors should be registered to the step
+            log.warn(
+                "Errors of failed evidence transport step [{}] are not persisted yet",
+                step.identifier()
+            );
+        }
+    }
+
+    private void markBusinessMessageAsDelivered(
+        ConnectorBusinessMessage message,
+        String remoteMessageIdentifier) {
+        var identifier = message.identifier();
+
         if (messageRepository.findByIdentifier(identifier) == null) {
             log.warn("Message [{}] not found", identifier);
             return;
@@ -182,23 +209,24 @@ public class ConnectorAckMessageTransportStepService implements ConnectorAckMess
 
         if (message.direction() == ConnectorMessageDirection.GATEWAY_TO_BACKEND) {
             messageRepository.updateBackendIdentifier(identifier, remoteMessageIdentifier);
+            messageRepository.updateStatus(identifier, ConnectorBusinessMessageStatus.DELIVERED);
             log.info("Message [{}] delivered to backend link partner", identifier);
         } else {
             // TODO see if ebms ID should be updated
             log.info("Message [{}] delivered to gateway link partner", identifier);
         }
+
         messageRepository.setDeliveredToLinkPartnerAt(identifier);
     }
 
-    private void updateEvidenceMessage(ConnectorEvidenceMessage message, String identifier) {
-        var evidences = message.transportedEvidences();
-
-        var evidenceUuid = evidences.getFirst().uuid();
-
-        if (evidenceUuid == null) {
-            throw new IllegalStateException(
-                "Evidence message [%s] contains no transported evidence".formatted(identifier));
-        }
+    private void markEvidenceMessageAsDelivered(ConnectorEvidenceMessage message) {
+        var evidenceUuid = message.transportedEvidences()
+                                  .stream()
+                                  .findFirst()
+                                  .map(ConnectorMessageEvidence::uuid)
+                                  .orElseThrow(() -> new IllegalStateException(
+                                      "Evidence message [%s] contains no transported evidence"
+                                          .formatted(message.identifier())));
 
         evidenceRepository.setDeliveredToLinkPartnerAt(evidenceUuid);
     }
@@ -206,7 +234,10 @@ public class ConnectorAckMessageTransportStepService implements ConnectorAckMess
     private void registerErrors(
         ConnectorBusinessMessage transportedMessage,
         List<ConnectorMessageError> errors) {
-        // TODO for evidence messages, the errors should be registered to the step
-        this.messageErrorRepository.save(transportedMessage.identifier(), errors);
+        var messageIdentifier = transportedMessage.identifier();
+
+        messageErrorRepository.save(messageIdentifier, errors);
+        messageRepository.updateStatus(messageIdentifier, ConnectorBusinessMessageStatus.FAILED);
     }
 }
+

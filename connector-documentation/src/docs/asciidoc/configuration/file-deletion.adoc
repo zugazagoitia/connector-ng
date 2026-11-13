@@ -1,0 +1,179 @@
+ifndef::header[]
+include::{basepath}/header.adoc[]
+endif::header[]
+
+= Files cleanup
+
+The connector periodically deletes the files of attachments that are no longer needed.
+Each cleanup is a scheduled job with its own age threshold and its own schedule.
+
+[cols="2,3,2", options="header"]
+|===
+| Job | Attachments processed | Property prefix
+
+| Orphaned attachments
+| Attachments not linked to any message.
+| `connector.file-deletion.orphan.*`
+
+| Unresolved messages
+| Attachments of messages that were neither confirmed nor rejected.
+| `connector.file-deletion.unresolved-messages.*`
+|===
+
+== Common configuration
+
+Configuration is provided via `application.properties` under the `connector.file-deletion.*`
+prefix. Every job has the same two properties: `threshold` and `cron`.
+
+=== Threshold format
+
+The threshold accepts the standard Spring Boot duration formats:
+
+[cols="1,2", options="header"]
+|===
+| Value | Meaning
+
+| `30m` | 30 minutes
+| `12h` | 12 hours
+| `1d` | 1 day
+| `PT36H` | 36 hours (ISO-8601)
+|===
+
+A value without a unit (for example `60`) is interpreted as milliseconds.
+
+=== Cron format
+
+The cron expression is a Spring cron expression with six fields, starting with the seconds:
+
+----
+ ┌───────── second        (0-59)
+ │ ┌─────── minute        (0-59)
+ │ │ ┌───── hour          (0-23)
+ │ │ │ ┌─── day of month  (1-31)
+ │ │ │ │ ┌─ month         (1-12)
+ │ │ │ │ │ ┌ day of week  (0-7 or MON-SUN)
+ │ │ │ │ │ │
+ 0 0 0 * * *
+----
+
+[cols="2,3", options="header"]
+|===
+| Expression | Runs
+
+| `0 0 0 * * *` | every day at 00:00:00
+| `0 10 0 * * *` | every day at 00:10:00
+| `0 0 * * * *` | every hour
+| `0 */15 * * * *` | every 15 minutes
+| `-` | never (job disabled)
+|===
+
+The jobs run in the default time zone of the JVM. In containers this is often UTC, so
+"midnight" may not correspond to midnight in your local time zone.
+
+NOTE: In a `.properties` file, do not wrap the cron expression in quotes: they would become part
+of the value. In YAML, quotes are required because of the `*` characters.
+
+=== Common behavior
+
+* The file is deleted from the storage first. The attachment is marked as deleted in the database
+(`DELETED_AT`) only after the deletion succeeded.
+* If the deletion of one file fails, the error is logged, the other attachments are still
+processed, and the failed attachment is retried at the next run.
+* Attachments that already have a deletion date are never processed again.
+* The jobs are idempotent: running them several times, or on several nodes at the same time, leads
+to the same result. Deleting a file that no longer exists is not an error.
+
+WARNING: Deleted files cannot be recovered.
+
+== Orphaned attachments cleanup
+
+An attachment is *orphaned* when it is not linked to any message (`MESSAGE_ID` is `null`).
+This happens, for example, when a file was uploaded but the message it belonged to was never created.
+
+A scheduled job periodically looks for orphaned attachments that are older than a configurable
+threshold, deletes their content from the file storage (for example the S3 bucket), and then marks
+them as deleted in the database by setting `DELETED_AT`.
+
+[cols="3,4,1,3", options="header"]
+|===
+| Property | Description | Optional | Example
+
+| `connector.file-deletion.orphan.threshold`
+| Minimum age of an orphaned attachment before its file is deleted.
+The age is computed from the attachment creation date (`CREATED_AT`, stored in UTC).
+| Yes (default: `1d`)
+| `connector.file-deletion.orphan.threshold=1d`
+
+| `connector.file-deletion.orphan.cron`
+| Schedule of the cleanup job.
+Set to `-` to disable the job.
+| Yes (default: `0 0 0 * * *`)
+| `connector.file-deletion.orphan.cron=0 0 0 * * *`
+|===
+
+.Configuration Example
+[source,properties]
+----
+# Delete the files of orphaned attachments that are at least 1 day old
+connector.file-deletion.orphan.threshold=1d
+
+# Run the cleanup every day at 00:00:00
+connector.file-deletion.orphan.cron=0 0 0 * * *
+----
+
+NOTE: With a threshold of `1d` and a daily schedule, an orphaned attachment is deleted between
+24 hours and almost 48 hours after its creation, depending on when it was created relative to the
+next run.
+
+== Unresolved messages attachments cleanup
+
+A message is *unresolved* when it was neither confirmed nor rejected
+(both `CONFIRMED_AT` and `REJECTED_AT` are `null`) and is older than a configurable threshold.
+Such a message will no longer receive an outcome, so its files are not needed anymore.
+
+A scheduled job periodically looks for unresolved messages that are older than the threshold,
+deletes the content of their attachments from the file storage (for example the S3 bucket), and then
+marks these attachments as deleted in the database by setting `DELETED_AT`.
+The messages themselves are kept.
+
+[cols="3,4,1,3", options="header"]
+|===
+| Property | Description | Optional | Example
+
+| `connector.file-deletion.unresolved-messages.threshold`
+| Minimum age of an unresolved message before the files of its attachments are deleted.
+The age is computed from the message creation date (`CREATED_AT`, stored in UTC).
+| Yes (default: `7d`)
+| `connector.file-deletion.unresolved-messages.threshold=7d`
+
+| `connector.file-deletion.unresolved-messages.cron`
+| Schedule of the cleanup job.
+Set to `-` to disable the job.
+| Yes (default: `0 10 0 * * *`)
+| `connector.file-deletion.unresolved-messages.cron=0 10 0 * * *`
+|===
+
+.Configuration Example
+[source,properties]
+----
+# Messages neither confirmed nor rejected
+# Delete the files of attachments of unresolved messages that are at least 7 days old
+connector.file-deletion.unresolved-messages.threshold=7d
+
+# Run the cleanup every day at 00:10:00
+connector.file-deletion.unresolved-messages.cron=0 10 0 * * *
+----
+
+NOTE: This job runs at 00:10:00, ten minutes after the orphaned attachments job (00:00:00), so
+the two jobs do not start at the same moment.
+
+NOTE: With a threshold of `7d` and a daily schedule, the files of an unresolved message are deleted
+between 7 and almost 8 days after its creation, depending on when it was created relative to the
+next run.
+
+=== Behavior
+
+* Only messages with no confirmation date and no rejection date are processed.
+* Only the attachments of these messages that are not yet marked as deleted are processed.
+* If the cleanup of one message fails, the error is logged and the other messages are still
+processed. The message is retried at the next run.

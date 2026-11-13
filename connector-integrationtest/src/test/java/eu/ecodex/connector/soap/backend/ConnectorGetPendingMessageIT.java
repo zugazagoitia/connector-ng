@@ -21,7 +21,7 @@ import eu.ecodex.connector.domain.model.message.transport.ConnectorMessageTransp
 import eu.ecodex.connector.domain.transition.DomibusConnectorBackendWebService;
 import eu.ecodex.connector.domain.transition.GetMessageByIdRequest;
 import eu.ecodex.connector.infrastructure.adapter.out.provider.ConnectorS3FileStorageProvider;
-import eu.ecodex.connector.soap.BackendServiceTest;
+import eu.ecodex.connector.soap.AbstractSoapBackendServiceTest;
 import jakarta.xml.ws.soap.SOAPFaultException;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -40,7 +40,7 @@ import org.springframework.test.context.jdbc.Sql;
         statements = "DELETE FROM connector_business_domains WHERE id > 0",
         executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS
 )
-public class ConnectorGetPendingMessageIT extends BackendServiceTest {
+public class ConnectorGetPendingMessageIT extends AbstractSoapBackendServiceTest {
     private static final String TRANSPORT_MESSAGE_ID = "b0f19c4c-ac3e-438c-9951-8e3a5211fed4@connector.ecodex.eu_backend_alice";
 
     @LocalServerPort

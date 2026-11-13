@@ -36,11 +36,11 @@ public class ActiveMQConfig {
             var policyMap = new RedeliveryPolicyMap();
 
             addQueue(
-                policyMap, queueProperties.getOutboundMessageStagingQueue(),
+                policyMap, queueProperties.outboundMessageStagingQueue(),
                 settingsProperties
             );
             addQueue(
-                policyMap, queueProperties.getOutboundMessageProcessingQueue(),
+                policyMap, queueProperties.outboundMessageProcessingQueue(),
                 settingsProperties
             );
 
@@ -57,11 +57,15 @@ public class ActiveMQConfig {
 
     private RedeliveryPolicy defaultRedeliveryPolicy(
         ActiveMQAddressSettingsProperties settingsProperties) {
+        var delayMillis = settingsProperties.redeliveryDelay().toMillis();
+        var attempts = settingsProperties.maxDeliveryAttempts();
+
         var policy = new RedeliveryPolicy();
-        policy.setMaximumRedeliveries(settingsProperties.getMaxDeliveryAttempts());
-        policy.setInitialRedeliveryDelay(settingsProperties.getRedeliveryDelay());
-        policy.setBackOffMultiplier(settingsProperties.getRedeliveryMultiplier());
-        policy.setUseExponentialBackOff(settingsProperties.getRedeliveryMultiplier() > 1.0);
+        policy.setMaximumRedeliveries(attempts - 1);
+        policy.setInitialRedeliveryDelay(delayMillis);
+        policy.setRedeliveryDelay(delayMillis);
+        policy.setBackOffMultiplier(settingsProperties.redeliveryMultiplier());
+        policy.setUseExponentialBackOff(settingsProperties.redeliveryMultiplier() > 1.0);
 
         return policy;
     }

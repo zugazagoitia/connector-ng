@@ -19,7 +19,6 @@ import eu.ecodex.connector.domain.model.message.attachment.ConnectorAttachmentTy
 import eu.ecodex.connector.domain.model.message.attachment.ConnectorMessageAttachment;
 import eu.ecodex.connector.domain.model.message.content.ConnectorBusinessDocumentAESType;
 import eu.ecodex.connector.domain.model.message.content.ConnectorMessageBusinessDocument;
-import eu.ecodex.connector.domain.model.message.content.DetachedSignature;
 import eu.ecodex.connector.domain.model.message.content.DetachedSignatureMimeType;
 import eu.ecodex.connector.infrastructure.adapter.out.security.container.checks.ConnectorContainerDocumentSignatureChecker;
 import eu.ecodex.connector.infrastructure.adapter.out.security.container.checks.ConnectorMessageContainerChecker;
@@ -322,10 +321,13 @@ public class ConnectorContainerValidator {
 
         var businessDocumentBuilder = ConnectorMessageBusinessDocument
             .builder()
-            .attachment(businessDocumentAttachment);
+            .content(businessDocumentAttachment);
 
-        var detachedSignature =
-            persistDetachedSignature(container.businessContent().getDetachedSignature(), message);
+        var detachedSignature = persistDetachedSignature(
+            container.businessContent().getDetachedSignature(),
+            message
+        );
+
         if (detachedSignature != null) {
             businessDocumentBuilder.detachedSignature(detachedSignature);
             businessDocumentBuilder.aesType(ConnectorBusinessDocumentAESType.SIGNATURE_BASED);
@@ -340,7 +342,7 @@ public class ConnectorContainerValidator {
         return businessContent.businessDocument();
     }
 
-    private DetachedSignature persistDetachedSignature(
+    private ConnectorMessageAttachment persistDetachedSignature(
         DSSDocument detachedDssSignature,
         ConnectorBusinessMessage message)
         throws IOException {
@@ -352,7 +354,7 @@ public class ConnectorContainerValidator {
 
         byte[] signatureBytes = DSSUtils.toByteArray(detachedDssSignature.openStream());
 
-        persistAttachment(
+        return persistAttachment(
             newAttachmentMetadata(
                 detachedDssSignature.getName(),
                 mimeType.getMimeType(),
@@ -363,12 +365,6 @@ public class ConnectorContainerValidator {
             new ByteArrayInputStream(signatureBytes),
             message.identifier()
         );
-
-        return DetachedSignature.builder()
-                                .signature(signatureBytes)
-                                .name(detachedDssSignature.getName())
-                                .mimeType(mimeType)
-                                .build();
     }
 
     private List<ConnectorMessageAttachment> persistAdditionalAttachments(

@@ -11,6 +11,7 @@
 package eu.ecodex.connector.infrastructure.adapter.out.persistence.db.repository.message.transport;
 
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.message.transport.ConnectorMessageTransportStepStatusEntity;
+import java.time.Instant;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -28,16 +29,17 @@ public interface ConnectorMessageTransportStepStatusJpaRepository extends
     JpaRepository<ConnectorMessageTransportStepStatusEntity, Long> {
     @Modifying
     @Transactional
-    @Query(
-        value = """
-            INSERT INTO connector_message_transport_step_statuses(
-                status, transport_step_id, created_at, updated_at
-            )
-            SELECT :status, MTS.id, now(), now()
-            FROM connector_message_transport_steps MTS
-            WHERE MTS.identifier IN :identifiers
-            """,
-        nativeQuery = true
+    @Query("""
+        INSERT INTO ConnectorMessageTransportStepStatusEntity (
+                status, transportStep, createdAt, updatedAt
+        )
+        SELECT :status, mts, :now, :now
+        FROM ConnectorMessageTransportStepEntity mts
+        WHERE mts.identifier IN :identifiers
+        """
     )
-    void insert(@Param("identifiers") List<String> identifiers, @Param("status") String status);
+    void insert(
+        @Param("identifiers") List<String> identifiers,
+        @Param("status") String status,
+        @Param("now") Instant now);
 }

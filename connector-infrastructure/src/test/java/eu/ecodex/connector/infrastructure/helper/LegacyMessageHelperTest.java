@@ -24,6 +24,7 @@ import eu.ecodex.connector.EvidenceTestFixtures;
 import eu.ecodex.connector.application.port.spi.ConnectorFileStorageProvider;
 import eu.ecodex.connector.application.port.spi.message.ConnectorMessageAttachmentRepository;
 import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessage;
+import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessageStatus;
 import eu.ecodex.connector.domain.model.message.ConnectorEvidenceMessage;
 import eu.ecodex.connector.domain.model.message.ConnectorMessageAS4Properties;
 import eu.ecodex.connector.domain.model.message.ConnectorMessageDirection;
@@ -119,6 +120,7 @@ public class LegacyMessageHelperTest {
                                        .backendName(BACKEND_NAME)
                                        .backendMessageIdentifier(null)
                                        .direction(ConnectorMessageDirection.GATEWAY_TO_BACKEND)
+                                       .status(ConnectorBusinessMessageStatus.CREATED)
                                        .as4Properties(as4Properties())
                                        .businessContent(businessContent())
                                        .attachments(List.of())

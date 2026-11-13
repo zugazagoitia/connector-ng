@@ -13,7 +13,6 @@ package eu.ecodex.connector.infrastructure.adapter.out.auth.accesstoken;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import eu.ecodex.connector.ConnectorUserTestFixtures;
-import eu.ecodex.connector.infrastructure.adapter.out.auth.accesstoken.ConnectorJwtGenerator;
 import eu.ecodex.connector.infrastructure.adapter.out.auth.identity.ConnectorUserDetails;
 import eu.ecodex.connector.infrastructure.config.property.auth.ConnectorJwtProperties;
 import eu.ecodex.connector.infrastructure.config.property.auth.ConnectorRefreshTokenProperties;
@@ -40,7 +39,7 @@ class ConnectorJwtGeneratorTest {
 
     private final ConnectorJwtProperties jwtProperties =
         new ConnectorJwtProperties(SECRET_STRING, Duration.ofMillis(ACCESS_TOKEN_EXPIRATION_MS),
-            refreshTokenProps);
+            "", refreshTokenProps);
 
     @Test
     void generateToken_should_generate_valid_token() {

@@ -10,23 +10,34 @@
 
 package eu.ecodex.connector.infrastructure.config.property;
 
+import jakarta.validation.constraints.NotEmpty;
 import java.util.List;
-import lombok.Getter;
-import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * Configuration properties for specifying Cross-Origin Resource Sharing (CORS) settings.
  */
-@Getter
-@Setter
-@Configuration
+@Validated
 @ConfigurationProperties(prefix = "connector.cors")
-public class ConnectorCorsProperties {
-    List<String> allowedOrigins = List.of("*");
-    List<String> allowedMethods = List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS");
-    List<String> allowedHeaders = List.of("*");
-    boolean allowCredentials = true;
-    long maxAge = 3600;
+public record ConnectorCorsProperties(
+    @NotEmpty
+    @DefaultValue("*")
+    List<String> allowedOrigins,
+
+    @NotEmpty
+    @DefaultValue({"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"})
+    List<String> allowedMethods,
+
+    @NotEmpty
+    @DefaultValue("*")
+    List<String> allowedHeaders,
+
+    @DefaultValue("true")
+    boolean allowCredentials,
+
+    @DefaultValue("3600")
+    long maxAge
+) {
 }

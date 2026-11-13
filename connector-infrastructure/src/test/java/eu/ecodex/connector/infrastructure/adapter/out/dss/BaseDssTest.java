@@ -11,10 +11,13 @@
 package eu.ecodex.connector.infrastructure.adapter.out.dss;
 
 import eu.ecodex.connector.DSSContextConfiguration;
+import eu.ecodex.connector.WithUploadTempDirectory;
+import eu.ecodex.connector.infrastructure.config.PropertiesConfig;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
-@ActiveProfiles(value = {"dss", "security", "evidence"})
-@SpringBootTest(classes = DSSContextConfiguration.class)
+@WithUploadTempDirectory
+@ActiveProfiles(value = {"dss", "security", "evidence", "local"})
+@SpringBootTest(classes = {DSSContextConfiguration.class, PropertiesConfig.class})
 public class BaseDssTest {
 }

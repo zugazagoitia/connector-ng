@@ -11,11 +11,13 @@
 package eu.ecodex.connector.domain.model.message.transport;
 
 import eu.ecodex.connector.domain.model.message.ConnectorMessage;
+import eu.ecodex.connector.domain.model.message.ConnectorMessageDirection;
 import jakarta.annotation.Nonnull;
 import java.io.Serializable;
 import java.time.Instant;
 import java.util.Set;
 import lombok.Builder;
+import org.apache.commons.lang3.StringUtils;
 
 /**
  * Represents a single transport step within the connector message delivery process.
@@ -46,23 +48,40 @@ import lombok.Builder;
  */
 @Builder(toBuilder = true)
 public record ConnectorMessageTransportStep(
-        @Nonnull String identifier,
-        String remoteSystemIdentifier,
-        String transportedMessageIdentifier,
-        int numberOfAttempts,
-        String linkPartnerName,
-        ConnectorMessage transportedMessage,
-        ConnectorMessageTransportStatus status,
-        Set<ConnectorMessageTransportStepStatus> statuses,
-        Instant createdAt,
-        Instant updatedAt
+    @Nonnull String identifier,
+    String remoteSystemIdentifier,
+    String transportedMessageIdentifier,
+    int numberOfAttempts,
+    @Nonnull String linkPartnerName,
+    @Nonnull ConnectorMessage transportedMessage,
+    @Nonnull ConnectorMessageTransportStatus status,
+    Set<ConnectorMessageTransportStepStatus> statuses,
+    Instant createdAt,
+    Instant updatedAt
 ) implements Serializable {
+    /**
+     * Canonical constructor; resolves the remote system identifier from the transported message
+     * when none is given and a message is present.
+     */
+    public ConnectorMessageTransportStep {
+        if (StringUtils.isBlank(remoteSystemIdentifier)) {
+            remoteSystemIdentifier =
+                transportedMessage.direction() == ConnectorMessageDirection.BACKEND_TO_GATEWAY
+                    ? transportedMessage.as4Properties().ebmsMessageIdentifier()
+                    : transportedMessage.backendMessageIdentifier();
+        }
+
+        if (StringUtils.isBlank(transportedMessageIdentifier)) {
+            transportedMessageIdentifier = transportedMessage.identifier();
+        }
+    }
+
     @Override
     @Nonnull
     public String toString() {
         return String.format(
-                "{identifier=%s, numberOfAttempts=%d, statues=%s, createdAt=%s, updatedAt=%s}",
-                identifier, numberOfAttempts, statuses, createdAt, updatedAt
+            "{identifier=%s, numberOfAttempts=%d, statues=%s, createdAt=%s, updatedAt=%s}",
+            identifier, numberOfAttempts, statuses, createdAt, updatedAt
         );
     }
 }

@@ -15,20 +15,22 @@ IMPORTANT: The template refers to the sample keystore `connector-keystore.jks` (
 == Basic configuration
 Configuration is provided via `application.properties` under the `+connector.container.*+` prefix.
 
+NOTE: The configuration is validated at startup. A missing or blank mandatory value stops the connector with an error naming the offending property.
+
 .Container Configuration Properties
 [cols="35,40,10,15", options="header"]
 |===
 | Property | Description | Optional | Example
 
 | `connector.container.signature.keystore.path`
-| Path to the keystore holding the private key/certificate used to sign containers and tokens
+| Path to the keystore holding the private key/certificate used to sign containers and tokens. Use the `file:` or `classpath:` prefix.
 | No
 | `file:./config/keystores/<connector-signing-keystore>.p12`
 
 | `connector.container.signature.keystore.password`
 | Password protecting the keystore file itself.
 | No
-| `*(secret)*`
+| `${CONTAINER_KEYSTORE_PASSWORD}`
 
 | `connector.container.signature.keystore.type`
 | Keystore format: `JKS` (legacy Java format) or `PKCS12`.
@@ -43,12 +45,37 @@ Configuration is provided via `application.properties` under the `+connector.con
 | `connector.container.signature.private-key.password`
 | Password protecting that specific private key entry
 | No
-| `*(secret)*`
+| `${CONTAINER_KEY_PASSWORD}`
+
+| `connector.container.signature.digest-algorithm`
+| Digest algorithm used when signing.
+| Yes
+| By default, set to `SHA256`
+
+| `connector.container.signature.encryption-algorithm`
+| Encryption algorithm of the signing key.
+| Yes
+| By default, set to `RSA`
 
 | `connector.container.signature.validation.constraints-xml`
 | ETSI TS 119 102 / DSS validation policy used when validating inbound ASiC-S containers.
 | Yes
 | By default, set to `classpath:/102853/constraint.xml`
+
+| `connector.container.signature.validation.ocsp-enabled`
+| Whether OCSP is queried when verifying certificates.
+| Yes
+| By default, set to `true`
+
+| `connector.container.signature.validation.crl-enabled`
+| Whether CRLs are queried when verifying certificates.
+| Yes
+| By default, set to `true`
+
+| `connector.container.signature.validation.aia-enabled`
+| Whether the Authority Information Access extension is used to find issuer certificates.
+| Yes
+| By default, set to `true`
 
 | `connector.container.signature.validation.trusted-list-source`
 | Name of a trusted list source declared under `connector.dss.trust-list-sources.<name>` (see <<dss-trust-list-sources>>). When set, certificates are also trusted if they chain to a service listed in that trusted list.
@@ -71,8 +98,7 @@ IMPORTANT: Inbound containers are validated against the *truststore of the P-Mod
 That truststore must contain the container signing certificates of your partner connectors.
 `+connector.container.signature.validation.truststore.*+` and `truststore-enabled` are accepted but not used for container validation.
 
-NOTE: The signature algorithm (RSA) and the digest algorithm (SHA-256) are fixed in the current version and cannot be changed through properties.
-OCSP, CRL and AIA checks are always enabled during certificate validation.
+NOTE: OCSP, CRL and AIA checks are enabled by default and can be switched off with `ocsp-enabled`, `crl-enabled` and `aia-enabled` under `connector.container.signature.validation.*`. The connector then needs outbound access (directly or through the DSS proxy) to the revocation services of the signers' CAs.
 
 .Configuration Example
 [source,properties]
@@ -83,4 +109,5 @@ connector.container.signature.keystore.type=PKCS12
 connector.container.signature.private-key.alias=<signing-key-alias>
 connector.container.signature.private-key.password=${SIGNING_KEY_PASSWORD}
 connector.container.signature.validation.constraints-xml=classpath:/102853/constraint.xml
+connector.container.signature.digest-algorithm=SHA256
 ----

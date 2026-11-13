@@ -34,7 +34,7 @@ Configuration is provided via the gateway's `domibus.properties` under the `+act
 | `activeMQ.embedded.configurationFile`
 | Path to the embedded ActiveMQ broker's configuration file (XML). Only used when running an *embedded* broker; leave it empty when connecting to an *external* broker.
 | Yes
-| By default, set to `file:///${domibus.config.location}/internal/activemq.xml`
+| By default, set to `file:///${domibus.config.location}/internal/activemq.xml`. Leave empty for an external broker.
 
 | `activeMQ.JMXURL`
 | Service URL(s) for the JMX MBeanServer(s) exposed by the broker, used for monitoring/management. Built from the broker host and JMX connector port; one or more comma-separated URLs, count must match `activeMQ.brokerName`.
@@ -52,20 +52,19 @@ Configuration is provided via the gateway's `domibus.properties` under the `+act
 | `tcp://${activeMQ.broker.host}:61616`
 
 | `activeMQ.username`
-| Username used to authenticate to the ActiveMQ broker.
+| Username used to authenticate to the ActiveMQ broker. Must be the same account as the connector's `spring.activemq.user`, or an account with access to the same queues.
 | No
-| `*secret*`
+| `${ACTIVEMQ_USERNAME}`
 
 | `activeMQ.password`
 | Password for the broker username above.
 | No
-| `*secret*`
+| `${ACTIVEMQ_PASSWORD}`
 
 | `activeMQ.persistent`
 | Whether message persistence is enabled on the broker (messages survive broker restarts). Disabling improves throughput but risks message loss on restart/crash.
-| No
+| Yes
 | By default, set to `true`
-
 |===
 
 .Configuration Example
@@ -102,3 +101,20 @@ activeMQ.password=<broker_password>
 #The persistence enabled flag
 activeMQ.persistent=true
 ----
+
+[[connector-side]]
+== Connector side
+
+The connector connects to the same broker with its own properties:
+
+[source,properties]
+----
+spring.activemq.broker-url=tcp://blue-activemq:61616
+spring.activemq.user=${ACTIVEMQ_USERNAME}
+spring.activemq.password=${ACTIVEMQ_PASSWORD}
+----
+
+The Domibus backend queues (`domibus.backend.jms.inQueue`, `domibus.backend.jms.replyQueue`) are shared
+between the gateway and the connector. Their names are configurable on the connector side with
+`connector.queues.gateway-submission-queue` and `connector.queues.gateway-submission-reply-queue`.
+Keep them identical to the queue names configured in Domibus.

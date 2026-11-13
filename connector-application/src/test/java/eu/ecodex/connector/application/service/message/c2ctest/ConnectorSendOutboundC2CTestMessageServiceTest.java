@@ -24,6 +24,7 @@ import eu.ecodex.connector.BusinessDomainIdentifierTestFixtures;
 import eu.ecodex.connector.BusinessMessageTestFixtures;
 import eu.ecodex.connector.MessageAttachmentTestFixtures;
 import eu.ecodex.connector.application.exception.c2ctest.ConnectorC2CTestMessageDisabledException;
+import eu.ecodex.connector.application.port.api.attachment.ConnectorAttachmentVerifier;
 import eu.ecodex.connector.application.port.api.businessdomain.ConnectorBusinessDomainVerifier;
 import eu.ecodex.connector.application.port.api.message.ConnectorBusinessMessageVerifier;
 import eu.ecodex.connector.application.port.api.message.ConnectorMessageIdGenerator;
@@ -51,8 +52,9 @@ import org.mockito.Answers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+@SuppressWarnings("DataFlowIssue")
 @ExtendWith(MockitoExtension.class)
-@DisplayName("ConnectorSendOutboundTestMessageService")
+@DisplayName("ConnectorSendOutboundC2CTestMessageService")
 class ConnectorSendOutboundC2CTestMessageServiceTest {
     private static final String MESSAGE_ID =
         "223caef9-cae9-4387-a38c-ad4879f94b4e@connector.ecodex.eu";
@@ -85,6 +87,7 @@ class ConnectorSendOutboundC2CTestMessageServiceTest {
         .role("GW")
         .roleType(ConnectorPartyRoleType.RESPONDER)
         .build();
+
     @Mock(answer = Answers.RETURNS_DEEP_STUBS)
     private ConnectorTestMessageConfigurationProvider testMessageConfigProvider;
     @Mock(answer = Answers.RETURNS_DEEP_STUBS)
@@ -99,6 +102,9 @@ class ConnectorSendOutboundC2CTestMessageServiceTest {
     private ConnectorBusinessMessageVerifier messageVerifierService;
     @Mock
     private ConnectorMessageEventPublisher<ConnectorBusinessMessage> stagingEventPublisher;
+    @Mock
+    private ConnectorAttachmentVerifier attachmentVerifierService;
+
     private ConnectorSendOutboundC2CTestMessageService service;
 
     @BeforeEach
@@ -110,7 +116,8 @@ class ConnectorSendOutboundC2CTestMessageServiceTest {
             businessDomainVerifierService,
             processingModeVerifierService,
             messageVerifierService,
-            stagingEventPublisher
+            stagingEventPublisher,
+            attachmentVerifierService
         );
     }
 
@@ -152,6 +159,27 @@ class ConnectorSendOutboundC2CTestMessageServiceTest {
     }
 
     @Nested
+    @DisplayName("when the command is invalid")
+    class WhenCommandIsInvalid {
+        @Test
+        void should_fail_when_the_command_is_null() {
+            assertThatThrownBy(() -> service.execute(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("command");
+
+            verifyNoInteractions(
+                testMessageConfigProvider,
+                businessDomainVerifierService,
+                processingModeVerifierService,
+                attachmentVerifierService,
+                messageIdGeneratorService,
+                messageVerifierService,
+                stagingEventPublisher
+            );
+        }
+    }
+
+    @Nested
     @DisplayName("when test messages are disabled")
     class WhenTestMessagesAreDisabled {
         @Test
@@ -165,6 +193,7 @@ class ConnectorSendOutboundC2CTestMessageServiceTest {
             verifyNoInteractions(
                 businessDomainVerifierService,
                 processingModeVerifierService,
+                attachmentVerifierService,
                 messageIdGeneratorService,
                 messageVerifierService,
                 stagingEventPublisher
@@ -197,6 +226,15 @@ class ConnectorSendOutboundC2CTestMessageServiceTest {
 
             verify(stagingEventPublisher).publish(message);
         }
+
+        @Test
+        void should_verify_the_business_domain_the_processing_mode_and_the_attachments() {
+            service.execute(createCommand());
+
+            verify(businessDomainVerifierService).execute(businessDomainIdentifier);
+            verify(processingModeVerifierService).execute(businessDomainIdentifier);
+            verify(attachmentVerifierService).execute(attachments);
+        }
     }
 
     @Nested
@@ -216,6 +254,7 @@ class ConnectorSendOutboundC2CTestMessageServiceTest {
 
             verifyNoInteractions(
                 processingModeVerifierService,
+                attachmentVerifierService,
                 messageIdGeneratorService,
                 messageVerifierService,
                 stagingEventPublisher
@@ -226,6 +265,21 @@ class ConnectorSendOutboundC2CTestMessageServiceTest {
         void should_propagate_and_publish_nothing_when_the_processing_mode_is_invalid() {
             var failure = new IllegalStateException("no processing mode");
             doThrow(failure).when(processingModeVerifierService).execute(any());
+
+            assertThatThrownBy(() -> service.execute(createCommand())).isSameAs(failure);
+
+            verifyNoInteractions(
+                attachmentVerifierService,
+                messageIdGeneratorService,
+                messageVerifierService,
+                stagingEventPublisher
+            );
+        }
+
+        @Test
+        void should_propagate_and_publish_nothing_when_the_attachments_are_invalid() {
+            var failure = new IllegalStateException("invalid attachments");
+            doThrow(failure).when(attachmentVerifierService).execute(any());
 
             assertThatThrownBy(() -> service.execute(createCommand())).isSameAs(failure);
 

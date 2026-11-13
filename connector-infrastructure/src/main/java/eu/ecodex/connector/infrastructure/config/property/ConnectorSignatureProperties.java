@@ -14,14 +14,17 @@ import eu.europa.esig.dss.enumerations.DigestAlgorithm;
 import eu.europa.esig.dss.enumerations.EncryptionAlgorithm;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
+import lombok.Setter;
 
 /**
  * Connector signature properties.
  */
 @Getter
+@Setter
 public class ConnectorSignatureProperties {
     @NotNull
-    EncryptionAlgorithm encryptionAlgorithm = EncryptionAlgorithm.RSA;
+    private EncryptionAlgorithm encryptionAlgorithm = EncryptionAlgorithm.RSA;
+
     @NotNull
-    DigestAlgorithm digestAlgorithm = DigestAlgorithm.SHA256;
+    private DigestAlgorithm digestAlgorithm = DigestAlgorithm.SHA256;
 }

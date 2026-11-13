@@ -17,11 +17,10 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
 import eu.ecodex.connector.MessageAttachmentTestFixtures;
-import eu.ecodex.connector.application.exception.message.ConnectorMessageAttachmentException;
+import eu.ecodex.connector.application.exception.attachment.ConnectorMessageAttachmentException;
 import eu.ecodex.connector.application.port.api.attachment.FileUploadCommand;
 import eu.ecodex.connector.application.port.spi.ConnectorFileStorageProvider;
 import eu.ecodex.connector.application.port.spi.message.ConnectorMessageAttachmentRepository;
-import eu.ecodex.connector.application.service.attachement.ConnectorUploadAttachmentsService;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -99,17 +98,18 @@ public class ConnectorUploadAttachmentsServiceTest {
             when(attachmentRepository.save(any())).thenReturn(savedAttachment);
             doThrow(RuntimeException.class).when(storageProvider).save(any(), (Path) any());
 
-            var fileUploadCommand = new FileUploadCommand(
+            var tempFile = provideTemporaryPath();
+            var commands = List.of(new FileUploadCommand(
                 "test_attachment.txt",
                 100L,
                 "text/plain",
-                provideTemporaryPath(),
+                tempFile,
                 "test_message"
-            );
+            ));
 
             assertThrows(
                 ConnectorMessageAttachmentException.class,
-                () -> uploadAttachmentsService.execute(List.of(fileUploadCommand))
+                () -> uploadAttachmentsService.execute(commands)
             );
         }
 

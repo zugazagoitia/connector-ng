@@ -14,8 +14,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -40,6 +40,7 @@ import eu.ecodex.connector.application.port.spi.ConnectorMessageEventPublisher;
 import eu.ecodex.connector.application.port.spi.ConnectorMessageProcessingConfigurationProvider;
 import eu.ecodex.connector.domain.model.ProcessingModeVerificationMode;
 import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessage;
+import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessageStatus;
 import eu.ecodex.connector.domain.model.message.ConnectorMessageDirection;
 import eu.ecodex.connector.domain.model.message.processing.ConnectorMessageProcessingConfiguration;
 import java.util.List;
@@ -48,6 +49,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -99,6 +102,16 @@ public class ConnectorInboundBusinessMessageReceiverServiceTest {
             .attachments(List.of(MessageAttachmentTestFixtures.createAttachment()))
             .transportedEvidences(List.of(EvidenceTestFixtures.createRelayREMMDAcceptanceEvidence()))
             .build();
+    }
+
+    private void stubConfiguration(ProcessingModeVerificationMode mode) {
+        when(configurationProvider.getConfiguration())
+            .thenReturn(
+                ConnectorMessageProcessingConfiguration
+                    .builder()
+                    .inboundMessageVerificationMode(mode)
+                    .build()
+            );
     }
 
     @Nested
@@ -221,16 +234,8 @@ public class ConnectorInboundBusinessMessageReceiverServiceTest {
 
         @Test
         void should_fail_when_the_message_verification_fails() {
-            doNothing().when(businessDomainVerifierService).execute(any());
-            doNothing().when(processingModeVerifierService).execute(any());
             when(messageIdGeneratorService.execute()).thenReturn(MESSAGE_ID);
-            when(configurationProvider.getConfiguration())
-                .thenReturn(
-                    ConnectorMessageProcessingConfiguration
-                        .builder()
-                        .inboundMessageVerificationMode(ProcessingModeVerificationMode.STRICT)
-                        .build()
-                );
+            stubConfiguration(ProcessingModeVerificationMode.STRICT);
             doThrow(ConnectorProcessingModeVerificationException.class)
                 .when(messageVerifierService).verify(any(), any());
 
@@ -252,18 +257,27 @@ public class ConnectorInboundBusinessMessageReceiverServiceTest {
         }
 
         @Test
-        void should_submit_the_message_to_the_staging_queue() {
-            doNothing().when(businessDomainVerifierService).execute(any());
-            doNothing().when(processingModeVerifierService).execute(any());
+        void should_propagate_the_failure_when_publishing_to_the_staging_queue_fails() {
             when(messageIdGeneratorService.execute()).thenReturn(MESSAGE_ID);
-            when(configurationProvider.getConfiguration())
-                .thenReturn(
-                    ConnectorMessageProcessingConfiguration
-                        .builder()
-                        .inboundMessageVerificationMode(ProcessingModeVerificationMode.STRICT)
-                        .build()
-                );
-            doNothing().when(messageVerifierService).verify(any(), any());
+            stubConfiguration(ProcessingModeVerificationMode.STRICT);
+            doThrow(new IllegalStateException("staging queue unavailable"))
+                .when(stagingEventPublisher).publish(any());
+
+            var inboundMessageCommand = createInboundBusinessMessageCommand();
+
+            assertThrows(
+                IllegalStateException.class,
+                () -> inboundBusinessMessageReceiver.execute(inboundMessageCommand)
+            );
+
+            verify(messageVerifierService).verify(any(), eq(ProcessingModeVerificationMode.STRICT));
+            verify(stagingEventPublisher).publish(any());
+        }
+
+        @Test
+        void should_submit_the_message_to_the_staging_queue() {
+            when(messageIdGeneratorService.execute()).thenReturn(MESSAGE_ID);
+            stubConfiguration(ProcessingModeVerificationMode.STRICT);
 
             var inboundMessageCommand = createInboundBusinessMessageCommand();
 
@@ -275,6 +289,7 @@ public class ConnectorInboundBusinessMessageReceiverServiceTest {
             var message = messageCaptor.getValue();
             assertThat(message).isNotNull();
             assertThat(message.identifier()).isEqualTo(MESSAGE_ID);
+            assertThat(message.status()).isEqualTo(ConnectorBusinessMessageStatus.CREATED);
             assertThat(message.businessDomainIdentifier())
                 .isEqualTo(inboundMessageCommand.businessDomainIdentifier());
             assertThat(message.gatewayName()).isEqualTo(inboundMessageCommand.gatewayName());
@@ -293,6 +308,43 @@ public class ConnectorInboundBusinessMessageReceiverServiceTest {
                 .execute(inboundMessageCommand.businessDomainIdentifier());
             verify(messageVerifierService)
                 .verify(message, ProcessingModeVerificationMode.STRICT);
+        }
+
+        @ParameterizedTest
+        @EnumSource(ProcessingModeVerificationMode.class)
+        void should_verify_the_message_with_the_configured_inbound_verification_mode(
+            ProcessingModeVerificationMode mode) {
+            when(messageIdGeneratorService.execute()).thenReturn(MESSAGE_ID);
+            stubConfiguration(mode);
+
+            inboundBusinessMessageReceiver.execute(createInboundBusinessMessageCommand());
+
+            var messageCaptor = ArgumentCaptor.forClass(ConnectorBusinessMessage.class);
+            verify(stagingEventPublisher).publish(messageCaptor.capture());
+            verify(messageVerifierService).verify(messageCaptor.getValue(), mode);
+        }
+
+        @Test
+        void should_verify_the_message_before_publishing_it_to_the_staging_queue() {
+            when(messageIdGeneratorService.execute()).thenReturn(MESSAGE_ID);
+            stubConfiguration(ProcessingModeVerificationMode.STRICT);
+
+            var inboundMessageCommand = createInboundBusinessMessageCommand();
+
+            inboundBusinessMessageReceiver.execute(inboundMessageCommand);
+
+            var orders = inOrder(
+                businessDomainVerifierService,
+                processingModeVerifierService,
+                messageVerifierService,
+                stagingEventPublisher
+            );
+            orders.verify(businessDomainVerifierService)
+                   .execute(inboundMessageCommand.businessDomainIdentifier());
+            orders.verify(processingModeVerifierService)
+                   .execute(inboundMessageCommand.businessDomainIdentifier());
+            orders.verify(messageVerifierService).verify(any(), any());
+            orders.verify(stagingEventPublisher).publish(any());
         }
     }
 }

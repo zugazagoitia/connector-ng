@@ -16,7 +16,6 @@ import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.message.Connec
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.transport.ConnectorMessageTransportStepDto;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.Instant;
 import java.util.List;
@@ -39,9 +38,7 @@ public interface ConnectorMessageTransportStepAdminApi {
     @ResponseStatus(HttpStatus.OK)
     @GetMapping
     @Operation(summary = "Get paginated list of messages transport steps.")
-    @ApiResponses({
-        @ApiResponse(responseCode = "401", description = "Unauthorized")
-    })
+    @ApiResponse(responseCode = "401", description = "Unauthorized")
     ConnectorPageResult<ConnectorMessageTransportStepDto> listTransportSteps(
         @RequestParam(name = "page", defaultValue = "0") int page,
         @RequestParam(name = "size", defaultValue = "20") int size,
@@ -57,9 +54,7 @@ public interface ConnectorMessageTransportStepAdminApi {
     @ResponseStatus(HttpStatus.OK)
     @GetMapping("{identifier}/message")
     @Operation(summary = "Get transported message.")
-    @ApiResponses({
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "404", description = "Not Found")
-    })
+    @ApiResponse(responseCode = "401", description = "Unauthorized")
+    @ApiResponse(responseCode = "404", description = "Not Found")
     ConnectorMessageDetailDto retrieveTransportedMessage(@PathVariable String identifier);
 }

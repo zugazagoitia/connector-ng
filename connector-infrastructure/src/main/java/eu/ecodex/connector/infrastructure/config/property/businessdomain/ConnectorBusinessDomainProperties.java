@@ -10,11 +10,11 @@
 
 package eu.ecodex.connector.infrastructure.config.property.businessdomain;
 
+import jakarta.validation.Valid;
 import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.validation.annotation.Validated;
 
 /**
@@ -25,8 +25,8 @@ import org.springframework.validation.annotation.Validated;
 @Getter
 @Setter
 @Validated
-@Configuration
 @ConfigurationProperties(prefix = "connector.business-domains")
 public class ConnectorBusinessDomainProperties {
+    @Valid
     private List<DefaultBusinessDomainProperties> defaults;
 }

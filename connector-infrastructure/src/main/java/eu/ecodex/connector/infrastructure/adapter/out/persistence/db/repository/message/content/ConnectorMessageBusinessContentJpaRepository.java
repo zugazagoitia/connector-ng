@@ -13,6 +13,9 @@ package eu.ecodex.connector.infrastructure.adapter.out.persistence.db.repository
 import eu.ecodex.connector.domain.model.message.content.ConnectorMessageBusinessContent;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.message.content.ConnectorMessageBusinessContentEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -23,4 +26,12 @@ import org.springframework.stereotype.Repository;
 public interface ConnectorMessageBusinessContentJpaRepository extends
     JpaRepository<ConnectorMessageBusinessContentEntity, Long> {
     ConnectorMessageBusinessContentEntity findByUuid(String uuid);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+        DELETE FROM ConnectorMessageBusinessContentEntity c
+         WHERE c.message.id IN (
+            SELECT m.id FROM ConnectorMessageEntity m WHERE m.identifier = :identifier)
+        """)
+    void deleteByMessageIdentifier(@Param("identifier") String identifier);
 }

@@ -15,11 +15,11 @@ import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
 
-import eu.ecodex.connector.application.port.api.transport.ConnectorSetMessagesTransportStepToDownload;
+import eu.ecodex.connector.application.port.api.transport.ConnectorSetMessagesTransportStepToPull;
 import eu.ecodex.connector.application.port.spi.ConnectorFileStorageProvider;
 import eu.ecodex.connector.domain.transition.DomibusConnectorBackendWebService;
 import eu.ecodex.connector.domain.transition.EmptyRequestType;
-import eu.ecodex.connector.soap.BackendServiceTest;
+import eu.ecodex.connector.soap.AbstractSoapBackendServiceTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -33,11 +33,11 @@ import org.springframework.test.context.jdbc.Sql;
     statements = "DELETE FROM connector_business_domains WHERE id > 0",
     executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS
 )
-public class ConnectorGetPendingMessagesIT extends BackendServiceTest {
+public class ConnectorGetPendingMessagesIT extends AbstractSoapBackendServiceTest {
     @LocalServerPort
     private int port;
     @MockitoBean
-    private ConnectorSetMessagesTransportStepToDownload setMessagesTransportStepToDownloadService;
+    private ConnectorSetMessagesTransportStepToPull setMessagesTransportStepToDownloadService;
     @MockitoBean
     private ConnectorFileStorageProvider fileStorageProvider;
 

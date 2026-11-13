@@ -21,7 +21,6 @@ import org.springframework.util.StringUtils;
 @Builder
 public record ConnectorEditUserCommand(
     @NotBlank String uuid,
-    @NotBlank String username,
     String email,
     Boolean enabled,
     Boolean mustChangePassword
@@ -41,7 +40,6 @@ public record ConnectorEditUserCommand(
         }
         return builder
             .uuid(editUserCommand.uuid())
-            .username(editUserCommand.username())
             .build();
     }
 }

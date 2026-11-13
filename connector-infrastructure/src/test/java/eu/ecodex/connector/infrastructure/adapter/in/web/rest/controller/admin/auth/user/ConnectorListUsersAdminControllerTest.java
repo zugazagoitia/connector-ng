@@ -21,7 +21,6 @@ import eu.ecodex.connector.application.port.api.auth.user.ConnectorListUsers;
 import eu.ecodex.connector.application.port.api.auth.user.ConnectorRegisterUser;
 import eu.ecodex.connector.application.port.api.auth.user.ConnectorRemoveUser;
 import eu.ecodex.connector.application.port.api.auth.user.ConnectorRetrieveUserByIdentifier;
-import eu.ecodex.connector.application.port.api.auth.user.ConnectorUpdateUser;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.controller.AbstractWebMvcTest;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.user.ConnectorUserDto;
 import java.util.List;
@@ -40,8 +39,6 @@ class ConnectorListUsersAdminControllerTest extends AbstractWebMvcTest {
     private ConnectorRetrieveUserByIdentifier connectorRetrieveUserByIdentifier;
     @MockitoBean
     private ConnectorRegisterUser connectorRegisterUser;
-    @MockitoBean
-    private ConnectorUpdateUser connectorUpdateUser;
     @MockitoBean
     private ConnectorEditUser connectorEditUser;
     @MockitoBean
@@ -76,8 +73,7 @@ class ConnectorListUsersAdminControllerTest extends AbstractWebMvcTest {
 
         verify(connectorListUsers).execute();
         verifyNoMoreInteractions(connectorRegisterUser, connectorRetrieveUserByIdentifier,
-                                 connectorEditUser, connectorUpdateUser, connectorRemoveUser,
-                                 connectorListUsers
+            connectorEditUser, connectorRemoveUser, connectorListUsers
         );
     }
 }

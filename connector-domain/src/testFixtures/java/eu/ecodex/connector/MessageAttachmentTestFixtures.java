@@ -78,4 +78,15 @@ public class MessageAttachmentTestFixtures {
             .name("XMLTrustOKToken.xml")
             .build();
     }
+
+    public static ConnectorMessageAttachment createPKCS7DetachedSignatureAttachment() {
+        return createAttachment()
+            .toBuilder()
+            .identifier("1e74780d-9a92-4df2-a368-119d2f70eb07_xml_detached_signature")
+            .description("Detached signature")
+            .type(ConnectorAttachmentType.DETACHED_SIGNATURE)
+            .contentType("application/pkcs7-signature")
+            .name("detachedSignature.p7b")
+            .build();
+    }
 }

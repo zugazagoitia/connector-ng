@@ -20,13 +20,16 @@ WORKDIR ${APP_FOLDER}
 RUN groupadd -g ${USER_GID} ${USERNAME} \
     && useradd -u ${USER_UID} -g ${USER_GID} -m ${USERNAME} \
     && mkdir -p data temp transaction-logs \
-    && chown -R ${USERNAME}:${USERNAME} ${APP_FOLDER}
+    && chown -R ${USERNAME}:${USERNAME} ${APP_FOLDER} \
+    && chmod 700 ${APP_FOLDER}/temp
 
 COPY --from=build --chown=${USERNAME}:${USERNAME} ${BUILD_OUTPUT_FOLDER}/bin/ ${APP_FOLDER}/bin/
 COPY --from=build --chown=${USERNAME}:${USERNAME} ${BUILD_OUTPUT_FOLDER}/config/ ${APP_FOLDER}/config/
 COPY --from=build --chown=${USERNAME}:${USERNAME} ${BUILD_OUTPUT_FOLDER}/start.sh ${APP_FOLDER}/
 
 RUN chmod +x /app/start.sh
+
+ENV TEMP_DIR_LOCATION=${APP_FOLDER}/temp
 
 USER $USERNAME
 

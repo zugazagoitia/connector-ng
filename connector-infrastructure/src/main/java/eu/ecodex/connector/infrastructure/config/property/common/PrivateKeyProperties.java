@@ -25,6 +25,12 @@ import lombok.Setter;
 public class PrivateKeyProperties {
     @NotBlank
     private String alias;
+
     @NotBlank
     private String password;
+
+    @Override
+    public String toString() {
+        return String.format("{alias=%s}", alias);
+    }
 }

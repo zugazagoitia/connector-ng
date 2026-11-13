@@ -11,9 +11,11 @@
 package eu.ecodex.connector.infrastructure.config.property.dss;
 
 import eu.ecodex.connector.infrastructure.config.property.common.KeystoreProperties;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
 /**
  * Configuration properties for the TL source.
@@ -23,5 +25,8 @@ import lombok.Setter;
 public class DssTlSourceProperties {
     @NotBlank
     private String tlUrl;
+
+    @Valid
+    @NestedConfigurationProperty
     private KeystoreProperties signingCerts;
 }

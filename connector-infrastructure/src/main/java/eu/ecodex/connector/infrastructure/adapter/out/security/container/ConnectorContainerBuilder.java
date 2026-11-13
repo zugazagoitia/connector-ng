@@ -151,7 +151,7 @@ public class ConnectorContainerBuilder {
         DSSDocument dssBusinessDocument;
 
         if (businessDocument != null) {
-            var attachment = businessDocument.attachment();
+            var attachment = businessDocument.content();
             var content = this.fileStorageProvider.findByIdentifier(attachment.identifier());
             dssBusinessDocument = new InMemoryDocument(
                 content,
@@ -160,23 +160,26 @@ public class ConnectorContainerBuilder {
             );
             // Detached signature is only applicable when a business document exists
             var detachedSignature = businessDocument.detachedSignature();
-            if (detachedSignature != null && detachedSignature.mimeType() != null) {
+
+            if (detachedSignature != null) {
                 var sigName = detachedSignature.name() != null
                     ? detachedSignature.name()
                     : "detachedSignature";
+                var signature = this.fileStorageProvider.findByIdentifier(
+                    detachedSignature.identifier()
+                );
                 containerBusinessContent.setDetachedSignature(
                     new InMemoryDocument(
-                        detachedSignature.signature(),
+                        signature,
                         sigName,
-                        MimeType.fromMimeTypeString(
-                            detachedSignature.mimeType().getMimeType()
-                        )
-                    ));
+                        MimeType.fromMimeTypeString(detachedSignature.contentType())
+                    )
+                );
             }
         } else {
             // no business document - make XML to the main document
-            log.warn("No business document attachment in message [{}]", message.identifier());
-            log.warn("Making the XML attachment the main document");
+            log.warn("No business document content in message [{}]", message.identifier());
+            log.warn("Making the XML content the main document");
 
             var xmlContent = this.fileStorageProvider.findByIdentifier(
                 businessContent.xmlContent().identifier()

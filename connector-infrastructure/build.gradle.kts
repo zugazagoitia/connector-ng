@@ -121,6 +121,7 @@ dependencies {
     testFixturesImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testFixturesImplementation(libs.jakarta.activation)
     testFixturesImplementation(libs.jakarta.mail)
+    testFixturesImplementation("eu.europa.ec.joinup.sd-dss:dss-enumerations:6.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation(libs.assertj.core)
     testImplementation(libs.mockito)

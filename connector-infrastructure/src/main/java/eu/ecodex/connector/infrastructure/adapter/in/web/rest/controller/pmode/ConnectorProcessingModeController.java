@@ -66,8 +66,8 @@ public class ConnectorProcessingModeController implements ConnectorProcessingMod
             .stream()
             .map(service -> ConnectorProcessingModeServiceDto.from(
                 service,
-                testMessageProperties.getService().getName(),
-                testMessageProperties.getService().getType()
+                testMessageProperties.service().name(),
+                testMessageProperties.service().type()
             ))
             .toList();
     }
@@ -79,7 +79,7 @@ public class ConnectorProcessingModeController implements ConnectorProcessingMod
             .execute(businessDomainIdentifier)
             .stream()
             .map(action -> ConnectorProcessingModeActionDto.from(
-                action, testMessageProperties.getAction()
+                action, testMessageProperties.action()
             ))
             .toList();
     }

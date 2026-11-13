@@ -15,12 +15,41 @@ The chapters are ordered so that they can be followed from top to bottom: the pr
 As an installation guide, this document does not describe the features or the day-to-day usage of the **Connector**.
 Configuration properties are described in the configuration guide, and changes between versions in the changelog.
 
+NOTE: If you are upgrading from connector 6.x, first read the configuration migration guide.
+Several configuration properties were renamed or removed, and properties with an old name are silently ignored.
+
 == e-CODEX building blocks
 
 The **Connector** is one of the building blocks that provide the connectivity and functionality of e-CODEX.
 To exchange messages with other e-CODEX partners, the other building blocks (in particular the e-CODEX gateway, based on Domibus) must also be installed and configured.
 
 A description of the e-CODEX building blocks and additional information on the e-CODEX system can be found on the link:https://www.ecodex.eu/tech[e-CODEX website].
+
+== Required infrastructure
+
+The **Connector** does not embed its infrastructure. The following components must be installed,
+running and reachable before the first start:
+
+[cols="1,3", options="header"]
+|===
+| Component | Purpose
+
+| Database (MySQL, MariaDB, PostgreSQL or Oracle)
+| Stores message state and processing history. An empty schema and a dedicated user are required.
+The Connector creates its own tables if *spring.jpa.hibernate.ddl-auto* is set to *update* or *create*.
+
+| Apache ActiveMQ Classic
+| External JMS message broker shared with the e-CODEX Gateway. The embedded broker of earlier versions is no longer used.
+
+| S3-compatible object storage (Amazon S3, MinIO, Silo)
+| Stores message attachments and other connector files. S3-compatible storage is the only supported storage backend.
+
+| e-CODEX Gateway
+| The Connector acts as a bridge between your backend and the Gateway.
+|===
+
+The configuration is validated when the Connector starts. A missing or invalid value stops the
+startup with an error naming the offending property.
 
 == Product distribution
 

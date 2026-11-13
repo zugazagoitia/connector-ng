@@ -15,6 +15,7 @@ import static org.assertj.core.api.AssertionsForClassTypes.assertThatNoException
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -35,6 +36,7 @@ import eu.ecodex.connector.domain.model.link.ConnectorLinkMode;
 import eu.ecodex.connector.domain.model.link.partner.ConnectorLinkPartner;
 import eu.ecodex.connector.domain.model.link.partner.ConnectorLinkPartnerName;
 import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessage;
+import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessageStatus;
 import eu.ecodex.connector.domain.model.message.ConnectorEvidenceMessage;
 import eu.ecodex.connector.domain.model.message.ConnectorMessageAS4Properties;
 import eu.ecodex.connector.domain.model.message.ConnectorMessageDirection;
@@ -70,6 +72,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 public class ConnectorJmsBackendMessageDeliveryListenerTest {
     private static final String MESSAGE_ID = "msg-001";
     private static final String BACKEND_NAME = "backend_alice";
+    private static final String BACKEND_MESSAGE_ID = "backend-message-id";
 
     @Mock
     private ConnectorMessageEvidenceRepository evidenceRepository;
@@ -157,6 +160,7 @@ public class ConnectorJmsBackendMessageDeliveryListenerTest {
             .backendName(BACKEND_NAME)
             .backendMessageIdentifier("backend-msg-001")
             .direction(ConnectorMessageDirection.GATEWAY_TO_BACKEND)
+            .status(ConnectorBusinessMessageStatus.CREATED)
             .as4Properties(as4Properties())
             .businessContent(businessContent())
             .attachments(List.of())
@@ -187,15 +191,30 @@ public class ConnectorJmsBackendMessageDeliveryListenerTest {
             .build();
     }
 
-    /**
-     * Stubs the common happy-path chain up to deliveryWebService.
-     */
-    private void stubHappyPath() {
-        when(backendServiceClient.createClient(any()))
-            .thenReturn(deliveryWebService);
+    private ConnectorLinkPartner pullLinkPartner() {
+        return linkPartner().toBuilder().senderMode(ConnectorLinkMode.PULL).build();
+    }
 
+    private ConnectorLinkPartner testLinkPartner() {
+        return linkPartner()
+            .toBuilder()
+            .name(
+                ConnectorLinkPartnerName.builder()
+                                        .name(ConnectorDefaults.DEFAULT_TEST_BACKEND_NAME)
+                                        .build()
+            )
+            .build();
+    }
+
+    private void stubDelivery(boolean accepted, String backendMessageIdentifier) {
+        when(backendServiceClient.createClient(any())).thenReturn(deliveryWebService);
         when(legacyMessageHelper.convertMessage(any()))
             .thenReturn(mock(DomibusConnectorMessageType.class));
+
+        var acknowledgement = mock(DomibsConnectorAcknowledgementType.class);
+        when(acknowledgement.isResult()).thenReturn(accepted);
+        when(acknowledgement.getMessageId()).thenReturn(backendMessageIdentifier);
+        when(deliveryWebService.deliverMessage(any())).thenReturn(acknowledgement);
     }
 
     @Nested
@@ -233,6 +252,17 @@ public class ConnectorJmsBackendMessageDeliveryListenerTest {
                 outboundEvidenceMessageReceiver
             );
         }
+
+        @Test
+        void should_look_up_the_link_partner_by_the_backend_name_of_the_message() {
+            when(linkPartnerProvider.findByName(any())).thenReturn(pullLinkPartner());
+
+            listener.handle(inboundMessage());
+
+            verify(linkPartnerProvider).findByName(
+                ConnectorLinkPartnerName.builder().name(BACKEND_NAME).build()
+            );
+        }
     }
 
     @Nested
@@ -241,15 +271,8 @@ public class ConnectorJmsBackendMessageDeliveryListenerTest {
         @Test
         void should_deliver_business_message_successfully() {
             ReflectionTestUtils.setField(listener, "autoTriggerDeliveryEvidences", true);
-            stubHappyPath();
+            stubDelivery(true, BACKEND_MESSAGE_ID);
             when(linkPartnerProvider.findByName(any())).thenReturn(linkPartner());
-            when(outboundEvidenceMessageReceiver.execute(any())).thenReturn(null);
-
-            var acknowledgement = mock(DomibsConnectorAcknowledgementType.class);
-            when(acknowledgement.isResult()).thenReturn(true);
-            when(acknowledgement.getMessageId()).thenReturn("backend-message-id");
-            when(deliveryWebService.deliverMessage(any())).thenReturn(acknowledgement);
-            when(registerMessageTransportStep.execute(any(), any())).thenReturn(any());
 
             var message = triggerBusinessMessage();
             listener.handle(message);
@@ -259,10 +282,11 @@ public class ConnectorJmsBackendMessageDeliveryListenerTest {
                 eq(ConnectorMessageTransportStatus.DELIVERED)
             );
             verify(messageRepository).setDeliveredToLinkPartnerAt(MESSAGE_ID);
-            verify(messageRepository).updateBackendIdentifier(
+            verify(messageRepository).updateStatus(
                 MESSAGE_ID,
-                "backend-message-id"
+                ConnectorBusinessMessageStatus.DELIVERED
             );
+            verify(messageRepository).updateBackendIdentifier(MESSAGE_ID, BACKEND_MESSAGE_ID);
             verify(messageRepository, never()).setAsRejected(any());
             verify(evidenceRepository).setDeliveredToLinkPartnerAt(
                 message.transportedEvidences().getFirst().uuid()
@@ -281,14 +305,8 @@ public class ConnectorJmsBackendMessageDeliveryListenerTest {
         @Test
         void should_deliver_business_message_without_auto_trigger_delivery_evidences() {
             ReflectionTestUtils.setField(listener, "autoTriggerDeliveryEvidences", false);
-            stubHappyPath();
+            stubDelivery(true, BACKEND_MESSAGE_ID);
             when(linkPartnerProvider.findByName(any())).thenReturn(linkPartner());
-
-            var acknowledgement = mock(DomibsConnectorAcknowledgementType.class);
-            when(acknowledgement.isResult()).thenReturn(true);
-            when(acknowledgement.getMessageId()).thenReturn("backend-message-id");
-            when(deliveryWebService.deliverMessage(any())).thenReturn(acknowledgement);
-            when(registerMessageTransportStep.execute(any(), any())).thenReturn(any());
 
             listener.handle(triggerBusinessMessage());
 
@@ -297,24 +315,19 @@ public class ConnectorJmsBackendMessageDeliveryListenerTest {
                 eq(ConnectorMessageTransportStatus.DELIVERED)
             );
             verify(messageRepository).setDeliveredToLinkPartnerAt(MESSAGE_ID);
-            verify(messageRepository).updateBackendIdentifier(
+            verify(messageRepository).updateStatus(
                 MESSAGE_ID,
-                "backend-message-id"
+                ConnectorBusinessMessageStatus.DELIVERED
             );
+            verify(messageRepository).updateBackendIdentifier(MESSAGE_ID, BACKEND_MESSAGE_ID);
             verify(outboundEvidenceMessageReceiver, never()).execute(any());
         }
 
         @Test
         void should_deliver_business_message_without_backend_identifier_when_acknowledgement_message_id_is_null() {
             ReflectionTestUtils.setField(listener, "autoTriggerDeliveryEvidences", false);
-            stubHappyPath();
+            stubDelivery(true, null);
             when(linkPartnerProvider.findByName(any())).thenReturn(linkPartner());
-
-            var acknowledgement = mock(DomibsConnectorAcknowledgementType.class);
-            when(acknowledgement.isResult()).thenReturn(true);
-            when(acknowledgement.getMessageId()).thenReturn(null);
-            when(deliveryWebService.deliverMessage(any())).thenReturn(acknowledgement);
-            when(registerMessageTransportStep.execute(any(), any())).thenReturn(any());
 
             listener.handle(triggerBusinessMessage());
 
@@ -323,20 +336,18 @@ public class ConnectorJmsBackendMessageDeliveryListenerTest {
                 eq(ConnectorMessageTransportStatus.DELIVERED)
             );
             verify(messageRepository).setDeliveredToLinkPartnerAt(MESSAGE_ID);
+            verify(messageRepository).updateStatus(
+                MESSAGE_ID,
+                ConnectorBusinessMessageStatus.DELIVERED
+            );
             verify(messageRepository, never()).updateBackendIdentifier(any(), any());
         }
 
         @Test
         void should_deliver_business_message_when_transported_evidences_is_empty() {
             ReflectionTestUtils.setField(listener, "autoTriggerDeliveryEvidences", false);
-            stubHappyPath();
+            stubDelivery(true, BACKEND_MESSAGE_ID);
             when(linkPartnerProvider.findByName(any())).thenReturn(linkPartner());
-
-            var acknowledgement = mock(DomibsConnectorAcknowledgementType.class);
-            when(acknowledgement.isResult()).thenReturn(true);
-            when(acknowledgement.getMessageId()).thenReturn("backend-message-id");
-            when(deliveryWebService.deliverMessage(any())).thenReturn(acknowledgement);
-            when(registerMessageTransportStep.execute(any(), any())).thenReturn(any());
 
             var message = inboundMessage()
                 .toBuilder()
@@ -350,21 +361,58 @@ public class ConnectorJmsBackendMessageDeliveryListenerTest {
                 eq(ConnectorMessageTransportStatus.DELIVERED)
             );
             verify(messageRepository).setDeliveredToLinkPartnerAt(MESSAGE_ID);
-            verify(messageRepository).updateBackendIdentifier(
-                MESSAGE_ID,
-                "backend-message-id"
+            verify(messageRepository).updateBackendIdentifier(MESSAGE_ID, BACKEND_MESSAGE_ID);
+            verify(evidenceRepository, never()).setDeliveredToLinkPartnerAt(any());
+        }
+
+        @Test
+        void should_deliver_business_message_when_transported_evidences_is_null() {
+            ReflectionTestUtils.setField(listener, "autoTriggerDeliveryEvidences", false);
+            stubDelivery(true, BACKEND_MESSAGE_ID);
+            when(linkPartnerProvider.findByName(any())).thenReturn(linkPartner());
+
+            var message = inboundMessage()
+                .toBuilder()
+                .transportedEvidences(null)
+                .build();
+
+            listener.handle(message);
+
+            verify(registerMessageTransportStep).execute(
+                any(),
+                eq(ConnectorMessageTransportStatus.DELIVERED)
             );
             verify(evidenceRepository, never()).setDeliveredToLinkPartnerAt(any());
         }
 
         @Test
-        void should_fail_when_business_message_transported_evidence_uuid_is_null() {
-            stubHappyPath();
+        void should_flag_every_transported_evidence_of_the_business_message_as_delivered() {
+            stubDelivery(true, BACKEND_MESSAGE_ID);
             when(linkPartnerProvider.findByName(any())).thenReturn(linkPartner());
 
-            var acknowledgement = mock(DomibsConnectorAcknowledgementType.class);
-            when(acknowledgement.isResult()).thenReturn(true);
-            when(deliveryWebService.deliverMessage(any())).thenReturn(acknowledgement);
+            var first = EvidenceTestFixtures.createSubmissionAcceptanceEvidence()
+                                            .toBuilder()
+                                            .uuid("evidence-uuid-1")
+                                            .build();
+            var second = EvidenceTestFixtures.createDeliveryEvidence()
+                                             .toBuilder()
+                                             .uuid("evidence-uuid-2")
+                                             .build();
+            var message = inboundMessage()
+                .toBuilder()
+                .transportedEvidences(List.of(first, second))
+                .build();
+
+            listener.handle(message);
+
+            verify(evidenceRepository).setDeliveredToLinkPartnerAt("evidence-uuid-1");
+            verify(evidenceRepository).setDeliveredToLinkPartnerAt("evidence-uuid-2");
+        }
+
+        @Test
+        void should_fail_when_business_message_transported_evidence_uuid_is_null() {
+            stubDelivery(true, null);
+            when(linkPartnerProvider.findByName(any())).thenReturn(linkPartner());
 
             var evidenceWithNullUuid = EvidenceTestFixtures
                 .createSubmissionAcceptanceEvidence()
@@ -379,17 +427,32 @@ public class ConnectorJmsBackendMessageDeliveryListenerTest {
             assertThatThrownBy(() -> listener.handle(message))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("The evidence message contains no transported evidence");
+
+            verifyNoInteractions(registerMessageTransportStep);
+            verify(evidenceRepository, never()).setDeliveredToLinkPartnerAt(any());
+        }
+
+        @Test
+        void should_propagate_the_failure_when_triggering_the_delivery_evidence_fails() {
+            ReflectionTestUtils.setField(listener, "autoTriggerDeliveryEvidences", true);
+            stubDelivery(true, BACKEND_MESSAGE_ID);
+            when(linkPartnerProvider.findByName(any())).thenReturn(linkPartner());
+            doThrow(new IllegalStateException("evidence generation failed"))
+                .when(outboundEvidenceMessageReceiver).execute(any());
+
+            assertThatThrownBy(() -> listener.handle(triggerBusinessMessage()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("evidence generation failed");
+
+            verifyNoInteractions(registerMessageTransportStep);
+            verify(messageRepository, never()).setDeliveredToLinkPartnerAt(any());
+            verify(messageRepository, never()).updateStatus(any(), any());
         }
 
         @Test
         void should_deliver_evidence_message_successfully() {
-            stubHappyPath();
+            stubDelivery(true, null);
             when(linkPartnerProvider.findByName(any())).thenReturn(linkPartner());
-
-            var acknowledgement = mock(DomibsConnectorAcknowledgementType.class);
-            when(acknowledgement.isResult()).thenReturn(true);
-            when(deliveryWebService.deliverMessage(any())).thenReturn(acknowledgement);
-            when(registerMessageTransportStep.execute(any(), any())).thenReturn(any());
 
             var message = triggerEvidenceMessage();
             listener.handle(message);
@@ -402,6 +465,7 @@ public class ConnectorJmsBackendMessageDeliveryListenerTest {
                 eq(ConnectorMessageTransportStatus.DELIVERED)
             );
             verify(messageRepository, never()).setDeliveredToLinkPartnerAt(any());
+            verify(messageRepository, never()).updateStatus(any(), any());
             verify(messageRepository, never()).updateBackendIdentifier(any(), any());
             verify(messageRepository, never()).setAsRejected(any());
             verify(outboundEvidenceMessageReceiver, never()).execute(any());
@@ -409,12 +473,8 @@ public class ConnectorJmsBackendMessageDeliveryListenerTest {
 
         @Test
         void should_fail_when_evidence_message_transported_evidence_uuid_is_null() {
-            stubHappyPath();
+            stubDelivery(true, null);
             when(linkPartnerProvider.findByName(any())).thenReturn(linkPartner());
-
-            var acknowledgement = mock(DomibsConnectorAcknowledgementType.class);
-            when(acknowledgement.isResult()).thenReturn(true);
-            when(deliveryWebService.deliverMessage(any())).thenReturn(acknowledgement);
 
             var evidenceWithNullUuid = EvidenceTestFixtures
                 .createSubmissionAcceptanceEvidence()
@@ -429,17 +489,14 @@ public class ConnectorJmsBackendMessageDeliveryListenerTest {
             assertThatThrownBy(() -> listener.handle(message))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("The evidence message contains no transported evidence");
+
+            verifyNoInteractions(registerMessageTransportStep);
         }
 
         @Test
         void should_mark_business_message_as_rejected_when_backend_rejects_it() {
-            stubHappyPath();
+            stubDelivery(false, null);
             when(linkPartnerProvider.findByName(any())).thenReturn(linkPartner());
-
-            var acknowledgement = mock(DomibsConnectorAcknowledgementType.class);
-            when(acknowledgement.isResult()).thenReturn(false);
-            when(deliveryWebService.deliverMessage(any())).thenReturn(acknowledgement);
-            when(registerMessageTransportStep.execute(any(), any())).thenReturn(any());
 
             listener.handle(triggerBusinessMessage());
 
@@ -449,18 +506,15 @@ public class ConnectorJmsBackendMessageDeliveryListenerTest {
             );
             verify(messageRepository).setAsRejected(MESSAGE_ID);
             verify(messageRepository, never()).setDeliveredToLinkPartnerAt(any());
+            verify(messageRepository, never()).updateStatus(any(), any());
             verify(evidenceRepository, never()).setDeliveredToLinkPartnerAt(any());
+            verify(outboundEvidenceMessageReceiver, never()).execute(any());
         }
 
         @Test
         void should_mark_evidence_message_as_failed_when_backend_rejects_it() {
-            stubHappyPath();
+            stubDelivery(false, null);
             when(linkPartnerProvider.findByName(any())).thenReturn(linkPartner());
-
-            var acknowledgement = mock(DomibsConnectorAcknowledgementType.class);
-            when(acknowledgement.isResult()).thenReturn(false);
-            when(deliveryWebService.deliverMessage(any())).thenReturn(acknowledgement);
-            when(registerMessageTransportStep.execute(any(), any())).thenReturn(any());
 
             listener.handle(triggerEvidenceMessage());
 
@@ -475,11 +529,12 @@ public class ConnectorJmsBackendMessageDeliveryListenerTest {
 
         @Test
         void should_mark_delivery_as_failed_when_backend_submission_throws_exception() {
-            stubHappyPath();
+            when(backendServiceClient.createClient(any())).thenReturn(deliveryWebService);
+            when(legacyMessageHelper.convertMessage(any()))
+                .thenReturn(mock(DomibusConnectorMessageType.class));
             when(linkPartnerProvider.findByName(any())).thenReturn(linkPartner());
             when(deliveryWebService.deliverMessage(any()))
                 .thenThrow(new RuntimeException());
-            when(registerMessageTransportStep.execute(any(), any())).thenReturn(any());
 
             assertThatNoException()
                 .isThrownBy(() -> listener.handle(triggerBusinessMessage()));
@@ -493,6 +548,40 @@ public class ConnectorJmsBackendMessageDeliveryListenerTest {
             verify(messageRepository, never()).updateBackendIdentifier(any(), any());
             verify(messageRepository, never()).setAsRejected(any());
         }
+
+        @Test
+        void should_mark_delivery_as_failed_when_the_backend_client_cannot_be_created() {
+            when(linkPartnerProvider.findByName(any())).thenReturn(linkPartner());
+            when(backendServiceClient.createClient(any()))
+                .thenThrow(new IllegalStateException("no endpoint"));
+
+            assertThatNoException()
+                .isThrownBy(() -> listener.handle(triggerBusinessMessage()));
+
+            verify(registerMessageTransportStep).execute(
+                any(),
+                eq(ConnectorMessageTransportStatus.FAILED)
+            );
+            verifyNoInteractions(legacyMessageHelper);
+            verifyNoInteractions(messageRepository, evidenceRepository);
+        }
+
+        @Test
+        void should_mark_delivery_as_failed_when_the_message_conversion_fails() {
+            when(linkPartnerProvider.findByName(any())).thenReturn(linkPartner());
+            when(backendServiceClient.createClient(any())).thenReturn(deliveryWebService);
+            when(legacyMessageHelper.convertMessage(any()))
+                .thenThrow(new IllegalArgumentException("cannot convert"));
+
+            assertThatNoException()
+                .isThrownBy(() -> listener.handle(triggerBusinessMessage()));
+
+            verify(registerMessageTransportStep).execute(
+                any(),
+                eq(ConnectorMessageTransportStatus.FAILED)
+            );
+            verifyNoInteractions(deliveryWebService, messageRepository, evidenceRepository);
+        }
     }
 
     @Nested
@@ -500,22 +589,17 @@ public class ConnectorJmsBackendMessageDeliveryListenerTest {
     class PullDelivery {
         @Test
         void should_make_business_message_ready_for_download() {
-            var linkPartner = linkPartner()
-                .toBuilder()
-                .senderMode(ConnectorLinkMode.PULL)
-                .build();
-
-            when(linkPartnerProvider.findByName(any())).thenReturn(linkPartner);
-            when(registerMessageTransportStep.execute(any(), any())).thenReturn(any());
+            when(linkPartnerProvider.findByName(any())).thenReturn(pullLinkPartner());
 
             listener.handle(triggerBusinessMessage());
 
             verify(registerMessageTransportStep).execute(
                 any(),
-                eq(ConnectorMessageTransportStatus.READY_FOR_DOWNLOAD)
+                eq(ConnectorMessageTransportStatus.READY_FOR_PULL)
             );
             verify(messageRepository, never()).setDeliveredToLinkPartnerAt(any());
             verify(messageRepository, never()).updateBackendIdentifier(any(), any());
+            verify(messageRepository, never()).updateStatus(any(), any());
             verify(messageRepository, never()).setAsRejected(any());
             verifyNoInteractions(
                 backendServiceClient,
@@ -527,19 +611,13 @@ public class ConnectorJmsBackendMessageDeliveryListenerTest {
 
         @Test
         void should_make_evidence_message_ready_for_download() {
-            var linkPartner = linkPartner()
-                .toBuilder()
-                .senderMode(ConnectorLinkMode.PULL)
-                .build();
-
-            when(linkPartnerProvider.findByName(any())).thenReturn(linkPartner);
-            when(registerMessageTransportStep.execute(any(), any())).thenReturn(any());
+            when(linkPartnerProvider.findByName(any())).thenReturn(pullLinkPartner());
 
             listener.handle(triggerEvidenceMessage());
 
             verify(registerMessageTransportStep).execute(
                 any(),
-                eq(ConnectorMessageTransportStatus.READY_FOR_DOWNLOAD)
+                eq(ConnectorMessageTransportStatus.READY_FOR_PULL)
             );
             verify(evidenceRepository, never()).setDeliveredToLinkPartnerAt(any());
             verifyNoInteractions(
@@ -557,16 +635,7 @@ public class ConnectorJmsBackendMessageDeliveryListenerTest {
         @Test
         void should_deliver_test_business_message() {
             ReflectionTestUtils.setField(listener, "autoTriggerDeliveryEvidences", false);
-            var linkPartner = linkPartner()
-                .toBuilder()
-                .name(
-                    ConnectorLinkPartnerName.builder()
-                                            .name(ConnectorDefaults.DEFAULT_TEST_BACKEND_NAME)
-                                            .build()
-                )
-                .build();
-            when(linkPartnerProvider.findByName(any())).thenReturn(linkPartner);
-            when(registerMessageTransportStep.execute(any(), any())).thenReturn(any());
+            when(linkPartnerProvider.findByName(any())).thenReturn(testLinkPartner());
 
             var message = inboundMessage()
                 .toBuilder()
@@ -575,12 +644,20 @@ public class ConnectorJmsBackendMessageDeliveryListenerTest {
 
             listener.handle(message);
 
+            var backendIdentifierCaptor = ArgumentCaptor.forClass(String.class);
             verify(registerMessageTransportStep).execute(
                 any(),
                 eq(ConnectorMessageTransportStatus.DELIVERED)
             );
             verify(messageRepository).setDeliveredToLinkPartnerAt(MESSAGE_ID);
-            verify(messageRepository).updateBackendIdentifier(eq(MESSAGE_ID), any());
+            verify(messageRepository).updateStatus(
+                MESSAGE_ID,
+                ConnectorBusinessMessageStatus.DELIVERED
+            );
+            verify(messageRepository).updateBackendIdentifier(
+                eq(MESSAGE_ID),
+                backendIdentifierCaptor.capture()
+            );
             verify(evidenceRepository).setDeliveredToLinkPartnerAt(
                 message.transportedEvidences().getFirst().uuid()
             );
@@ -592,17 +669,30 @@ public class ConnectorJmsBackendMessageDeliveryListenerTest {
         }
 
         @Test
-        void should_deliver_test_evidence_message() {
-            var linkPartner = linkPartner()
+        void should_trigger_the_delivery_evidence_for_a_test_business_message_when_auto_trigger_is_enabled() {
+            ReflectionTestUtils.setField(listener, "autoTriggerDeliveryEvidences", true);
+            when(linkPartnerProvider.findByName(any())).thenReturn(testLinkPartner());
+
+            var message = inboundMessage()
                 .toBuilder()
-                .name(
-                    ConnectorLinkPartnerName.builder()
-                                            .name(ConnectorDefaults.DEFAULT_TEST_BACKEND_NAME)
-                                            .build()
-                )
+                .backendName(ConnectorDefaults.DEFAULT_TEST_BACKEND_NAME)
                 .build();
-            when(linkPartnerProvider.findByName(any())).thenReturn(linkPartner);
-            when(registerMessageTransportStep.execute(any(), any())).thenReturn(any());
+
+            listener.handle(message);
+
+            var commandCaptor =
+                ArgumentCaptor.forClass(ConnectorOutboundEvidenceMessageCommand.class);
+            verify(outboundEvidenceMessageReceiver).execute(commandCaptor.capture());
+            assertThat(commandCaptor.getValue().evidenceType())
+                .isEqualTo(ConnectorEvidenceType.DELIVERY);
+            assertThat(commandCaptor.getValue().backendName())
+                .isEqualTo(ConnectorDefaults.DEFAULT_TEST_BACKEND_NAME);
+            verifyNoInteractions(backendServiceClient, legacyMessageHelper);
+        }
+
+        @Test
+        void should_deliver_test_evidence_message() {
+            when(linkPartnerProvider.findByName(any())).thenReturn(testLinkPartner());
 
             var message = triggerEvidenceMessage()
                 .toBuilder()

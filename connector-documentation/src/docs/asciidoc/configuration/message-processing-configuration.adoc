@@ -18,6 +18,7 @@ These settings influence how messages are created, validated, tracked, and excha
 
 == Basic configuration
 Configuration is provided via `application.properties` under the `+connector.message-processing.*+` prefix.
+All properties are optional: when a property is not set, its default value is used.
 
 .Message Processing Configuration Properties
 [cols="35,40,10,15", options="header"]
@@ -40,30 +41,29 @@ Configuration is provided via `application.properties` under the `+connector.mes
 | `true/false`. By default, set to *true*
 
 | `connector.message-processing.ebms-id-suffix`
-| Domain suffix appended when generating ebMS message IDs (formatted as `<uuid>@<suffix>`, similar to an e-mail Message-ID). Only takes effect when the generator above is enabled.
+| Domain suffix appended when generating ebMS message IDs (formatted as `<uuid>@<suffix>`, similar to an e-mail Message-ID). Only takes effect when the generator above is enabled. Must not be blank.
 | Yes
 | `connector.<your-organisation>.example`
 
 | `connector.message-processing.identifier-suffix`
-| Domain suffix used when generating connector message identifiers.
+| Domain suffix used when generating connector message identifiers. Must not be blank.
 | Yes
 | `connector.<your-organisation>.example`
 
 | `connector.message-processing.transport-id-suffix`
-| Domain suffix used for transport step identifiers.
+| Domain suffix used for transport step identifiers. Must not be blank.
 | Yes
 | `connector.<your-organisation>.example`
 
-| `connector.message-processing.outbound-message-verification-mode`
+| `connector.message-processing.outbound-verification-mode`
 | How strictly outbound messages (backend → gateway) are verified against the processing mode before being sent.
 | Yes
 | `STRICT/RELAXED`. By default, set to *STRICT*.
 
-| `connector.message-processing.inbound-message-verification-mode`
+| `connector.message-processing.inbound-verification-mode`
 | How strictly inbound messages (gateway → backend) are verified against the processing mode upon receipt.
 | Yes
 | `STRICT/RELAXED`. By default, set to *RELAXED*.
-
 |===
 
 For verification mode:
@@ -74,10 +74,14 @@ For verification mode:
 
 NOTE: In the current implementation *RELAXED* performs more checks than *STRICT* (party verification). This is expected to be revisited; check the release notes before relying on it.
 
-WARNING: Earlier versions of this guide and of the template used `outbound-verification-mode` and `inbound-verification-mode`.
-These names are not bound by the connector and are silently ignored; use the names above.
+WARNING: Do not write the names as `outbound-message-verification-mode` or `inbound-message-verification-mode`: the connector does not bind them and silently ignores them.
 
 The three suffix properties default to `connector.ecodex.eu`, which is also the value of the template. Replace it with a domain name of your organisation, so that generated identifiers are unique across connectors and traceable to your deployment.
+
+NOTE: The configuration is validated at startup. An empty value (for example
+`connector.message-processing.ebms-id-suffix=`) counts as set to blank and stops the connector.
+Remove or comment out the line to use the default. An invalid verification mode value
+(for example `STRICTT`) also stops the startup.
 
 .Configuration Example
 [source,properties]
@@ -88,6 +92,6 @@ connector.message-processing.ebms-id-generator-enabled=true
 connector.message-processing.ebms-id-suffix=connector.<your-organisation>.example
 connector.message-processing.identifier-suffix=connector.<your-organisation>.example
 connector.message-processing.transport-id-suffix=connector.<your-organisation>.example
-connector.message-processing.outbound-message-verification-mode=STRICT
-connector.message-processing.inbound-message-verification-mode=RELAXED
+connector.message-processing.outbound-verification-mode=STRICT
+connector.message-processing.inbound-verification-mode=RELAXED
 ----

@@ -13,15 +13,15 @@ package eu.ecodex.connector;
 import eu.ecodex.connector.infrastructure.config.BeanConfig;
 import eu.ecodex.connector.infrastructure.config.DatabaseConfig;
 import eu.ecodex.connector.infrastructure.config.DssConfig;
-import eu.ecodex.connector.infrastructure.config.RepositoryConfig;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Import;
 
 
-@Import({DssConfig.class, DatabaseConfig.class, RepositoryConfig.class, BeanConfig.class})
+@Import({DssConfig.class, DatabaseConfig.class, BeanConfig.class})
 @ComponentScan(
     basePackages = {
         "eu.ecodex.connector.domain",
+        "eu.ecodex.connector.infrastructure.helper",
         "eu.ecodex.connector.infrastructure.config.property",
         "eu.ecodex.connector.infrastructure.adapter.out.provider",
         "eu.ecodex.connector.infrastructure.adapter.out.dss",

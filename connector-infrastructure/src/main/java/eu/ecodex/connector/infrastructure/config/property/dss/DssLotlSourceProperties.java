@@ -11,9 +11,11 @@
 package eu.ecodex.connector.infrastructure.config.property.dss;
 
 import eu.ecodex.connector.infrastructure.config.property.common.KeystoreProperties;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
 /**
  * Configuration properties for the LOTL source.
@@ -26,14 +28,19 @@ public class DssLotlSourceProperties {
      */
     @NotBlank
     private String lotlUrl = "https://ec.europa.eu/tools/lotl/eu-lotl.xml";
+
     /**
      * OJ announcement URI for signing certificate validation.
      */
     @NotBlank
     private String signingCertificatesAnnouncementUri = "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=uriserv:OJ.C_.2019.276.01.0001.01.ENG";
+
     /**
      * Whether pivot LOTL support is enabled.
      */
     private boolean pivotSupport = true;
+
+    @Valid
+    @NestedConfigurationProperty
     private KeystoreProperties signingCerts;
 }

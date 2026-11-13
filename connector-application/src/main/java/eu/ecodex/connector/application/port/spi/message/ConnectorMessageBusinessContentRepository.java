@@ -50,4 +50,21 @@ public interface ConnectorMessageBusinessContentRepository {
      */
     ConnectorMessageBusinessContent assignBusinessDocument(
         @Nonnull String uuid, @Nonnull ConnectorMessageBusinessDocument document);
+
+
+    /**
+     * Deletes the business content of the message identified by the given identifier, together with
+     * its assigned business document.
+     *
+     * <p>The business content and business document records are physically removed, not flagged
+     * as deleted. The files they refer to (stored as attachments) and the message itself are not
+     * affected, and nothing happens if the message has no business content. This is part of
+     * deleting a message once its attachments and business content are no longer needed (see
+     * {@link ConnectorMessageRepository#setAsDeleted}).
+     *
+     * @param messageIdentifier the unique identifier of the message whose business content is
+     *                          deleted (must not be null)
+     */
+
+    void deleteByMessageIdentifier(@Nonnull String messageIdentifier);
 }

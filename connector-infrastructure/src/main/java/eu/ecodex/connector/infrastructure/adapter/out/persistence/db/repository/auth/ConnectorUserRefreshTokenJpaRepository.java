@@ -75,11 +75,12 @@ public interface ConnectorUserRefreshTokenJpaRepository
     @Modifying
     @Transactional
     @Query("""
-        update ConnectorRefreshTokenEntity rt
-           set rt.revoked = true, rt.revokedAt= :now
-         where rt.user.uuid = :userUuid
-           and rt.revoked = false
-        """)
+        UPDATE ConnectorRefreshTokenEntity rt
+           SET rt.revoked = true, rt.revokedAt= :now
+         WHERE rt.user.uuid = :userUuid
+           AND rt.revoked = false
+        """
+    )
     @EntityGraph(attributePaths = {"user", "user.roles"})
     int revokeAllActiveByUserId(@Param("userUuid") @Nonnull String userUuid,
                                 @Param("now") Instant now);

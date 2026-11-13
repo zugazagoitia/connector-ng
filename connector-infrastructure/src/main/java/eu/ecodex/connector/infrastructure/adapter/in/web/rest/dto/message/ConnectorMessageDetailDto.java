@@ -11,6 +11,7 @@
 package eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.message;
 
 import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessage;
+import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessageStatus;
 import eu.ecodex.connector.domain.model.message.ConnectorEvidenceMessage;
 import eu.ecodex.connector.domain.model.message.ConnectorMessageAS4Properties;
 import eu.ecodex.connector.domain.model.message.ConnectorMessageDirection;
@@ -29,31 +30,26 @@ import lombok.Builder;
 /**
  * Detailed representation of a connector message exchanged between a backend system and a gateway.
  *
- * @param businessDomainIdentifier            identifier of the business domain to which the message
- *                                            belongs
- * @param identifier                          unique identifier of the connector message
- * @param backendMessageIdentifier            identifier assigned to the message by the backend
- *                                            system
- * @param backendName                         name of the backend system associated with the
- *                                            message
- * @param gatewayName                         name of the gateway responsible for transmitting or
- *                                            receiving the message
- * @param businessContent                     business content of the message
- * @param as4Properties                       AS4-specific metadata and properties associated with
- *                                            the message
- * @param direction                           direction of the message flow (e.g., inbound or
- *                                            outbound)
- * @param isBusiness                          indicates whether the message is a business message
- * @param createdAt                           timestamp when the message was created
- * @param updatedAt                           timestamp when the message was last updated
- * @param deletedAt                           timestamp when the message was deleted
- * @param rejectedAt                          timestamp when the message was rejected
- * @param confirmedAt                         timestamp when the message was confirmed
- * @param attachments                         list of attachments associated with the message
- * @param evidences                           list of evidences related to message processing or
- *                                            delivery
- * @param errors                              list of processing or delivery errors associated with
- *                                            the message
+ * @param businessDomainIdentifier identifier of the business domain to which the message belongs
+ * @param identifier               unique identifier of the connector message
+ * @param backendMessageIdentifier identifier assigned to the message by the backend system
+ * @param backendName              name of the backend system associated with the message
+ * @param gatewayName              name of the gateway responsible for transmitting or receiving the
+ *                                 message
+ * @param businessContent          business content of the message
+ * @param as4Properties            AS4-specific metadata and properties associated with the message
+ * @param direction                direction of the message flow (e.g., inbound or outbound)
+ * @param status                   current {@link ConnectorBusinessMessageStatus} of the message
+ * @param isBusiness               indicates whether the message is a business message
+ * @param createdAt                timestamp when the message was created
+ * @param updatedAt                timestamp when the message was last updated
+ * @param deletedAt                timestamp when the message was deleted
+ * @param rejectedAt               timestamp when the message was rejected
+ * @param confirmedAt              timestamp when the message was confirmed
+ * @param attachments              list of attachments associated with the message
+ * @param evidences                list of evidences related to message processing or delivery
+ * @param errors                   list of processing or delivery errors associated with the
+ *                                 message
  */
 @Builder
 public record ConnectorMessageDetailDto(
@@ -65,6 +61,7 @@ public record ConnectorMessageDetailDto(
     ConnectorMessageBusinessContent businessContent,
     ConnectorMessageAS4Properties as4Properties,
     ConnectorMessageDirection direction,
+    ConnectorBusinessMessageStatus status,
     boolean isBusiness,
     Instant createdAt,
     Instant updatedAt,
@@ -102,6 +99,7 @@ public record ConnectorMessageDetailDto(
             .identifier(message.identifier())
             .backendMessageIdentifier(message.backendMessageIdentifier())
             .direction(Objects.requireNonNull(message.direction()))
+            .status(message.status())
             .isBusiness(true)
             .backendName(message.backendName())
             .gatewayName(message.gatewayName())

@@ -69,7 +69,7 @@ public class ConnectorDownloadAttachmentsIT extends AbstractIntegrationTest {
     @WithAttachmentData
     void should_failed_when_attachment_is_not_found() {
         apiClient.get()
-            .uri("/api/v1/admin/attachments/unknown-ide/download")
+            .uri("/api/v1/admin/attachments/unknown-id/download")
             .header(HttpHeaders.AUTHORIZATION, "Bearer " + generateDefaultAdminToken())
             .exchange()
             .expectStatus().is4xxClientError()
@@ -78,6 +78,21 @@ public class ConnectorDownloadAttachmentsIT extends AbstractIntegrationTest {
                 assert response != null;
                 assertThat(response.status()).isEqualTo(404);
             });
+    }
+
+    @Test
+    @WithAttachmentData
+    void should_failed_when_is_deleted_from_the_storage() {
+        apiClient.get()
+                 .uri("/api/v1/admin/attachments/f07d1bfd-685a-4fee-b70d-a582cd0711c7_test_attachment/download")
+                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + generateDefaultAdminToken())
+                 .exchange()
+                 .expectStatus().is4xxClientError()
+                 .expectBody(ErrorResponse.class)
+                 .value(response -> {
+                     assert response != null;
+                     assertThat(response.status()).isEqualTo(409);
+                 });
     }
 
     @Test

@@ -17,13 +17,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import eu.ecodex.connector.application.exception.message.ConnectorMessageAttachmentException;
-import eu.ecodex.connector.application.exception.message.ConnectorMessageAttachmentNotFoundException;
+import eu.ecodex.connector.application.exception.attachment.ConnectorMessageAttachmentDeletedException;
+import eu.ecodex.connector.application.exception.attachment.ConnectorMessageAttachmentException;
+import eu.ecodex.connector.application.exception.attachment.ConnectorMessageAttachmentNotFoundException;
 import eu.ecodex.connector.application.port.spi.ConnectorFileStorageProvider;
 import eu.ecodex.connector.application.port.spi.message.ConnectorMessageAttachmentRepository;
-import eu.ecodex.connector.application.service.attachement.ConnectorDownloadAttachmentService;
 import eu.ecodex.connector.domain.model.message.attachment.ConnectorMessageAttachment;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -83,8 +84,20 @@ class ConnectorDownloadAttachmentsServiceTest {
             when(attachmentRepository.findByIdentifier(INPUT_IDENTIFIER)).thenReturn(null);
 
             assertThatThrownBy(() -> service.execute(INPUT_IDENTIFIER))
-                .isInstanceOf(ConnectorMessageAttachmentNotFoundException.class)
-                .hasMessage("Attachment not found");
+                .isInstanceOf(ConnectorMessageAttachmentNotFoundException.class);
+
+            verifyNoInteractions(storageProvider);
+        }
+
+        @Test
+        void should_throw_deletion_exception_when_attachment_has_been_deleted_from_storage() {
+            var attachment = anAttachment().toBuilder()
+                                           .deletedAt(Instant.now().minusSeconds(1000))
+                                           .build();
+            when(attachmentRepository.findByIdentifier(INPUT_IDENTIFIER)).thenReturn(attachment);
+
+            assertThatThrownBy(() -> service.execute(INPUT_IDENTIFIER))
+                .isInstanceOf(ConnectorMessageAttachmentDeletedException.class);
 
             verifyNoInteractions(storageProvider);
         }
@@ -96,8 +109,7 @@ class ConnectorDownloadAttachmentsServiceTest {
             when(storageProvider.findByIdentifier(STORAGE_IDENTIFIER)).thenReturn(null);
 
             assertThatThrownBy(() -> service.execute(INPUT_IDENTIFIER))
-                .isInstanceOf(ConnectorMessageAttachmentException.class)
-                .hasMessage("Attachment is no longer available in the storage");
+                .isInstanceOf(ConnectorMessageAttachmentException.class);
         }
     }
 }

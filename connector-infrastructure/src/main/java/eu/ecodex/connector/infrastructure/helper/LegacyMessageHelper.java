@@ -19,6 +19,7 @@ import eu.ecodex.connector.domain.model.message.ConnectorMessageError;
 import eu.ecodex.connector.domain.model.message.attachment.ConnectorAttachmentType;
 import eu.ecodex.connector.domain.model.message.content.ConnectorMessageBusinessContent;
 import eu.ecodex.connector.domain.model.message.content.ConnectorMessageBusinessDocument;
+import eu.ecodex.connector.domain.model.message.content.DetachedSignatureMimeType;
 import eu.ecodex.connector.domain.model.message.evidence.ConnectorMessageEvidence;
 import eu.ecodex.connector.domain.model.pmode.ConnectorProcessingModeParty;
 import eu.ecodex.connector.domain.transition.DomibusConnectorActionType;
@@ -159,15 +160,15 @@ public class LegacyMessageHelper {
             return null;
         }
 
-        var data = this.fileStorageProvider.findByIdentifier(document.attachment().identifier());
+        var data = this.fileStorageProvider.findByIdentifier(document.content().identifier());
 
         var documentType = new DomibusConnectorMessageDocumentType();
-        documentType.setDocumentName(document.attachment().name());
+        documentType.setDocumentName(document.content().name());
         documentType.setDocument(
             new DataHandler(
                 new ByteArrayDataSource(
                     Arrays.copyOf(data, data.length),
-                    document.attachment().contentType()
+                    document.content().contentType()
                 )
             )
         );
@@ -178,16 +179,20 @@ public class LegacyMessageHelper {
             );
         }
 
-        if (document.detachedSignature() != null) {
-            var detachedSignature = new DomibusConnectorDetachedSignatureType();
-            detachedSignature.setMimeType(
-                DomibusConnectorDetachedSignatureMimeType.fromValue(document.detachedSignature()
-                                                                            .mimeType()
-                                                                            .name())
+        var detachedSignature = document.detachedSignature();
+
+        if (detachedSignature != null) {
+            var detachedSignatureType = new DomibusConnectorDetachedSignatureType();
+            var mimeType = DomibusConnectorDetachedSignatureMimeType.fromValue(
+                DetachedSignatureMimeType.fromMimeType(detachedSignature.contentType()).toString()
             );
-            detachedSignature.setDetachedSignatureName(document.detachedSignature().name());
-            detachedSignature.setDetachedSignature(document.detachedSignature().signature());
-            documentType.setDetachedSignature(detachedSignature);
+            detachedSignatureType.setMimeType(mimeType);
+            detachedSignatureType.setDetachedSignatureName(document.detachedSignature().name());
+
+            var content = this.fileStorageProvider.findByIdentifier(detachedSignature.identifier());
+
+            detachedSignatureType.setDetachedSignature(content);
+            documentType.setDetachedSignature(detachedSignatureType);
         }
 
         return documentType;
@@ -203,7 +208,7 @@ public class LegacyMessageHelper {
             )
         );
 
-        return attachments.stream().map((attachment) -> {
+        return attachments.stream().map(attachment -> {
             var data = this.fileStorageProvider.findByIdentifier(attachment.identifier());
             var attachmentType = new DomibusConnectorMessageAttachmentType();
             attachmentType.setIdentifier(attachment.identifier());

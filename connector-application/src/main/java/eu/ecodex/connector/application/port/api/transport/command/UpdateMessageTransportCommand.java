@@ -12,6 +12,7 @@ package eu.ecodex.connector.application.port.api.transport.command;
 
 import eu.ecodex.connector.domain.model.message.ConnectorMessageError;
 import eu.ecodex.connector.domain.model.message.transport.ConnectorMessageTransportStatus;
+import jakarta.annotation.Nonnull;
 import java.util.List;
 import lombok.Builder;
 
@@ -32,8 +33,8 @@ import lombok.Builder;
 public record UpdateMessageTransportCommand(
     // e.g.: backend system message id
     String remoteMessageIdentifier,
-    String linkPartnerName,
-    ConnectorMessageTransportStatus status,
+    @Nonnull String linkPartnerName,
+    @Nonnull ConnectorMessageTransportStatus status,
     List<ConnectorMessageError> errors
 ) {
 }

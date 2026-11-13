@@ -20,7 +20,6 @@ import lombok.Setter;
 @Getter
 @Setter
 public class PostalAddressProperties {
-
     @NotBlank
     private String street;
 

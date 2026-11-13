@@ -19,6 +19,7 @@ import eu.ecodex.connector.application.port.api.pmode.ConnectorProcessingModeVer
 import eu.ecodex.connector.application.port.spi.ConnectorMessageEventPublisher;
 import eu.ecodex.connector.application.port.spi.ConnectorMessageProcessingConfigurationProvider;
 import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessage;
+import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessageStatus;
 import eu.ecodex.connector.domain.model.message.ConnectorMessageDirection;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -82,6 +83,7 @@ public class ConnectorInboundBusinessMessageReceiverService implements
             .gatewayName(command.gatewayName())
             .as4Properties(command.as4Properties())
             .direction(ConnectorMessageDirection.GATEWAY_TO_BACKEND)
+            .status(ConnectorBusinessMessageStatus.CREATED)
             .businessContent(command.businessContent())
             .attachments(command.attachments())
             .transportedEvidences(command.transportedEvidences())

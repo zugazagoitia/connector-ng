@@ -13,9 +13,11 @@ package eu.ecodex.connector.infrastructure.adapter.out.persistence.adapter.messa
 import eu.ecodex.connector.application.port.spi.message.ConnectorMessageAS4PropertiesRepository;
 import eu.ecodex.connector.application.port.spi.message.ConnectorMessageBusinessContentRepository;
 import eu.ecodex.connector.application.port.spi.message.ConnectorMessageRepository;
+import eu.ecodex.connector.application.port.spi.message.ConnectorMessageTransportStepRepository;
 import eu.ecodex.connector.domain.model.businessdomain.ConnectorBusinessDomainIdentifier;
 import eu.ecodex.connector.domain.model.filter.ConnectorMessagesListFilter;
 import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessage;
+import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessageStatus;
 import eu.ecodex.connector.domain.model.message.ConnectorMessageAS4Properties;
 import eu.ecodex.connector.domain.model.message.ConnectorMessageDirection;
 import eu.ecodex.connector.domain.model.message.ConnectorMessageError;
@@ -45,18 +47,22 @@ import java.util.List;
 import java.util.Set;
 import lombok.NonNull;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * RDBMS implementation of {@link ConnectorMessageRepository}.
  */
 @Component
+@Transactional(readOnly = true)
 public class ConnectorDBMessageRepository implements ConnectorMessageRepository {
     private final ConnectorMessageJpaRepository messageJpaRepository;
     private final ConnectorMessageAS4PropertiesJpaRepository as4PropertiesJpaRepository;
     private final ConnectorBusinessDomainJpaRepository businessDomainJpaRepository;
     private final ConnectorMessageAS4PropertiesRepository as4PropertiesRepository;
     private final ConnectorMessageBusinessContentRepository messageBusinessContentRepository;
+    private final ConnectorMessageTransportStepRepository transportStepRepository;
     private final PaginationMapper paginationMapper;
+
     @PersistenceContext
     private EntityManager entityManager;
 
@@ -72,6 +78,8 @@ public class ConnectorDBMessageRepository implements ConnectorMessageRepository 
      * @param as4PropertiesRepository          JPA repository responsible for managing
      *                                         {@code ConnectorMessageAS4Properties} entities.
      * @param messageBusinessContentRepository JPA repository responsible for managing
+     * @param transportStepRepository          the repository used to read and delete the transport
+     *                                         steps of a message (must not be nul
      * @param paginationMapper                 the utility for mapping between page requests and
      *                                         results
      */
@@ -81,12 +89,14 @@ public class ConnectorDBMessageRepository implements ConnectorMessageRepository 
         ConnectorMessageAS4PropertiesJpaRepository as4PropertiesJpaRepository,
         ConnectorMessageAS4PropertiesRepository as4PropertiesRepository,
         ConnectorMessageBusinessContentRepository messageBusinessContentRepository,
+        ConnectorMessageTransportStepRepository transportStepRepository,
         PaginationMapper paginationMapper) {
         this.messageJpaRepository = messageJpaRepository;
         this.as4PropertiesJpaRepository = as4PropertiesJpaRepository;
         this.businessDomainJpaRepository = businessDomainJpaRepository;
         this.as4PropertiesRepository = as4PropertiesRepository;
         this.messageBusinessContentRepository = messageBusinessContentRepository;
+        this.transportStepRepository = transportStepRepository;
         this.paginationMapper = paginationMapper;
     }
 
@@ -105,6 +115,7 @@ public class ConnectorDBMessageRepository implements ConnectorMessageRepository 
             .backendName(entity.getBackendName())
             .gatewayName(entity.getGatewayName())
             .direction(entity.getDirection())
+            .status(entity.getStatus())
             .createdAt(entity.getCreatedAt())
             .updatedAt(entity.getUpdatedAt())
             .deletedAt(entity.getDeletedAt())
@@ -150,6 +161,7 @@ public class ConnectorDBMessageRepository implements ConnectorMessageRepository 
 
     @SuppressWarnings("checkstyle:VariableDeclarationUsageDistance")
     @Override
+    @Transactional
     public ConnectorBusinessMessage save(@NonNull ConnectorBusinessMessage message) {
         var messageToSave = toEntity(message);
         var savedMessage = this.messageJpaRepository.save(messageToSave);
@@ -164,6 +176,7 @@ public class ConnectorDBMessageRepository implements ConnectorMessageRepository 
     }
 
     @Override
+    @Transactional
     public ConnectorBusinessMessage updateGatewayName(
         @NonNull String identifier,
         @NonNull String name) {
@@ -175,6 +188,7 @@ public class ConnectorDBMessageRepository implements ConnectorMessageRepository 
     }
 
     @Override
+    @Transactional
     public ConnectorBusinessMessage updateBackendName(
         @NonNull String identifier,
         @NonNull String name) {
@@ -186,6 +200,7 @@ public class ConnectorDBMessageRepository implements ConnectorMessageRepository 
     }
 
     @Override
+    @Transactional
     public ConnectorBusinessMessage updateEbmsIdentifier(
         @NonNull String identifier,
         @NonNull String ebmsIdentifier) {
@@ -198,11 +213,23 @@ public class ConnectorDBMessageRepository implements ConnectorMessageRepository 
     }
 
     @Override
+    @Transactional
     public ConnectorBusinessMessage updateBackendIdentifier(
         @NonNull String identifier,
         @NonNull String backendIdentifier) {
         var message = this.messageJpaRepository.findByIdentifier(identifier);
         message.setBackendMessageIdentifier(backendIdentifier);
+        var updated = this.messageJpaRepository.save(message);
+
+        return toDomain(updated);
+    }
+
+    @Override
+    public ConnectorBusinessMessage updateStatus(
+        @NonNull String identifier,
+        @NonNull ConnectorBusinessMessageStatus status) {
+        var message = this.messageJpaRepository.findByIdentifier(identifier);
+        message.setStatus(status);
         var updated = this.messageJpaRepository.save(message);
 
         return toDomain(updated);
@@ -218,6 +245,13 @@ public class ConnectorDBMessageRepository implements ConnectorMessageRepository 
         var messages = messageJpaRepository.findAll(specification, pageable).map(this::toDomain);
 
         return paginationMapper.toPageResult(messages);
+    }
+
+    @Override
+    public List<ConnectorBusinessMessage> findAllUnresolved(Instant threshold) {
+        var messages = messageJpaRepository.findUnresolveToDelete(threshold);
+
+        return messages.stream().map(this::toDomain).toList();
     }
 
     @Override
@@ -243,16 +277,6 @@ public class ConnectorDBMessageRepository implements ConnectorMessageRepository 
             .findByAs4PropertiesEbmsMessageIdentifierAndDirection(
                 ebmsMessageIdentifier, direction
             );
-
-        return toDomain(message);
-    }
-
-    @Override
-    public ConnectorBusinessMessage findByBackendMessageIdentifier(
-        @NonNull String backendMessageIdentifier) {
-        var message = this.messageJpaRepository.findByBackendMessageIdentifier(
-            backendMessageIdentifier
-        );
 
         return toDomain(message);
     }
@@ -292,30 +316,51 @@ public class ConnectorDBMessageRepository implements ConnectorMessageRepository 
     }
 
     @Override
+    @Transactional
     public ConnectorBusinessMessage setAsRejected(@NonNull String identifier) {
         var foundMessage = this.messageJpaRepository.findByIdentifier(identifier);
         foundMessage.setRejectedAt(Instant.now());
+        foundMessage.setStatus(ConnectorBusinessMessageStatus.REJECTED);
         var updatedMessage = this.messageJpaRepository.save(foundMessage);
 
         return toDomain(updatedMessage);
     }
 
     @Override
+    @Transactional
     public ConnectorBusinessMessage setAsConfirmed(@NonNull String identifier) {
         var foundMessage = this.messageJpaRepository.findByIdentifier(identifier);
         foundMessage.setConfirmedAt(Instant.now());
+        foundMessage.setStatus(ConnectorBusinessMessageStatus.CONFIRMED);
         var updatedMessage = this.messageJpaRepository.save(foundMessage);
 
         return toDomain(updatedMessage);
     }
 
     @Override
+    @Transactional
+    public void setAsDeleted(@NonNull String identifier) {
+        this.messageJpaRepository.markAsDeleted(identifier, Instant.now());
+    }
+
+    @Override
+    @Transactional
     public ConnectorBusinessMessage setDeliveredToLinkPartnerAt(@NonNull String identifier) {
         var foundMessage = this.messageJpaRepository.findByIdentifier(identifier);
         foundMessage.setDeliveredToLinkPartnerAt(Instant.now());
+        foundMessage.setStatus(ConnectorBusinessMessageStatus.SUBMITTED);
         var updatedMessage = this.messageJpaRepository.save(foundMessage);
 
         return toDomain(updatedMessage);
+    }
+
+    @Override
+    @Transactional
+    public void deleteByIdentifier(@NonNull String identifier) {
+        this.transportStepRepository.deleteByTransportedMessageIdentifier(identifier);
+        this.messageBusinessContentRepository.deleteByMessageIdentifier(identifier);
+        this.as4PropertiesJpaRepository.deleteByMessageIdentifier(identifier);
+        this.messageJpaRepository.deleteByIdentifier(identifier);
     }
 
     private ConnectorMessageEntity toEntity(ConnectorBusinessMessage message) {
@@ -331,6 +376,7 @@ public class ConnectorDBMessageRepository implements ConnectorMessageRepository 
             .backendName(message.backendName())
             .gatewayName(message.gatewayName())
             .direction(message.direction())
+            .status(message.status())
             .build();
     }
 

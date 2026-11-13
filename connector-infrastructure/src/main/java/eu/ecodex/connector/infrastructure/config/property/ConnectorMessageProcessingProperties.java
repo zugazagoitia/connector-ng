@@ -11,28 +11,45 @@
 package eu.ecodex.connector.infrastructure.config.property;
 
 import eu.ecodex.connector.domain.model.ProcessingModeVerificationMode;
-import lombok.Getter;
-import lombok.Setter;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.validation.annotation.Validated;
 
 /**
  * Configuration properties for the connector message processing.
  */
-@Getter
-@Setter
 @Validated
-@Configuration
-@SuppressWarnings("checkstyle:LineLength")
 @ConfigurationProperties(prefix = "connector.message-processing")
-public class ConnectorMessageProcessingProperties {
-    private boolean ebmsIdGeneratorEnabled = true;
-    private String identifierSuffix = "connector.ecodex.eu";
-    private String ebmsIdSuffix = "connector.ecodex.eu";
-    private String transportIdSuffix = "connector.ecodex.eu";
-    private ProcessingModeVerificationMode outboundMessageVerificationMode = ProcessingModeVerificationMode.STRICT;
-    private ProcessingModeVerificationMode inboundMessageVerificationMode = ProcessingModeVerificationMode.RELAXED;
-    private boolean sendGeneratedEvidencesToBackend = true;
-    private boolean autoTriggerDeliveryEvidences = true;
+public record ConnectorMessageProcessingProperties(
+    @DefaultValue("true")
+    boolean ebmsIdGeneratorEnabled,
+
+    @NotBlank
+    @DefaultValue("connector.ecodex.eu")
+    String identifierSuffix,
+
+    @NotBlank
+    @DefaultValue("connector.ecodex.eu")
+    String ebmsIdSuffix,
+
+    @NotBlank
+    @DefaultValue("connector.ecodex.eu")
+    String transportIdSuffix,
+
+    @NotNull
+    @DefaultValue("STRICT")
+    ProcessingModeVerificationMode outboundVerificationMode,
+
+    @NotNull
+    @DefaultValue("RELAXED")
+    ProcessingModeVerificationMode inboundVerificationMode,
+
+    @DefaultValue("true")
+    boolean sendGeneratedEvidencesToBackend,
+
+    @DefaultValue("true")
+    boolean autoTriggerDeliveryEvidences
+) {
 }

@@ -48,4 +48,17 @@ values
         NULL,
         now(),
         now()
+    ),
+    (
+        3,
+        '1e74780d-9a92-4df2-a368-119d2f70eb07_xml_detached_signature',
+        'application/pkcs7-signature',
+        'Detached signature',
+        'detachedSignature.p7b',
+        30000000,
+        'S3_BUCKET',
+        'DETACHED_SIGNATURE',
+        NULL,
+        now(),
+        now()
     );

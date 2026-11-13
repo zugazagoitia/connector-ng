@@ -10,10 +10,13 @@
 
 package eu.ecodex.connector.infrastructure.config.property.link;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
 /**
  * Configuration properties for a backend component.
@@ -24,6 +27,11 @@ import lombok.Setter;
 @Getter
 @Setter
 public class BackendLinkProperties {
+    @Valid
+    @NotNull
+    @NestedConfigurationProperty
     private LinkConfigProperties linkConfig;
+
+    @Valid
     private List<LinkPartnerProperties> linkPartners = new ArrayList<>();
 }

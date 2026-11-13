@@ -16,9 +16,10 @@ import eu.ecodex.connector.domain.model.user.ConnectorRoleName;
 import eu.ecodex.connector.domain.model.user.ConnectorUser;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.user.ConnectorUserDto;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.login.ConnectorUpdateUserPasswordRequest;
+import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.user.ConnectorCreateUserRequest;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.user.ConnectorEditSelfRequest;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.user.ConnectorEditUserRequest;
-import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.user.ConnectorUserCreationOrUpdateRequest;
+import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.user.ConnectorEditUserRolesRequest;
 import eu.ecodex.connector.infrastructure.adapter.out.auth.identity.ConnectorUserDetails;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.user.ConnectorRoleEntity;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.user.ConnectorUserEntity;
@@ -107,8 +108,8 @@ public class ConnectorUserTestFixtures {
             .build();
     }
 
-    public static ConnectorUserCreationOrUpdateRequest createDefaultUserRequest() {
-        return ConnectorUserCreationOrUpdateRequest.builder()
+    public static ConnectorCreateUserRequest createDefaultUserRequest() {
+        return ConnectorCreateUserRequest.builder()
             .username("test_user")
             .email("test_user@email.com")
             .password("test_password")
@@ -134,7 +135,6 @@ public class ConnectorUserTestFixtures {
 
     public static ConnectorEditUserRequest createDefaultPatchUserRequest() {
         return ConnectorEditUserRequest.builder()
-            .username("test_user")
             .email("test_user@email.com")
             .enabled(Boolean.TRUE)
             .build();
@@ -142,13 +142,24 @@ public class ConnectorUserTestFixtures {
 
     public static ConnectorEditSelfRequest createDefaultPatchMeUserRequest() {
         return ConnectorEditSelfRequest.builder()
-            .username("test_user")
             .email("test_user_new@email.com")
             .build();
     }
 
-    public static ConnectorUserCreationOrUpdateRequest createDefaultUserRequestWithRoles() {
-        return ConnectorUserCreationOrUpdateRequest.builder()
+    public static ConnectorEditUserRolesRequest createEditUserRolesRequest() {
+        return ConnectorEditUserRolesRequest.builder()
+            .roles(Set.of("ROLE_ADMIN", "ROLE_USER"))
+            .build();
+    }
+
+    public static ConnectorEditUserRolesRequest createInvalidEditUserRolesRequest() {
+        return ConnectorEditUserRolesRequest.builder()
+            .roles(Set.of("INVALID_ROLE_ADMIN"))
+            .build();
+    }
+
+    public static ConnectorCreateUserRequest createDefaultUserRequestWithRoles() {
+        return ConnectorCreateUserRequest.builder()
             .username("test_user")
             .email("test_user@email.com")
             .password("test_password")
@@ -157,10 +168,10 @@ public class ConnectorUserTestFixtures {
             .build();
     }
 
-    public static ConnectorUserCreationOrUpdateRequest createUserRequest(String username,
-                                                                         String email,
-                                                                         String password) {
-        return ConnectorUserCreationOrUpdateRequest.builder()
+    public static ConnectorCreateUserRequest createUserRequest(String username,
+                                                               String email,
+                                                               String password) {
+        return ConnectorCreateUserRequest.builder()
             .username(username)
             .email(email)
             .password(password)

@@ -18,6 +18,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
 /**
  * Configuration properties for the container signature.
@@ -25,12 +26,19 @@ import lombok.Setter;
 @Getter
 @Setter
 public class ContainerSignatureProperties extends ConnectorSignatureProperties {
-    @NotNull
-    private KeystoreProperties keystore;
-    @NotNull
-    private PrivateKeyProperties privateKey;
     @Valid
     @NotNull
+    @NestedConfigurationProperty
+    private KeystoreProperties keystore;
+
+    @Valid
+    @NotNull
+    @NestedConfigurationProperty
+    private PrivateKeyProperties privateKey;
+
+    @Valid
+    @NotNull
+    @NestedConfigurationProperty
     private ConnectorSignatureValidationProperties validation =
         new ConnectorSignatureValidationProperties();
 }

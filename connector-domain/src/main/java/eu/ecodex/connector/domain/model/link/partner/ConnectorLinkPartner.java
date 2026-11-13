@@ -14,6 +14,7 @@ import eu.ecodex.connector.domain.model.link.ConnectorConfigurationSource;
 import eu.ecodex.connector.domain.model.link.ConnectorLinkMode;
 import eu.ecodex.connector.domain.model.link.ConnectorLinkType;
 import jakarta.annotation.Nonnull;
+import java.net.URI;
 import lombok.Builder;
 
 /**
@@ -54,7 +55,7 @@ public record ConnectorLinkPartner(
         ConnectorConfigurationSource source,
         String encryptionAlias,
         String certificateDn,
-        String pushAddress
+        URI pushAddress
 ) {
     @Override
     @Nonnull

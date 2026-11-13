@@ -10,11 +10,14 @@
 
 package eu.ecodex.connector.application.port.spi.message;
 
+import eu.ecodex.connector.application.port.api.message.ConnectorCleanupUnresolvedMessages;
 import eu.ecodex.connector.domain.model.filter.ConnectorMessagesListFilter;
 import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessage;
+import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessageStatus;
 import eu.ecodex.connector.domain.model.message.ConnectorMessageDirection;
 import eu.ecodex.connector.domain.model.paging.ConnectorPageResult;
 import jakarta.annotation.Nonnull;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -61,7 +64,8 @@ public interface ConnectorMessageRepository {
      * @return the updated {@link ConnectorBusinessMessage}
      */
     ConnectorBusinessMessage updateEbmsIdentifier(
-        @Nonnull String identifier, @Nonnull String ebmsIdentifier);
+        @Nonnull String identifier,
+        @Nonnull String ebmsIdentifier);
 
     /**
      * Updates the backend message identifier of a message.
@@ -72,7 +76,21 @@ public interface ConnectorMessageRepository {
      * @return the updated {@link ConnectorBusinessMessage}
      */
     ConnectorBusinessMessage updateBackendIdentifier(
-        @Nonnull String identifier, @Nonnull String backendIdentifier);
+        @Nonnull String identifier,
+        @Nonnull String backendIdentifier);
+
+    /**
+     * Updates the status of the message identified by the given identifier.
+     *
+     * @param identifier the unique identifier of the message to update (must not be null)
+     * @param status     the new {@link ConnectorBusinessMessageStatus} of the message (must not be
+     *                   null)
+     *
+     * @return the updated {@link ConnectorBusinessMessage}, reflecting the new status
+     */
+    ConnectorBusinessMessage updateStatus(
+        @Nonnull String identifier,
+        @Nonnull ConnectorBusinessMessageStatus status);
 
     /**
      * Retrieves a page of {@link ConnectorBusinessMessage} objects based on the pagination
@@ -88,6 +106,21 @@ public interface ConnectorMessageRepository {
      */
     ConnectorPageResult<ConnectorBusinessMessage> findAll(
         @Nonnull ConnectorMessagesListFilter filter);
+
+    /**
+     * Retrieves the unresolved business messages created before the given threshold.
+     *
+     * <p>A message is unresolved when it has not reached a final state, that is, it is still
+     * waiting for a transport or processing outcome (for example an acknowledgement or an
+     * evidence). It is used by {@link ConnectorCleanupUnresolvedMessages}.
+     *
+     * @param threshold the instant before which unresolved messages are returned; messages created
+     *                  at or after this instant are excluded (must not be null)
+     *
+     * @return the unresolved {@link ConnectorBusinessMessage} objects created before the threshold;
+     *     never {@code null}, and empty if there are none
+     */
+    List<ConnectorBusinessMessage> findAllUnresolved(Instant threshold);
 
     /**
      * Retrieves all messages whose identifier is in the given list.
@@ -118,16 +151,6 @@ public interface ConnectorMessageRepository {
      */
     ConnectorBusinessMessage findByEbmsMessageIdentifierAndDirection(
         @Nonnull String ebmsMessageIdentifier, @Nonnull ConnectorMessageDirection direction);
-
-    /**
-     * Finds a message by its backend-assigned message identifier.
-     *
-     * @param backendMessageIdentifier the backend message identifier (must not be null or blank)
-     *
-     * @return the matching {@link ConnectorBusinessMessage}, or {@code null} if none exists
-     */
-    ConnectorBusinessMessage findByBackendMessageIdentifier(
-        @Nonnull String backendMessageIdentifier);
 
     /**
      * Finds the business message referenced by an evidence trigger.
@@ -171,6 +194,19 @@ public interface ConnectorMessageRepository {
     ConnectorBusinessMessage setAsConfirmed(@Nonnull String identifier);
 
     /**
+     * Marks a message as deleted by recording the deletion instant (soft delete).
+     *
+     * <p>A message is deleted once its attachments and its business content (the business content
+     * and business document files) have been deleted. The method records this state on the message;
+     * the deletion of the files and of the attachment and business content rows is done beforehand
+     * The message itself is not removed from the repository: it is flagged as deleted.
+     *
+     * @param identifier the unique identifier of the message to mark as deleted (must not be null)
+     */
+
+    void setAsDeleted(@Nonnull String identifier);
+
+    /**
      * Records that a message has been delivered to the link partner, by setting its delivery
      * timestamp.
      *
@@ -179,4 +215,17 @@ public interface ConnectorMessageRepository {
      * @return the updated {@link ConnectorBusinessMessage}
      */
     ConnectorBusinessMessage setDeliveredToLinkPartnerAt(@Nonnull String identifier);
+
+    /**
+     * Permanently deletes the message identified by the given identifier.
+     *
+     * <p>Unlike {@link #setAsDeleted}, which only flags the message as deleted, this physically
+     * removes the message row. Nothing happens if no message matches. The records that depend on
+     * the message (business content, AS4 properties, attachments, evidences, errors and transport
+     * steps) must be removed first, or by a cascade, otherwise the deletion fails with a foreign
+     * key violation.
+     *
+     * @param identifier the unique identifier of the message to delete (must not be null)
+     */
+    void deleteByIdentifier(@Nonnull String identifier);
 }

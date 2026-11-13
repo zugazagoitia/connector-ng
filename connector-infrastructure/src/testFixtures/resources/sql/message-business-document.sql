@@ -11,7 +11,7 @@
 INSERT
 INTO connector_message_business_documents
 (
-    uuid, aes_type, business_content_id, attachment_id, created_at, updated_at
+    uuid, aes_type, business_content_id, content_attachment_id, created_at, updated_at
 )
 VALUES
     (

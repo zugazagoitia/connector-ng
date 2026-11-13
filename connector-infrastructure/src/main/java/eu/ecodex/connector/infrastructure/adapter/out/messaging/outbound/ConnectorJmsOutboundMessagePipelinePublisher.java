@@ -43,7 +43,7 @@ public class ConnectorJmsOutboundMessagePipelinePublisher
         );
 
         this.jmsTemplate.convertAndSend(
-            this.queueProperties.getOutboundMessageProcessingQueue(), message
+            this.queueProperties.outboundMessageProcessingQueue(), message
         );
     }
 }

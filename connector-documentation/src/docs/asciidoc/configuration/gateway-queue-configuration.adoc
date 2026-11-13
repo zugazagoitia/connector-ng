@@ -12,10 +12,12 @@ The gateway queues handle:
 
 * Outbound message submission
 * Gateway response handling
-* Inbound message reception
 
 == Basic configuration
 Configuration is provided via `application.properties` under the `+connector.queues.*+` prefix.
+Queue names must not be blank.
+
+NOTE: The message listeners resolve the queue names from the Spring environment, so keep every property of the table in `application.properties`, as in the shipped template. Removing one can prevent the Connector from starting, even though the binding class has a default value for most of them.
 
 .Gateway Queue Configuration Properties
 [cols="35,40,10,15", options="header"]

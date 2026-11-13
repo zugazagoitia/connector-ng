@@ -39,11 +39,10 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  * password encoding, and authentication management.
  *
  * <p>This configuration sets up:</p>
- * - A custom security filter chain integrating JWT authentication.
- * - Cross-Origin Resource Sharing (CORS) settings based on application properties.
- * - Stateless session management.
- * - Role-based access control and endpoint-specific permissions.
- * - Exception handling for unauthorized and access-denied responses.
+ * - A custom security filter chain integrating JWT authentication. - Cross-Origin Resource Sharing
+ * (CORS) settings based on application properties. - Stateless session management. - Role-based
+ * access control and endpoint-specific permissions. - Exception handling for unauthorized and
+ * access-denied responses.
  */
 @Configuration
 @EnableWebSecurity
@@ -123,11 +122,11 @@ public class WebSecurityConfiguration {
     @Bean
     CorsConfigurationSource corsConfigurationSource(ConnectorCorsProperties corsProperties) {
         var configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(corsProperties.getAllowedOrigins());
-        configuration.setAllowedMethods(corsProperties.getAllowedMethods());
-        configuration.setAllowedHeaders(corsProperties.getAllowedHeaders());
-        configuration.setAllowCredentials(corsProperties.isAllowCredentials());
-        configuration.setMaxAge(corsProperties.getMaxAge());
+        configuration.setAllowedOrigins(corsProperties.allowedOrigins());
+        configuration.setAllowedMethods(corsProperties.allowedMethods());
+        configuration.setAllowedHeaders(corsProperties.allowedHeaders());
+        configuration.setAllowCredentials(corsProperties.allowCredentials());
+        configuration.setMaxAge(corsProperties.maxAge());
 
         var source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

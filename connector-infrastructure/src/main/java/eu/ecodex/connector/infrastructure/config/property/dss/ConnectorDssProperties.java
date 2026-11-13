@@ -10,25 +10,36 @@
 
 package eu.ecodex.connector.infrastructure.config.property.dss;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.context.properties.NestedConfigurationProperty;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * Root configuration properties for DSS (Digital Signature Services) integration.
  */
 @Getter
 @Setter
-@Configuration
+@Validated
 @ConfigurationProperties(prefix = "connector.dss")
 public class ConnectorDssProperties {
+    @Valid
     @NotNull
+    @NestedConfigurationProperty
     private DssCacheProperties cache;
+
+    @Valid
+    @NestedConfigurationProperty
     private DssProxyProperties proxy;
+
+    @Valid
     private Map<String, DssTrustListSourceGroupProperties> trustListSources = new LinkedHashMap<>();
+
+    @Valid
     private Map<String, DssTimestampServerProperties> timeStampServers = new LinkedHashMap<>();
 }

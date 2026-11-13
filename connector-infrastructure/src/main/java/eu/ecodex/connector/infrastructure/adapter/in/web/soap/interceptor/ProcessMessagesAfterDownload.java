@@ -10,7 +10,7 @@
 
 package eu.ecodex.connector.infrastructure.adapter.in.web.soap.interceptor;
 
-import eu.ecodex.connector.application.port.api.transport.ConnectorSetMessagesTransportStepToDownload;
+import eu.ecodex.connector.application.port.api.transport.ConnectorSetMessagesTransportStepToPull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.cxf.interceptor.Fault;
 import org.apache.cxf.message.Message;
@@ -24,7 +24,7 @@ import org.apache.cxf.phase.Phase;
 @Slf4j
 public class ProcessMessagesAfterDownload extends AbstractPhaseInterceptor<Message> {
     private final String backendClient;
-    private final ConnectorSetMessagesTransportStepToDownload setTransportStepsToDownloadService;
+    private final ConnectorSetMessagesTransportStepToPull setTransportStepsToDownloadService;
 
     /**
      * Constructs a ProcessMessagesAfterDownload instance to process all connector messages after
@@ -38,7 +38,7 @@ public class ProcessMessagesAfterDownload extends AbstractPhaseInterceptor<Messa
      */
     public ProcessMessagesAfterDownload(
         String backendClient,
-        ConnectorSetMessagesTransportStepToDownload setTransportStepsToDownloadService) {
+        ConnectorSetMessagesTransportStepToPull setTransportStepsToDownloadService) {
         super(Phase.POST_INVOKE);
         this.backendClient = backendClient;
         this.setTransportStepsToDownloadService = setTransportStepsToDownloadService;

@@ -11,20 +11,31 @@
 package eu.ecodex.connector.infrastructure.config.property.c2ctest;
 
 import eu.ecodex.connector.domain.ConnectorDefaults;
-import lombok.Getter;
-import lombok.Setter;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.context.properties.NestedConfigurationProperty;
+import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * Configuration properties for connector-to-connector test messages.
  */
-@Getter
-@Setter
-@Configuration
+@Validated
 @ConfigurationProperties(prefix = "connector.c2ctests")
-public class Connector2ConnectorTestMessageProperties {
-    boolean enabled = true;
-    String action = ConnectorDefaults.DEFAULT_TEST_ACTION_NAME;
-    TestServiceProperties service = new TestServiceProperties();
+public record Connector2ConnectorTestMessageProperties(
+    @DefaultValue("true")
+    boolean enabled,
+
+    @NotBlank
+    @DefaultValue(ConnectorDefaults.DEFAULT_TEST_ACTION_NAME)
+    String action,
+
+    @Valid
+    @NotNull
+    @NestedConfigurationProperty
+    @DefaultValue
+    TestServiceProperties service
+) {
 }

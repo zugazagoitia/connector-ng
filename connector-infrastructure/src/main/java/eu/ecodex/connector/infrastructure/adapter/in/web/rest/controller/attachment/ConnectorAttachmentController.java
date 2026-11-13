@@ -14,11 +14,10 @@ import eu.ecodex.connector.application.port.api.attachment.ConnectorUploadAttach
 import eu.ecodex.connector.application.port.api.attachment.FileUploadCommand;
 import eu.ecodex.connector.domain.model.message.attachment.ConnectorMessageAttachment;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.exception.ConnectorInternalServerException;
+import eu.ecodex.connector.infrastructure.helper.ConnectorTempFilesHelper;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.List;
 import java.util.Objects;
-import java.util.UUID;
 import org.springframework.http.MediaType;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.RestController;
@@ -30,10 +29,12 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 public class ConnectorAttachmentController implements ConnectorAttachmentApi {
     private final ConnectorUploadAttachments uploadAttachments;
+    private final ConnectorTempFilesHelper tempFilesHelper;
 
     public ConnectorAttachmentController(
-        ConnectorUploadAttachments uploadAttachments) {
+        ConnectorUploadAttachments uploadAttachments, ConnectorTempFilesHelper tempFilesHelper) {
         this.uploadAttachments = uploadAttachments;
+        this.tempFilesHelper = tempFilesHelper;
     }
 
     @Override
@@ -46,8 +47,8 @@ public class ConnectorAttachmentController implements ConnectorAttachmentApi {
                              Objects.requireNonNull(attachment.getOriginalFilename())
                          );
 
-                         var tempLocation = Files.createTempFile(
-                             "upload-attachment-%s-".formatted(UUID.randomUUID()),
+                         var tempLocation = tempFilesHelper.create(
+                             "upload-attachment-%s-",
                              filename
                          );
                          attachment.transferTo(tempLocation);

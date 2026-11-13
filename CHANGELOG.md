@@ -4,14 +4,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 The same content is published in the documentation (`connector-documentation/src/docs/asciidoc/changelog`); keep both in sync.
 
-## [7.1.0] - Unreleased
+## [7.1.0] - 2026-11-12
 
 ### Upgrade notes
 
 - **Breaking — REST API**: the multipart part of the outbound message business content was renamed from `businessContent.contentFile` to `businessContent.xmlContent`.
 - **Breaking — REST API**: `POST /api/v1/auth/refresh` no longer takes the access token; only the refresh token is sent.
 - **Breaking — Authentication**: the REST API now requires a JWT bearer token (see *Security* below). The configuration must contain `connector.auth.security.jwt.*` and `connector.admin.*`.
-- **Configuration**: the message processing properties can now be overridden. The verification modes are bound as `connector.message-processing.outbound-message-verification-mode` and `connector.message-processing.inbound-message-verification-mode`.
+- **Configuration**: the message processing properties can now be overridden. The verification modes are bound as `connector.message-processing.outbound-verification-mode` and `connector.message-processing.inbound-verification-mode`.
 - **Database**: new tables (users, roles, refresh tokens), columns and indexes were added. Only initial scripts are provided (`dbscripts/initial`); compare them with your schema before upgrading.
 - **Transactions**: Narayana was replaced by Atomikos; the JTA transaction log is written to `spring.jta.log-file` (default `./data/jtalog`), which must be on persistent storage.
 
@@ -29,6 +29,10 @@ The same content is published in the documentation (`connector-documentation/src
   - Public endpoints are listed in the security guidance of the installation guide.
 - **Connector-to-connector test** — Support for C2C test messages (`connector.c2ctests.*`, enabled by default) and test message submission from the administration API.
 - **Backend ownership** — A backend client can only acknowledge or retrieve its own messages.
+- **Orphaned attachments cleanup** — Automatic deletion of orphaned attachment files.
+- **Unresolved messages cleanup** — Automatic purge of unresolved messages: their attachment files are deleted from the storage, then the messages and their attachments are permanently removed from the database.
+- **Resolved messages cleanup** — Automatic deletion of attachment files when a message is confirmed or rejected.
+- **S3 bucket auto-creation** — The S3 bucket is created at startup when it is missing (`connector.file.storage.s3.auto-create-bucket`, enabled by default).
 
 ### Fixed
 
@@ -40,6 +44,7 @@ The same content is published in the documentation (`connector-documentation/src
 - **REST API** — Invalid enum values now return HTTP 400 with the allowed values instead of HTTP 403.
 - **Statistics** — Statistics computation and PostgreSQL compatibility of the statistics query.
 - **Evidence trigger** — The evidence trigger process is now transactional.
+- **SOAP** — Fixed an issue that sometimes prevented the business content from being submitted to the backend via SOAP.
 
 ### Technical
 
@@ -68,3 +73,4 @@ The same content is published in the documentation (`connector-documentation/src
 
 - **Docker-friendly deployment** — The new connector is designed to run smoothly in containerized environments.
 - **Shared JMS broker** — The connector now shares the same JMS broker (ActiveMQ Classic) as the gateway.
+- **Dependency updates** — Libraries bumped to their latest versions.

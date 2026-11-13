@@ -13,8 +13,10 @@ package eu.ecodex.connector.infrastructure.adapter.in.web.soap.controller;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -25,12 +27,13 @@ import eu.ecodex.connector.TransportStepFixtures;
 import eu.ecodex.connector.application.exception.NotFoundException;
 import eu.ecodex.connector.application.exception.message.ConnectorLinkPartnerNotOwnerException;
 import eu.ecodex.connector.application.port.api.attachment.ConnectorUploadAttachments;
+import eu.ecodex.connector.application.port.api.attachment.FileUploadCommand;
 import eu.ecodex.connector.application.port.api.message.outbound.ConnectorOutboundBusinessMessageReceiver;
 import eu.ecodex.connector.application.port.api.message.outbound.ConnectorOutboundEvidenceMessageReceiver;
 import eu.ecodex.connector.application.port.api.transport.ConnectorAckMessageTransportStep;
 import eu.ecodex.connector.application.port.api.transport.ConnectorListPendingTransportStepsIds;
 import eu.ecodex.connector.application.port.api.transport.ConnectorRetrieveMessageByTransportId;
-import eu.ecodex.connector.application.port.api.transport.ConnectorSetMessagesTransportStepToDownload;
+import eu.ecodex.connector.application.port.api.transport.ConnectorSetMessagesTransportStepToPull;
 import eu.ecodex.connector.application.service.message.transport.ConnectorListPendingTransportStepsService;
 import eu.ecodex.connector.domain.transition.DomibusConnectorBackendWebService;
 import eu.ecodex.connector.domain.transition.DomibusConnectorMessageResponseType;
@@ -38,11 +41,17 @@ import eu.ecodex.connector.domain.transition.DomibusConnectorMessageType;
 import eu.ecodex.connector.domain.transition.EmptyRequestType;
 import eu.ecodex.connector.domain.transition.GetMessageByIdRequest;
 import eu.ecodex.connector.infrastructure.adapter.in.web.ConnectorBackendClientVerifier;
+import eu.ecodex.connector.infrastructure.adapter.in.web.soap.helper.ConnectorSOAPMessageAttachmentHelpers;
 import eu.ecodex.connector.infrastructure.adapter.in.web.soap.interceptor.ProcessMessageAfterDownload;
 import eu.ecodex.connector.infrastructure.adapter.in.web.soap.interceptor.ProcessMessagesAfterDownload;
+import eu.ecodex.connector.infrastructure.config.property.filestorage.ConnectorFileStorageProperties;
+import eu.ecodex.connector.infrastructure.helper.ConnectorTempFilesHelper;
 import eu.ecodex.connector.infrastructure.helper.LegacyMessageHelper;
 import eu.ecodex.connector.link.LinkPartnerTestFixtures;
 import jakarta.xml.ws.WebServiceContext;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.attribute.UserPrincipal;
 import java.util.List;
 import org.apache.cxf.interceptor.InterceptorChain;
@@ -53,6 +62,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -63,6 +73,9 @@ import org.springframework.test.util.ReflectionTestUtils;
 public class ConnectorBackendWebServiceControllerTest {
     private static final String TRANSPORT_ID =
         "2921bed4-5587-488b-93a2-c048bc130a12@connector.ecodex.eu_backend_alice";
+
+    @TempDir
+    Path uploadDirectory;
 
     @Mock
     private ConnectorOutboundBusinessMessageReceiver businessMessageReceiver;
@@ -79,7 +92,7 @@ public class ConnectorBackendWebServiceControllerTest {
     @Mock
     private ConnectorBackendClientVerifier backendClientVerifier;
     @Mock
-    private ConnectorSetMessagesTransportStepToDownload changePendingMessagesStatus;
+    private ConnectorSetMessagesTransportStepToPull changePendingMessagesStatus;
     @Mock
     private ConnectorAckMessageTransportStep acknowledgeMessageTransportStep;
     @Mock
@@ -93,10 +106,15 @@ public class ConnectorBackendWebServiceControllerTest {
     @Mock
     private WebServiceContext webServiceContext;
 
+    private ConnectorSOAPMessageAttachmentHelpers attachmentHelpers;
     private DomibusConnectorBackendWebService backendWebService;
 
     @BeforeEach
     void setUp() {
+        attachmentHelpers = new ConnectorSOAPMessageAttachmentHelpers(
+            new ConnectorTempFilesHelper(new ConnectorFileStorageProperties(uploadDirectory, null))
+        );
+
         backendWebService = new ConnectorBackendWebServiceController(
             businessMessageReceiver,
             outboundEvidenceMessageProcessor,
@@ -107,10 +125,17 @@ public class ConnectorBackendWebServiceControllerTest {
             changePendingMessagesStatus,
             acknowledgeMessageTransportStep,
             backendClientVerifier,
-            legacyMessageHelper
+            legacyMessageHelper,
+            attachmentHelpers
         );
         // @Resource field isn't constructor-injected, so set it manually
         ReflectionTestUtils.setField(backendWebService, "webServiceContext", webServiceContext);
+    }
+
+    private List<Path> remainingTempFiles() throws IOException {
+        try (var files = Files.list(uploadDirectory)) {
+            return files.toList();
+        }
     }
 
     private void stubAuthenticatedBackendClient() {
@@ -307,6 +332,61 @@ public class ConnectorBackendWebServiceControllerTest {
 
             assertThatThrownBy(() -> backendWebService.acknowledgeMessage(acknowledgeMessage(true)))
                 .isInstanceOf(ConnectorLinkPartnerNotOwnerException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("temp files")
+    class TempFiles {
+        @BeforeEach
+        void stubCollaborators() {
+            // lenient: the rejection test overrides businessMessageReceiver, and strict
+            // stubs would report the original stubbing as unused
+            lenient().when(webServiceContext.getUserPrincipal())
+                     .thenReturn((UserPrincipal) () -> "CN=alice");
+            lenient().when(backendClientVerifier.getBackendClient(any()))
+                     .thenReturn(LinkPartnerTestFixtures.createAliceBackendLinkPartner()
+                                                        .name()
+                                                        .name());
+            lenient().when(uploadAttachments.execute(any()))
+                     .thenReturn(List.of(MessageAttachmentTestFixtures.createAttachment()));
+            lenient().when(businessMessageReceiver.execute(any()))
+                     .thenReturn(BusinessMessageTestFixtures.createOutboundMessage());
+        }
+
+        @Test
+        void should_delete_all_temp_files_after_a_successful_submission() throws IOException {
+            backendWebService.submitMessage(
+                SoapMessageSubmitTestFixtures.createBackendToConnectorMessage());
+
+            assertThat(remainingTempFiles()).isEmpty();
+        }
+
+        @Test
+        void should_delete_all_temp_files_when_the_connector_rejects_the_message()
+            throws IOException {
+            when(businessMessageReceiver.execute(any())).thenThrow(new RuntimeException("Error"));
+
+            backendWebService.submitMessage(
+                SoapMessageSubmitTestFixtures.createBackendToConnectorMessage());
+
+            assertThat(remainingTempFiles()).isEmpty();
+        }
+
+        @Test
+        void should_not_expose_generated_temp_file_names_as_attachment_filenames() {
+            backendWebService.submitMessage(
+                SoapMessageSubmitTestFixtures.createBackendToConnectorMessage());
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<FileUploadCommand>> captor = ArgumentCaptor.forClass(List.class);
+            verify(uploadAttachments, atLeastOnce()).execute(captor.capture());
+
+            assertThat(captor.getAllValues().stream().flatMap(List::stream))
+                .extracting(command -> (String) ReflectionTestUtils.getField(command, "filename"))
+                .isNotEmpty()
+                .noneMatch(name -> name.startsWith("ws-payload-")
+                    || name.startsWith("ws-attachment-"));
         }
     }
 }

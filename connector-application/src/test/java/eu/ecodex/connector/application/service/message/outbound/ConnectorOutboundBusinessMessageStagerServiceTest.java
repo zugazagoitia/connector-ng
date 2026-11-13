@@ -29,6 +29,7 @@ import eu.ecodex.connector.application.port.spi.ConnectorMessageEventPublisher;
 import eu.ecodex.connector.application.port.spi.message.ConnectorMessageRepository;
 import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessage;
 import eu.ecodex.connector.domain.model.message.attachment.ConnectorAttachmentType;
+import eu.ecodex.connector.domain.model.message.attachment.ConnectorMessageAttachment;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -61,18 +62,40 @@ public class ConnectorOutboundBusinessMessageStagerServiceTest {
             .build();
     }
 
+    private ConnectorBusinessMessage withDetachedSignature(
+        ConnectorBusinessMessage message, ConnectorMessageAttachment signature) {
+        var content = message.businessContent();
+
+        assert content.businessDocument() != null;
+        return message
+            .toBuilder()
+            .businessContent(
+                content
+                    .toBuilder()
+                    .businessDocument(
+                        content.businessDocument()
+                               .toBuilder()
+                               .detachedSignature(signature)
+                               .build()
+                    )
+                    .build()
+            )
+            .build();
+    }
+
     @Nested
     @DisplayName("when staging succeeds")
     class WhenStagingSucceeds {
         @Test
         void should_stage_the_message_with_its_attachments() {
-            var message = createMessage();
+            var message = withDetachedSignature(createMessage(), null);
             when(messageRepository.save(message)).thenReturn(message);
             doNothing().when(attachmentLinkerService).execute(any(), any(), any());
 
             outboundMessageStagerService.execute(message);
 
             verify(messageRepository).save(message);
+            assert message.attachments() != null;
             verify(attachmentLinkerService).execute(
                 message.attachments().getFirst().identifier(),
                 message.identifier(),
@@ -83,8 +106,9 @@ public class ConnectorOutboundBusinessMessageStagerServiceTest {
                 message.identifier(),
                 ConnectorAttachmentType.BUSINESS_CONTENT
             );
+            assert message.businessContent().businessDocument() != null;
             verify(attachmentLinkerService).execute(
-                message.businessContent().businessDocument().attachment().identifier(),
+                message.businessContent().businessDocument().content().identifier(),
                 message.identifier(),
                 ConnectorAttachmentType.BUSINESS_DOCUMENT
             );
@@ -93,7 +117,7 @@ public class ConnectorOutboundBusinessMessageStagerServiceTest {
 
         @Test
         void should_stage_the_message_without_attachments() {
-            var message = createMessage()
+            var message = withDetachedSignature(createMessage(), null)
                 .toBuilder()
                 .attachments(null)
                 .build();
@@ -108,8 +132,9 @@ public class ConnectorOutboundBusinessMessageStagerServiceTest {
                 message.identifier(),
                 ConnectorAttachmentType.BUSINESS_CONTENT
             );
+            assert message.businessContent().businessDocument() != null;
             verify(attachmentLinkerService).execute(
-                message.businessContent().businessDocument().attachment().identifier(),
+                message.businessContent().businessDocument().content().identifier(),
                 message.identifier(),
                 ConnectorAttachmentType.BUSINESS_DOCUMENT
             );
@@ -117,6 +142,39 @@ public class ConnectorOutboundBusinessMessageStagerServiceTest {
                 any(),
                 any(),
                 eq(ConnectorAttachmentType.ATTACHMENT)
+            );
+            verify(outboundMessagePipelinePublisher).publish(message);
+        }
+
+        @Test
+        void should_link_the_detached_signature_when_present() {
+            var signature = MessageAttachmentTestFixtures.createAttachment();
+            var message = withDetachedSignature(createMessage(), signature);
+            when(messageRepository.save(message)).thenReturn(message);
+            doNothing().when(attachmentLinkerService).execute(any(), any(), any());
+
+            outboundMessageStagerService.execute(message);
+
+            verify(attachmentLinkerService).execute(
+                signature.identifier(),
+                message.identifier(),
+                ConnectorAttachmentType.DETACHED_SIGNATURE
+            );
+            verify(outboundMessagePipelinePublisher).publish(message);
+        }
+
+        @Test
+        void should_not_link_a_detached_signature_when_absent() {
+            var message = withDetachedSignature(createMessage(), null);
+            when(messageRepository.save(message)).thenReturn(message);
+            doNothing().when(attachmentLinkerService).execute(any(), any(), any());
+
+            outboundMessageStagerService.execute(message);
+
+            verify(attachmentLinkerService, never()).execute(
+                any(),
+                any(),
+                eq(ConnectorAttachmentType.DETACHED_SIGNATURE)
             );
             verify(outboundMessagePipelinePublisher).publish(message);
         }
@@ -178,6 +236,29 @@ public class ConnectorOutboundBusinessMessageStagerServiceTest {
 
             verify(messageRepository).save(message);
             verifyNoInteractions(attachmentLinkerService, outboundMessagePipelinePublisher);
+        }
+
+        @Test
+        void should_fail_when_linking_the_detached_signature_fails() {
+            var signature = MessageAttachmentTestFixtures.createAttachment();
+            var message = withDetachedSignature(createMessage(), signature)
+                .toBuilder()
+                .attachments(null)
+                .build();
+            when(messageRepository.save(message)).thenReturn(message);
+            doNothing().when(attachmentLinkerService).execute(
+                any(), any(), eq(ConnectorAttachmentType.BUSINESS_CONTENT));
+            doNothing().when(attachmentLinkerService).execute(
+                any(), any(), eq(ConnectorAttachmentType.BUSINESS_DOCUMENT));
+            doThrow(IllegalStateException.class).when(attachmentLinkerService).execute(
+                any(), any(), eq(ConnectorAttachmentType.DETACHED_SIGNATURE));
+
+            assertThrows(
+                IllegalStateException.class,
+                () -> outboundMessageStagerService.execute(message)
+            );
+
+            verifyNoInteractions(outboundMessagePipelinePublisher);
         }
     }
 }

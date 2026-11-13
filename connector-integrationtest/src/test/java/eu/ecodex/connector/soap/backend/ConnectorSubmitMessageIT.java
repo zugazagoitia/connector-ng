@@ -14,7 +14,7 @@ import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 
 import eu.ecodex.connector.SoapMessageSubmitTestFixtures;
 import eu.ecodex.connector.domain.transition.DomibusConnectorBackendWebService;
-import eu.ecodex.connector.soap.BackendServiceTest;
+import eu.ecodex.connector.soap.AbstractSoapBackendServiceTest;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -31,7 +31,7 @@ import org.springframework.test.context.jdbc.Sql;
     statements = "DELETE FROM connector_business_domains WHERE id > 0",
     executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS
 )
-public class ConnectorSubmitMessageIT extends BackendServiceTest {
+public class ConnectorSubmitMessageIT extends AbstractSoapBackendServiceTest {
     @LocalServerPort
     private int port;
 

@@ -13,7 +13,7 @@ package eu.ecodex.connector.application.service.auth.user;
 import eu.ecodex.connector.application.port.api.auth.user.ConnectorEditUser;
 import eu.ecodex.connector.application.port.api.auth.user.ConnectorEditUserCommand;
 import eu.ecodex.connector.application.port.api.auth.user.ConnectorRetrieveUserByIdentifier;
-import eu.ecodex.connector.application.port.api.auth.user.ConnectorVerifyUniqueUser;
+import eu.ecodex.connector.application.port.api.auth.user.ConnectorVerifyUniqueUserEmail;
 import eu.ecodex.connector.application.port.spi.auth.user.ConnectorUserRepository;
 import eu.ecodex.connector.domain.model.user.ConnectorUser;
 import lombok.NonNull;
@@ -41,7 +41,7 @@ import org.springframework.util.StringUtils;
 @Component
 public class ConnectorEditUserService implements ConnectorEditUser {
     private final ConnectorUserRepository repository;
-    private final ConnectorVerifyUniqueUser verifyUniqueUser;
+    private final ConnectorVerifyUniqueUserEmail verifierUniqueUserEmail;
     private final ConnectorRetrieveUserByIdentifier retrieveUserByIdentifier;
 
     /**
@@ -49,16 +49,16 @@ public class ConnectorEditUserService implements ConnectorEditUser {
      *
      * @param repository               the repository used for user data operations; must not be
      *                                 null
-     * @param verifyUniqueUser         the service to verify user uniqueness; must not be null
+     * @param verifierUniqueUserEmail  the service to verify user email uniqueness; must not be null
      * @param retrieveUserByIdentifier the service to retrieve a user by its unique identifier; must
      *                                 not be null
      */
     public ConnectorEditUserService(
         ConnectorUserRepository repository,
-        ConnectorVerifyUniqueUser verifyUniqueUser,
+        ConnectorVerifyUniqueUserEmail verifierUniqueUserEmail,
         ConnectorRetrieveUserByIdentifierService retrieveUserByIdentifier) {
         this.repository = repository;
-        this.verifyUniqueUser = verifyUniqueUser;
+        this.verifierUniqueUserEmail = verifierUniqueUserEmail;
         this.retrieveUserByIdentifier = retrieveUserByIdentifier;
     }
 
@@ -77,13 +77,10 @@ public class ConnectorEditUserService implements ConnectorEditUser {
     public ConnectorUser execute(@NonNull String identifier,
                                  @NonNull ConnectorEditUserCommand user) {
         var existingUser = retrieveUserByIdentifier.execute(identifier);
-        verifyUniqueUser.execute(identifier, ConnectorEditUserCommand.toDomain(user));
+
+        verifierUniqueUserEmail.execute(ConnectorEditUserCommand.toDomain(user));
 
         var userBuilder = existingUser.toBuilder();
-
-        if (StringUtils.hasText(user.username())) {
-            userBuilder.username(user.username());
-        }
 
         if (StringUtils.hasText(user.email())) {
             userBuilder.email(user.email());

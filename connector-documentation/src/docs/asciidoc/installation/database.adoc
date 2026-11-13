@@ -22,6 +22,8 @@ The application has been tested against the following database versions (see als
 
 The JDBC drivers for all four databases are bundled with the application; no additional driver installation is required.
 
+An empty schema and a dedicated database user must exist before the first start.
+
 == Create a database user with appropriate privileges
 
 Create an empty schema (database) and a dedicated user that owns it.
@@ -79,8 +81,53 @@ The connector creates the necessary tables on startup.
 WARNING: This option is intended for development and testing only, and it is the value used in the sample `application.properties`.
 Change it before going to production — `ddl-auto=update` is not a reliable mechanism for managing schema evolution over time.
 
-== Upgrading an existing database
+== Connection settings
+
+The datasource must use the XA-capable driver of your database. In the Docker deployment these values are set with the
+`DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `DB_DRIVER_CLASSNAME` and `DB_DIALECT` variables.
+
+[cols="1,2,2", options="header"]
+|===
+| Database | Driver class name | Hibernate dialect
+
+| MySQL
+| `com.mysql.cj.jdbc.MysqlXADataSource`
+| `org.hibernate.dialect.MySQLDialect`
+
+| MariaDB
+| `org.mariadb.jdbc.MariaDbDataSource`
+| `org.hibernate.dialect.MariaDBDialect`
+
+| PostgreSQL
+| `org.postgresql.xa.PGXADataSource`
+| `org.hibernate.dialect.PostgreSQLDialect`
+
+| Oracle
+| `oracle.jdbc.xa.client.OracleXADataSource`
+| `org.hibernate.dialect.OracleDialect`
+|===
+
+== Upgrading
+
+=== Upgrading from 6.x
+
+The 7.x release changes the database schema. Do not start the 7.x connector against a 6.x database.
+Data migration from a 6.x connector database is not covered by this guide.
+
+=== Upgrading from an earlier 7.x release
 
 Only initial scripts are provided at the moment; there are no incremental upgrade scripts between releases.
 Before upgrading the Connector, compare the initial script of the new release with your current schema (new tables, columns and indexes) and back up the database.
-Data migration from a 6.x connector database is not covered by this guide.
+
+=== Upgrading from 7.0.0
+
+No member state has deployed connector 7.0.0 in production. If you are coming from version 7.0.0,
+recreate the database from scratch instead of upgrading it:
+
+. Stop the connector.
+. Drop the existing schema and create a new, empty one (or use a new database).
+. Initialize it again as described in <<Database initialization>>.
+. Start the connector.
+
+WARNING: Recreating the database deletes all data of the previous installation. Back up anything
+you need to keep before you drop the schema.

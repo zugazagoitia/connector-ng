@@ -12,6 +12,9 @@ package eu.ecodex.connector.infrastructure.adapter.out.persistence.db.repository
 
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.message.content.ConnectorMessageBusinessDocumentEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -21,4 +24,14 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface ConnectorMessageBusinessDocumentJpaRepository extends
     JpaRepository<ConnectorMessageBusinessDocumentEntity, Long> {
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+    DELETE FROM ConnectorMessageBusinessDocumentEntity d
+     WHERE d.businessContent.id IN (
+        SELECT c.id FROM ConnectorMessageBusinessContentEntity c
+         WHERE c.message.id = (
+            SELECT m.id FROM ConnectorMessageEntity m WHERE m.identifier = :identifier))
+    """)
+    int deleteByMessageIdentifier(@Param("identifier") String identifier);
 }

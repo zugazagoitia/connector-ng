@@ -18,9 +18,9 @@ import static eu.ecodex.connector.domain.model.user.ConnectorRole.defaultUserRol
 import eu.ecodex.connector.application.exception.role.ConnectorRoleAlreadyExistsException;
 import eu.ecodex.connector.application.exception.user.ConnectorUserAlreadyExistsException;
 import eu.ecodex.connector.application.exception.user.ConnectorUserNotFoundException;
-import eu.ecodex.connector.application.port.api.auth.role.ConnectorAssignRole;
 import eu.ecodex.connector.application.port.api.auth.role.ConnectorRegisterRole;
 import eu.ecodex.connector.application.port.api.auth.role.ConnectorRetrieveRoleByName;
+import eu.ecodex.connector.application.port.api.auth.user.ConnectorEditUserRoles;
 import eu.ecodex.connector.application.port.api.auth.user.ConnectorRegisterUser;
 import eu.ecodex.connector.application.port.api.auth.user.ConnectorRetrieveUserByUsername;
 import eu.ecodex.connector.domain.model.user.ConnectorRole;
@@ -68,7 +68,7 @@ import org.springframework.util.StringUtils;
 public class ConnectorAdminUserInitializer implements ApplicationRunner {
     private final ConnectorRegisterUser registerUser;
     private final ConnectorRegisterRole registerRole;
-    private final ConnectorAssignRole assignRole;
+    private final ConnectorEditUserRoles editUserRoles;
     private final ConnectorRetrieveUserByUsername retrieveUserByUsername;
     private final ConnectorRetrieveRoleByName retrieveUserRoleByName;
     private final ConnectorAdminUserProperties adminUserProperties;
@@ -90,13 +90,13 @@ public class ConnectorAdminUserInitializer implements ApplicationRunner {
      */
     public ConnectorAdminUserInitializer(ConnectorRegisterUser registerUser,
                                          ConnectorRegisterRole registerRole,
-                                         ConnectorAssignRole assignRole,
+                                         ConnectorEditUserRoles editUserRoles,
                                          ConnectorRetrieveUserByUsername retrieveUserByUsername,
                                          ConnectorRetrieveRoleByName retrieveUserRoleByName,
                                          ConnectorAdminUserProperties adminUserProperties) {
         this.registerUser = registerUser;
         this.registerRole = registerRole;
-        this.assignRole = assignRole;
+        this.editUserRoles = editUserRoles;
         this.retrieveUserByUsername = retrieveUserByUsername;
         this.retrieveUserRoleByName = retrieveUserRoleByName;
         this.adminUserProperties = adminUserProperties;
@@ -139,7 +139,7 @@ public class ConnectorAdminUserInitializer implements ApplicationRunner {
     private void updateWithAdminRole(ConnectorUser administrator) {
         log.info("Administrator user exists but has not admin role; adding {}", DEFAULT_ADMIN_ROLE);
 
-        assignRole.execute(administrator.uuid(), DEFAULT_ADMIN_ROLE);
+        editUserRoles.execute(administrator.uuid(), Set.of(DEFAULT_ADMIN_ROLE));
         log.info("{} added to Administrator user, admin user updated", DEFAULT_ADMIN_ROLE);
     }
 

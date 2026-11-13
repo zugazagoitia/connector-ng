@@ -12,6 +12,7 @@ package eu.ecodex.connector.infrastructure.adapter.out.persistence.db.repository
 
 import eu.ecodex.connector.domain.model.message.transport.ConnectorMessageTransportStatus;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.message.transport.ConnectorMessageTransportStepEntity;
+import java.time.Instant;
 import java.util.List;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -33,48 +34,43 @@ public interface ConnectorMessageTransportStepJpaRepository extends
     @EntityGraph(attributePaths = {"statuses"})
     ConnectorMessageTransportStepEntity findByIdentifier(String identifier);
 
-    @Query(
-        value = """
-            SELECT MTS.*
-            FROM connector_message_transport_steps MTS
-            WHERE MTS.identifier = :identifier
-            OR MTS.transported_message_identifier = :identifier
-            OR MTS.remote_system_identifier = :identifier
-            """,
-        nativeQuery = true
+    @Query("""
+        SELECT mts
+        FROM ConnectorMessageTransportStepEntity mts
+        WHERE mts.identifier = :identifier
+            OR mts.transportedMessageIdentifier = :identifier
+            OR mts.remoteSystemIdentifier = :identifier
+        """
     )
     ConnectorMessageTransportStepEntity findByTransportOrMessageOrRemoteSystemIdentifier(
         @Param("identifier") String identifier);
 
-    @Query(
-        value = """
-            SELECT DISTINCT MTS.identifier
-            FROM connector_message_transport_steps MTS
-            WHERE MTS.status = 'READY_FOR_DOWNLOAD'
-            AND MTS.link_partner_name = :backendName
-            """,
-        nativeQuery = true
+    @Query("""
+        SELECT DISTINCT mts.identifier
+        FROM ConnectorMessageTransportStepEntity mts
+        WHERE mts.status = READY_FOR_PULL
+            AND mts.linkPartnerName = :backendName
+        """
     )
     List<String> findAllPendingByBackendName(@Param("backendName") String backendName);
 
     @Modifying
     @Transactional
-    @Query(
-        value = """
-            UPDATE connector_message_transport_steps MTS
-            SET
-                MTS.status = :status,
-                MTS.number_of_attempts = MTS.number_of_attempts + 1,
-                MTS.updated_at = now()
-            WHERE MTS.identifier IN :identifiers
-            """,
-        nativeQuery = true
-    )
+    @Query("""
+        UPDATE ConnectorMessageTransportStepEntity mts
+            SET mts.status = :status,
+               mts.numberOfAttempts = mts.numberOfAttempts + 1,
+               mts.updatedAt = :now
+        WHERE mts.identifier IN :identifiers
+        """)
     void updateStatus(
         @Param("identifiers") List<String> identifiers,
-        @Param("status") String status);
+        @Param("status") ConnectorMessageTransportStatus status,
+        @Param("now") Instant now);
 
     List<ConnectorMessageTransportStepEntity> findAllByStatusAndLinkPartnerNameOrderByCreatedAtAsc(
         ConnectorMessageTransportStatus status, String linkPartnerName
     );
+
+    void deleteByTransportedMessageIdentifier(String messageIdentifier);
 }

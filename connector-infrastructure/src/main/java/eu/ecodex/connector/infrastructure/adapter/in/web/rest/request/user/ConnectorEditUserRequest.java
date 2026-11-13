@@ -12,7 +12,6 @@ package eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.user;
 
 import eu.ecodex.connector.application.port.api.auth.user.ConnectorEditUserCommand;
 import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
 import lombok.NonNull;
@@ -21,23 +20,19 @@ import lombok.NonNull;
 /**
  * Represents a request for creating or updating a user in the connector system.
  *
- * @param username           the new username (must not be blank, at most 255 characters)
- * @param email              the new email address; must be a valid email address of at most 255
- *                           characters if provided, and may be {@code null}
- * @param enabled            whether the user account is enabled; may be {@code null}
- * @param mustChangePassword whether the user must change their password at next login; may be
- *                           {@code null}
+ * <p>The {@code email} value is the new email address; it must be a valid email address of at most
+ * 255 characters if provided, and may be {@code null} to leave the current email unchanged.
+ *
+ * <p>The {@code enabled} boolean parameter,whether the user account is enabled; may be {@code null}
+ *
+ * <p>The {@code mustChangePassword} mustChangePassword whether the user must change their password
+ * at next login; may be {@code null}
  */
 @Builder(toBuilder = true)
 public record ConnectorEditUserRequest(
-    @NotBlank(message = "The [username] must not be blank")
-    @Size(max = 255, message = "The [username] must not exceed 255")
-    String username,
-
     @Email(message = "The [email] must be a valid email address")
     @Size(max = 255, message = "The [email] must not exceed 255")
     String email,
-
     Boolean enabled,
     Boolean mustChangePassword
 ) {
@@ -54,11 +49,10 @@ public record ConnectorEditUserRequest(
         @NonNull String identifier,
         @NonNull ConnectorEditUserRequest userRequest) {
         return ConnectorEditUserCommand.builder()
-                                       .uuid(identifier)
-                                       .username(userRequest.username())
-                                       .email(userRequest.email())
-                                       .enabled(userRequest.enabled())
-                                       .mustChangePassword(userRequest.mustChangePassword())
-                                       .build();
+            .uuid(identifier)
+            .email(userRequest.email())
+            .enabled(userRequest.enabled())
+            .mustChangePassword(userRequest.mustChangePassword())
+            .build();
     }
 }

@@ -29,16 +29,16 @@ create table connector_message_transport_steps
 (
     id                             bigint auto_increment
         primary key,
-    created_at                     datetime(6)                                  not null,
-    updated_at                     datetime(6)                                  not null,
-    identifier                     varchar(255)                                 not null,
-    link_partner_name              varchar(255)                                 not null,
-    number_of_attempts             int                                          not null,
-    remote_system_identifier       varchar(255)                                 null,
+    created_at                     datetime(6)                          not null,
+    updated_at                     datetime(6)                          not null,
+    identifier                     varchar(255)                         not null,
+    link_partner_name              varchar(255)                         not null,
+    number_of_attempts             int                                  not null,
+    remote_system_identifier       varchar(255)                         null,
     status                         enum (
-        'DELIVERED', 'DOWNLOADED', 'FAILED', 'READY_FOR_DOWNLOAD', 'SUBMITTED') not null,
-    transported_message            mediumtext                                   not null,
-    transported_message_identifier varchar(255)                                 not null,
+        'DELIVERED', 'PULLED', 'FAILED', 'READY_FOR_PULL', 'SUBMITTED') not null,
+    transported_message            mediumtext                           not null,
+    transported_message_identifier varchar(255)                         not null,
     constraint UQ_CM_TS_IDENTIFIER
         unique (identifier)
 );
@@ -47,11 +47,11 @@ create table connector_message_transport_step_statuses
 (
     id                bigint auto_increment
         primary key,
-    created_at        datetime(6)                                               not null,
-    updated_at        datetime(6)                                               not null,
+    created_at        datetime(6)                                       not null,
+    updated_at        datetime(6)                                       not null,
     status            enum (
-        'DELIVERED', 'DOWNLOADED', 'FAILED', 'READY_FOR_DOWNLOAD', 'SUBMITTED') not null,
-    transport_step_id bigint                                                    null,
+        'DELIVERED', 'PULLED', 'FAILED', 'READY_FOR_PULL', 'SUBMITTED') not null,
+    transport_step_id bigint                                            null,
     constraint FK_CM_TSS_TRANSPORT_STEP
         foreign key (transport_step_id) references connector_message_transport_steps (id)
 );
@@ -72,19 +72,23 @@ create table connector_messages
 (
     id                           bigint auto_increment
         primary key,
-    created_at                   datetime(6)        not null,
-    updated_at                   datetime(6)        not null,
-    backend_message_identifier   varchar(255)       null,
-    backend_name                 varchar(255)       null,
-    confirmed_at                 datetime(6)        null,
-    deleted_at                   datetime(6)        null,
-    delivered_to_link_partner_at datetime(6)        null,
+    created_at                   datetime(6)                       not null,
+    updated_at                   datetime(6)                       not null,
+    backend_message_identifier   varchar(255)                      null,
+    backend_name                 varchar(255)                      null,
+    confirmed_at                 datetime(6)                       null,
+    deleted_at                   datetime(6)                       null,
+    delivered_to_link_partner_at datetime(6)                       null,
     direction                    enum (
-        'BACKEND_TO_GATEWAY', 'GATEWAY_TO_BACKEND') not null,
-    gateway_name                 varchar(255)       null,
-    identifier                   varchar(255)       not null,
-    rejected_at                  datetime(6)        null,
-    business_domain_id           bigint             not null,
+        'BACKEND_TO_GATEWAY', 'GATEWAY_TO_BACKEND')                not null,
+    gateway_name                 varchar(255)                      null,
+    status                       enum (
+        'CONFIRMED', 'CREATED', 'DELETED', 'DELIVERED',
+        'FAILED', 'PULLED', 'READY_FOR_PULL',
+        'RECEIVED_BY_OPPOSITE_CONNECTOR', 'REJECTED', 'SUBMITTED') not null,
+    identifier                   varchar(255)                      not null,
+    rejected_at                  datetime(6)                       null,
+    business_domain_id           bigint                            not null,
     constraint UQ_CM_IDENTIFIER
         unique (identifier),
     constraint FK_CM_BUSINESS_DOMAIN
@@ -97,6 +101,7 @@ create table connector_message_attachments
         primary key,
     created_at   datetime(6)                                            not null,
     updated_at   datetime(6)                                            not null,
+    deleted_at   datetime(6)                                            null,
     content_type varchar(255)                                           not null,
     description  varchar(255)                                           not null,
     identifier   varchar(255)                                           not null,
@@ -124,64 +129,50 @@ create index IDX_CM_ATTACHMENTS_TYPE
 
 create table connector_message_business_contents
 (
-    id            bigint auto_increment
+    id                        bigint auto_increment
         primary key,
-    created_at    datetime(6)  not null,
-    updated_at    datetime(6)  not null,
-    uuid          varchar(255) not null,
-    message_id    bigint       not null,
-    attachment_id bigint       not null,
+    created_at                datetime(6)  not null,
+    updated_at                datetime(6)  not null,
+    uuid                      varchar(255) not null,
+    message_id                bigint       not null,
+    xml_content_attachment_id bigint       not null,
     constraint UQ_CM_BC_ATTACHMENT
-        unique (attachment_id),
+        unique (xml_content_attachment_id),
     constraint UQ_CM_BC_MESSAGE
         unique (message_id),
     constraint UQ_CM_BC_UUID
         unique (uuid),
-    constraint FK_CM_BC_ATTACHMENT
-        foreign key (attachment_id) references connector_message_attachments (id),
     constraint FK_CM_BC_MESSAGE
-        foreign key (message_id) references connector_messages (id)
+        foreign key (message_id) references connector_messages (id),
+    constraint FK_CM_BC_XML_CT_ATTACHMENT
+        foreign key (xml_content_attachment_id) references connector_message_attachments (id)
 );
 
 create table connector_message_business_documents
 (
-    id                  bigint auto_increment
+    id                               bigint auto_increment
         primary key,
-    created_at          datetime(6)                                      not null,
-    updated_at          datetime(6)                                      not null,
-    aes_type            enum ('AUTHENTICATION_BASED', 'SIGNATURE_BASED') null,
-    uuid                varchar(255)                                     not null,
-    attachment_id       bigint                                           not null,
-    business_content_id bigint                                           not null,
+    created_at                       datetime(6)                                      not null,
+    updated_at                       datetime(6)                                      not null,
+    aes_type                         enum ('AUTHENTICATION_BASED', 'SIGNATURE_BASED') null,
+    uuid                             varchar(255)                                     not null,
+    business_content_id              bigint                                           not null,
+    content_attachment_id            bigint                                           not null,
+    detached_signature_attachment_id bigint                                           null,
     constraint UQ_CM_BD_ATTACHMENT
-        unique (attachment_id),
+        unique (content_attachment_id),
     constraint UQ_CM_BD_CONTENT
         unique (business_content_id),
+    constraint UQ_CM_BD_DS_ATTACHMENT
+        unique (detached_signature_attachment_id),
     constraint UQ_CM_BD_UUID
         unique (uuid),
-    constraint FK_CM_BD_ATTACHMENT
-        foreign key (attachment_id) references connector_message_attachments (id),
     constraint FK_CM_BD_CONTENT
-        foreign key (business_content_id) references connector_message_business_contents (id)
-);
-
-create table connector_message_business_document_signatures
-(
-    id                   bigint auto_increment
-        primary key,
-    created_at           datetime(6)                     not null,
-    updated_at           datetime(6)                     not null,
-    mime_type            enum ('BINARY', 'PKCS7', 'XML') not null,
-    name                 varchar(255)                    not null,
-    signature            mediumblob                      not null,
-    uuid                 varchar(255)                    not null,
-    business_document_id bigint                          not null,
-    constraint UQ_CM_BDS_DOCUMENT
-        unique (business_document_id),
-    constraint UQ_CM_BDS_UUID
-        unique (uuid),
-    constraint FK_CM_BDS_DOCUMENT
-        foreign key (business_document_id) references connector_message_business_documents (id)
+        foreign key (business_content_id) references connector_message_business_contents (id),
+    constraint FK_CM_BD_ATT_CONTENT
+        foreign key (content_attachment_id) references connector_message_attachments (id),
+    constraint FK_CM_BD_DS_ATTACHMENT
+        foreign key (detached_signature_attachment_id) references connector_message_attachments (id)
 );
 
 create index IDX_CM_BD_AES_TYPE

@@ -80,7 +80,7 @@ The ActiveMQ broker is shared with the gateway. Back up and secure the broker da
 The Connector processes messages through JMS queues. When processing a queue message keeps failing, ActiveMQ retries it and finally moves it to the dead-letter queue of that queue, named `ActiveMQ.DLQ.<queue-name>`.
 
 * Monitor the dead-letter queues with the broker's web console or through the queue statistics of the administration API.
-* The retry settings (5 delivery attempts, 60 seconds delay, multiplier 2) are fixed in the current version and cannot be configured.
+* The retry settings (by default 5 delivery attempts, a 60 seconds delay and a multiplier of 2) are set with `connector.activemq.address-settings.*`.
 * Moving a message back from the dead-letter queue to its queue (after the cause is fixed) is done with the broker's tools. Find the cause in the Connector log first, using the message identifier.
 
 Delivery to a backend or to the gateway that failed is recorded in the transport steps of the message with status `FAILED`. A failed transport step is *not* retried automatically in the current version.
@@ -103,7 +103,7 @@ Database upgrades::
 Only the initial scripts exist (`dbscripts/initial`). There is no upgrade script between releases: read the upgrade notes in the changelog and back up before upgrading.
 
 Content deletion::
-The Connector does not delete message content automatically. Use S3 lifecycle rules and database housekeeping that match your retention rules.
+The Connector deletes the files of orphaned attachments, of unresolved messages and of resolved (confirmed or rejected) messages with scheduled jobs; see the file deletion chapter of the configuration guide (`connector.file-deletion.*`). Other content, and the message records in the database, are not deleted automatically: use S3 lifecycle rules and database housekeeping that match your retention rules.
 
 == Stopping the Connector
 

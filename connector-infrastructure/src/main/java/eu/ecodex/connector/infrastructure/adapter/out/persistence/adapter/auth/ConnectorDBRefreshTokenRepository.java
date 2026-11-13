@@ -22,13 +22,11 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 /**
  * Default implementation of {@link ConnectorRefreshTokenRepository}.
  */
-@Slf4j
 @Service
 public class ConnectorDBRefreshTokenRepository implements ConnectorRefreshTokenRepository {
     private final ConnectorUserRefreshTokenJpaRepository jpaRepository;

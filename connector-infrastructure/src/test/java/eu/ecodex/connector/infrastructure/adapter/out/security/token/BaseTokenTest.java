@@ -11,10 +11,13 @@
 package eu.ecodex.connector.infrastructure.adapter.out.security.token;
 
 import eu.ecodex.connector.TokenContextConfiguration;
+import eu.ecodex.connector.WithUploadTempDirectory;
+import eu.ecodex.connector.infrastructure.config.PropertiesConfig;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
-@ActiveProfiles(value = { "dss", "security"})
-@SpringBootTest(classes = TokenContextConfiguration.class)
+@WithUploadTempDirectory
+@ActiveProfiles(value = { "dss", "security", "evidence", "local"})
+@SpringBootTest(classes = {TokenContextConfiguration.class, PropertiesConfig.class})
 public class BaseTokenTest {
 }

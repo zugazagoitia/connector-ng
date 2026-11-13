@@ -37,18 +37,15 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class ConnectorDBUserRepositoryTest {
-
     @Mock
-    ConnectorUserJpaRepository jpaRepository;
-
+    private ConnectorUserJpaRepository jpaRepository;
     @Mock
-    ConnectorUserRoleJpaRepository roleJpaRepository;
-
+    private ConnectorUserRoleJpaRepository roleJpaRepository;
     @Mock
-    ConnectorUserRefreshTokenJpaRepository refreshTokenJpaRepository;
+    private ConnectorUserRefreshTokenJpaRepository refreshTokenJpaRepository;
 
     @InjectMocks
-    ConnectorDBUserRepository userRepository;
+    private ConnectorDBUserRepository userRepository;
 
     private void assertNoMoreInteractions() {
         verifyNoMoreInteractions(

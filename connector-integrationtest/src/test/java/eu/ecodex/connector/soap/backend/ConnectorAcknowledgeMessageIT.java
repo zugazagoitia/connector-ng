@@ -16,7 +16,7 @@ import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import eu.ecodex.connector.domain.transition.DomibusConnectorBackendWebService;
 import eu.ecodex.connector.domain.transition.DomibusConnectorMessageErrorType;
 import eu.ecodex.connector.domain.transition.DomibusConnectorMessageResponseType;
-import eu.ecodex.connector.soap.BackendServiceTest;
+import eu.ecodex.connector.soap.AbstractSoapBackendServiceTest;
 import jakarta.xml.ws.soap.SOAPFaultException;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -34,7 +34,7 @@ import org.springframework.test.context.jdbc.Sql;
     statements = "DELETE FROM connector_business_domains WHERE id > 0",
     executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS
 )
-public class ConnectorAcknowledgeMessageIT extends BackendServiceTest {
+public class ConnectorAcknowledgeMessageIT extends AbstractSoapBackendServiceTest {
     private static final String MESSAGE_ID = "3fae4358-7cc9-4929-a17b-4432cbb8b9cc@connector.ecodex.eu";
     @LocalServerPort
     private int port;

@@ -25,7 +25,6 @@ import eu.ecodex.connector.application.port.api.auth.user.ConnectorListUsers;
 import eu.ecodex.connector.application.port.api.auth.user.ConnectorRegisterUser;
 import eu.ecodex.connector.application.port.api.auth.user.ConnectorRemoveUser;
 import eu.ecodex.connector.application.port.api.auth.user.ConnectorRetrieveUserByIdentifier;
-import eu.ecodex.connector.application.port.api.auth.user.ConnectorUpdateUser;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.controller.AbstractWebMvcTest;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.user.ConnectorUserDto;
 import org.junit.jupiter.api.Test;
@@ -45,8 +44,6 @@ class ConnectorEditUserAdminControllerTest extends AbstractWebMvcTest {
     @MockitoBean
     private ConnectorRegisterUser connectorRegisterUser;
     @MockitoBean
-    private ConnectorUpdateUser connectorUpdateUser;
-    @MockitoBean
     private ConnectorEditUser connectorEditUser;
     @MockitoBean
     private ConnectorRemoveUser connectorRemoveUser;
@@ -63,7 +60,6 @@ class ConnectorEditUserAdminControllerTest extends AbstractWebMvcTest {
         var connectorUserRequest = ConnectorUserTestFixtures.createDefaultPatchUserRequest();
         var editUserCommand = ConnectorEditUserCommand.builder()
             .uuid(connectorUser.uuid())
-            .username("test_user")
             .email("test_user@email.com")
             .enabled(Boolean.TRUE)
             .build();
@@ -95,6 +91,6 @@ class ConnectorEditUserAdminControllerTest extends AbstractWebMvcTest {
 
         verifyNoMoreInteractions(connectorEditUser,
                                  connectorListUsers, connectorRemoveUser,
-                                 connectorRegisterUser, connectorUpdateUser, connectorRetrieveUserByIdentifier);
+                                 connectorRegisterUser, connectorRetrieveUserByIdentifier);
     }
 }

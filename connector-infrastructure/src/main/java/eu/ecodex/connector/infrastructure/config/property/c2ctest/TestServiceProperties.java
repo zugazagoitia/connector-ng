@@ -11,15 +11,19 @@
 package eu.ecodex.connector.infrastructure.config.property.c2ctest;
 
 import eu.ecodex.connector.domain.ConnectorDefaults;
-import lombok.Getter;
-import lombok.Setter;
+import jakarta.validation.constraints.NotBlank;
+import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /**
  * Configuration properties for connector-to-connector test messages services.
  */
-@Getter
-@Setter
-public class TestServiceProperties {
-    String name = ConnectorDefaults.DEFAULT_TEST_SERVICE_NAME;
-    String type = ConnectorDefaults.DEFAULT_TEST_SERVICE_TYPE;
+public record TestServiceProperties(
+    @NotBlank
+    @DefaultValue(ConnectorDefaults.DEFAULT_TEST_SERVICE_NAME)
+    String name,
+
+    @NotBlank
+    @DefaultValue(ConnectorDefaults.DEFAULT_TEST_SERVICE_TYPE)
+    String type
+) {
 }

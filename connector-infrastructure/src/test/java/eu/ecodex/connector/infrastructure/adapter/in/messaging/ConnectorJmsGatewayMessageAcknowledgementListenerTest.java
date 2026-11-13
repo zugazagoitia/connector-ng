@@ -18,6 +18,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import eu.ecodex.connector.TransportStepFixtures;
 import eu.ecodex.connector.application.port.api.transport.ConnectorAckMessageTransportStep;
 import eu.ecodex.connector.application.port.spi.message.ConnectorMessageTransportStepRepository;
 import eu.ecodex.connector.domain.model.message.transport.ConnectorMessageTransportStep;
@@ -82,7 +83,7 @@ public class ConnectorJmsGatewayMessageAcknowledgementListenerTest extends BaseJ
             when(mapMessage.getStringProperty("messageId"))
                 .thenReturn(MESSAGE_ID);
             when(transportStepRepository.findByStepOrMessageOrRemoteSystemIdentifier(any()))
-                .thenReturn(ConnectorMessageTransportStep.builder().build());
+                .thenReturn(TransportStepFixtures.createTransportStepWithBusinessMessage());
             doNothing()
                 .when(acknowledgeMessageTransportStep)
                 .execute(any(), any());

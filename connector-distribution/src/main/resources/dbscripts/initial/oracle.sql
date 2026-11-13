@@ -40,7 +40,7 @@ create table CONNECTOR_MESSAGE_TRANSPORT_STEPS
     NUMBER_OF_ATTEMPTS             NUMBER(10)                  not null,
     REMOTE_SYSTEM_IDENTIFIER       VARCHAR2(255 char),
     STATUS                         VARCHAR2(255 char)          not null
-        check ((status in ('DELIVERED', 'FAILED', 'SUBMITTED', 'DOWNLOADED', 'READY_FOR_DOWNLOAD'))),
+        check ((status in ('DELIVERED', 'FAILED', 'SUBMITTED', 'PULLED', 'READY_FOR_PULL'))),
     TRANSPORTED_MESSAGE            CLOB                        not null,
     TRANSPORTED_MESSAGE_IDENTIFIER VARCHAR2(255 char)          not null
 )
@@ -53,7 +53,7 @@ create table CONNECTOR_MESSAGE_TRANSPORT_STEP_STATUSES
     CREATED_AT        TIMESTAMP(9) WITH TIME ZONE not null,
     UPDATED_AT        TIMESTAMP(9) WITH TIME ZONE not null,
     STATUS            VARCHAR2(255 char)          not null
-        check ((status in ('DELIVERED', 'FAILED', 'SUBMITTED', 'DOWNLOADED', 'READY_FOR_DOWNLOAD'))),
+        check ((status in ('DELIVERED', 'FAILED', 'SUBMITTED', 'PULLED', 'READY_FOR_PULL'))),
     TRANSPORT_STEP_ID NUMBER(19)
         constraint FK_CM_TSS_TRANSPORT_STEP
             references CONNECTOR_MESSAGE_TRANSPORT_STEPS
@@ -78,23 +78,27 @@ create index IDX_CM_TS_STATUS
 
 create table CONNECTOR_MESSAGES
 (
-    ID                                      NUMBER(19) generated as identity
+    ID                           NUMBER(19) generated as identity
         primary key,
-    CREATED_AT                              TIMESTAMP(9) WITH TIME ZONE not null,
-    UPDATED_AT                              TIMESTAMP(9) WITH TIME ZONE not null,
-    BACKEND_MESSAGE_IDENTIFIER              VARCHAR2(255 char),
-    BACKEND_NAME                            VARCHAR2(255 char),
-    CONFIRMED_AT                            TIMESTAMP(9) WITH TIME ZONE,
-    DELETED_AT                              TIMESTAMP(9) WITH TIME ZONE,
-    DELIVERED_TO_LINK_PARTNER_AT            TIMESTAMP(9) WITH TIME ZONE,
-    DIRECTION                               VARCHAR2(255 char)          not null
+    CREATED_AT                   TIMESTAMP(9) WITH TIME ZONE not null,
+    UPDATED_AT                   TIMESTAMP(9) WITH TIME ZONE not null,
+    BACKEND_MESSAGE_IDENTIFIER   VARCHAR2(255 char),
+    BACKEND_NAME                 VARCHAR2(255 char),
+    CONFIRMED_AT                 TIMESTAMP(9) WITH TIME ZONE,
+    DELETED_AT                   TIMESTAMP(9) WITH TIME ZONE,
+    DELIVERED_TO_LINK_PARTNER_AT TIMESTAMP(9) WITH TIME ZONE,
+    DIRECTION                    VARCHAR2(255 char)          not null
         check ((direction in ('BACKEND_TO_GATEWAY', 'GATEWAY_TO_BACKEND'))),
-    GATEWAY_NAME                            VARCHAR2(255 char),
-    IDENTIFIER                              VARCHAR2(255 char)          not null
+    GATEWAY_NAME                 VARCHAR2(255 char),
+    STATUS                       VARCHAR2(255 char)          not null
+        check ((status in ('CONFIRMED', 'CREATED', 'DELETED', 'DELIVERED',
+                           'FAILED', 'PULLED', 'READY_FOR_PULL',
+                           'RECEIVED_BY_OPPOSITE_CONNECTOR', 'REJECTED', 'SUBMITTED'))),
+    IDENTIFIER                   VARCHAR2(255 char)          not null
         constraint UQ_CM_IDENTIFIER
             unique,
-    REJECTED_AT                             TIMESTAMP(9) WITH TIME ZONE,
-    BUSINESS_DOMAIN_ID                      NUMBER(19)                  not null
+    REJECTED_AT                  TIMESTAMP(9) WITH TIME ZONE,
+    BUSINESS_DOMAIN_ID           NUMBER(19)                  not null
         constraint FK_CM_BUSINESS_DOMAIN
             references CONNECTOR_BUSINESS_DOMAINS
 )
@@ -106,6 +110,7 @@ create table CONNECTOR_MESSAGE_ATTACHMENTS
         primary key,
     CREATED_AT   TIMESTAMP(9) WITH TIME ZONE not null,
     UPDATED_AT   TIMESTAMP(9) WITH TIME ZONE not null,
+    DELETED_AT   TIMESTAMP(9) WITH TIME ZONE null,
     CONTENT_TYPE VARCHAR2(255 char)          not null,
     DESCRIPTION  VARCHAR2(255 char)          not null,
     IDENTIFIER   VARCHAR2(255 char)          not null
@@ -139,68 +144,52 @@ create index IDX_CM_ATTACHMENTS_MESSAGE_ID
 
 create table CONNECTOR_MESSAGE_BUSINESS_CONTENTS
 (
-    ID            NUMBER(19) generated as identity
+    ID                        NUMBER(19) generated as identity
         primary key,
-    CREATED_AT    TIMESTAMP(9) WITH TIME ZONE not null,
-    UPDATED_AT    TIMESTAMP(9) WITH TIME ZONE not null,
-    UUID          VARCHAR2(255 char)          not null
+    CREATED_AT                TIMESTAMP(9) WITH TIME ZONE not null,
+    UPDATED_AT                TIMESTAMP(9) WITH TIME ZONE not null,
+    UUID                      VARCHAR2(255 char)          not null
         constraint UQ_CM_BC_UUID
             unique,
-    MESSAGE_ID    NUMBER(19)                  not null
+    MESSAGE_ID                NUMBER(19)                  not null
         constraint UQ_CM_BC_MESSAGE
             unique
         constraint FK_CM_BC_MESSAGE
             references CONNECTOR_MESSAGES,
-    ATTACHMENT_ID NUMBER(19)                  not null
+    XML_CONTENT_ATTACHMENT_ID NUMBER(19)                  not null
         constraint UQ_CM_BC_ATTACHMENT
             unique
-        constraint FK_CM_BC_ATTACHMENT
+        constraint FK_CM_BC_XML_CT_ATTACHMENT
             references CONNECTOR_MESSAGE_ATTACHMENTS
 )
 /
 
 create table CONNECTOR_MESSAGE_BUSINESS_DOCUMENTS
 (
-    ID                  NUMBER(19) generated as identity
+    ID                               NUMBER(19) generated as identity
         primary key,
-    CREATED_AT          TIMESTAMP(9) WITH TIME ZONE not null,
-    UPDATED_AT          TIMESTAMP(9) WITH TIME ZONE not null,
-    AES_TYPE            VARCHAR2(255 char)
+    CREATED_AT                       TIMESTAMP(9) WITH TIME ZONE not null,
+    UPDATED_AT                       TIMESTAMP(9) WITH TIME ZONE not null,
+    AES_TYPE                         VARCHAR2(255 char)
         check ((aes_type in ('AUTHENTICATION_BASED', 'SIGNATURE_BASED'))),
-    UUID                VARCHAR2(255 char)          not null
+    UUID                             VARCHAR2(255 char)          not null
         constraint UQ_CM_BD_UUID
             unique,
-    ATTACHMENT_ID       NUMBER(19)                  not null
+    CONTENT_ATTACHMENT_ID            NUMBER(19)                  not null
         constraint UQ_CM_BD_ATTACHMENT
             unique
-        constraint FK_CM_BD_ATTACHMENT
+        constraint FK_CM_BD_ATT_CONTENT
             references CONNECTOR_MESSAGE_ATTACHMENTS,
-    BUSINESS_CONTENT_ID NUMBER(19)                  not null
+    DETACHED_SIGNATURE_ATTACHMENT_ID NUMBER(19)                  null
+        constraint UQ_CM_BD_DS_ATTACHMENT
+            unique
+        constraint FK_CM_BD_DS_ATTACHMENT
+            references CONNECTOR_MESSAGE_ATTACHMENTS,
+    BUSINESS_CONTENT_ID              NUMBER(19)                  not null
         constraint UQ_CM_BD_CONTENT
             unique
         constraint FK_CM_BD_CONTENT
             references CONNECTOR_MESSAGE_BUSINESS_CONTENTS
-)
-/
-
-create table CONNECTOR_MESSAGE_BUSINESS_DOCUMENT_SIGNATURES
-(
-    ID                   NUMBER(19) generated as identity
-        primary key,
-    CREATED_AT           TIMESTAMP(9) WITH TIME ZONE not null,
-    UPDATED_AT           TIMESTAMP(9) WITH TIME ZONE not null,
-    MIME_TYPE            VARCHAR2(255 char)          not null
-        check ((mime_type in ('BINARY', 'XML', 'PKCS7'))),
-    NAME                 VARCHAR2(255 char)          not null,
-    SIGNATURE            BLOB                        not null,
-    UUID                 VARCHAR2(255 char)          not null
-        constraint UQ_CM_BDS_UUID
-            unique,
-    BUSINESS_DOCUMENT_ID NUMBER(19)                  not null
-        constraint UQ_CM_BDS_DOCUMENT
-            unique
-        constraint FK_CM_BDS_DOCUMENT
-            references CONNECTOR_MESSAGE_BUSINESS_DOCUMENTS
 )
 /
 

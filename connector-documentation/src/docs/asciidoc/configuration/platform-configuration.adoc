@@ -137,8 +137,24 @@ The Connector connects to the shared external ActiveMQ Classic broker with the s
 | `1` / `10`
 |===
 
-Redelivery of failed messages is fixed in the current version: at most 5 redeliveries, an initial delay of 60 seconds and a back-off multiplier of 2.
-The commented `+connector.activemq.address-settings.*+` properties in the template are not yet configurable.
+Redelivery of failed JMS messages is configured with `+connector.activemq.address-settings.*+`:
+
+[cols="3,1,4", options="header"]
+|===
+| Property | Default | Description
+
+| `connector.activemq.address-settings.max-delivery-attempts`
+| `5`
+| Total number of deliveries before a message goes to the dead-letter queue. Minimum `1`.
+
+| `connector.activemq.address-settings.redelivery-delay`
+| `60s`
+| Delay before the first redelivery. Must be positive. A bare number is read as milliseconds.
+
+| `connector.activemq.address-settings.redelivery-multiplier`
+| `2.0`
+| Multiplier applied to the delay on each redelivery. Use `1` for a constant delay. Minimum `1.0`.
+|===
 
 == Distributed transactions (JTA / Atomikos)
 

@@ -45,10 +45,8 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 public interface ConnectorAuthenticationApi {
     @Operation(summary = "Login a connector user.")
     @PostMapping(path = "/login", consumes = MediaType.APPLICATION_JSON_VALUE)
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "400", description = "Bad Request"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-    })
+    @ApiResponse(responseCode = "400", description = "Bad Request")
+    @ApiResponse(responseCode = "401", description = "Unauthorized")
     ConnectorUserAuthenticationResult login(
         @RequestBody @Valid @Nonnull ConnectorLoginRequest connectorLoginRequest);
 
@@ -65,11 +63,9 @@ public interface ConnectorAuthenticationApi {
     @Operation(summary = "Update a connector user password after login, using access and refresh "
         + "tokens.")
     @PostMapping(path = "/change-password", consumes = MediaType.APPLICATION_JSON_VALUE)
-    @ApiResponses({
-        @ApiResponse(responseCode = "400", description = "Bad Request"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "404", description = "Not Found"),
-    })
+    @ApiResponse(responseCode = "400", description = "Bad Request")
+    @ApiResponse(responseCode = "401", description = "Unauthorized")
+    @ApiResponse(responseCode = "404", description = "Not Found")
     void updatePasswordAfterLogin(
         @AuthenticationPrincipal @Nonnull ConnectorUserDetails userDetails,
         @Valid @RequestBody @Nonnull ConnectorUpdateUserPasswordRequest userRequest);
@@ -77,10 +73,8 @@ public interface ConnectorAuthenticationApi {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Logout a user token.")
     @PostMapping("/logout")
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "400", description = "Bad Request"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-    })
+    @ApiResponse(responseCode = "400", description = "Bad Request")
+    @ApiResponse(responseCode = "401", description = "Unauthorized")
     void logout(
         @AuthenticationPrincipal @Nonnull ConnectorUserDetails userDetails,
         @RequestBody @Valid @Nonnull ConnectorLogoutRequest request);

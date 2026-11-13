@@ -10,14 +10,15 @@
 
 package eu.ecodex.connector.infrastructure.config.property.auth;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import java.time.Duration;
-import lombok.NonNull;
 
 /**
  * Refresh token configuration properties.
  */
 public record ConnectorRefreshTokenProperties(
-    @NonNull Duration expiration,
-    @NonNull String cleanupCron
+    @NotNull Duration expiration,
+    @NotBlank String cleanupCron
 ) {
 }

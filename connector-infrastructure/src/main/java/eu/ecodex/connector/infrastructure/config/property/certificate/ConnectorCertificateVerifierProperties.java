@@ -11,8 +11,11 @@
 package eu.ecodex.connector.infrastructure.config.property.certificate;
 
 import eu.ecodex.connector.infrastructure.config.property.common.KeystoreProperties;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
 /**
  * Configuration properties for the certificate verifier.
@@ -23,18 +26,32 @@ public class ConnectorCertificateVerifierProperties {
     /**
      * should ocsp be queried?.
      */
-    private final boolean ocspEnabled = true;
+    private boolean ocspEnabled = true;
     /**
      * should a crl be queried?.
      */
-    private final boolean crlEnabled = true;
+    private boolean crlEnabled = true;
     /**
      * should AIA be used?.
      */
-    private final boolean aiaEnabled = true;
+    private boolean aiaEnabled = true;
+
     private boolean truststoreEnabled = true;
+
     private boolean ignoreStoreEnabled = false;
+
     private String trustedListSource;
+
+    @Valid
+    @NestedConfigurationProperty
     private KeystoreProperties truststore;
+
+    @Valid
+    @NestedConfigurationProperty
     private KeystoreProperties ignoreStore;
+
+    @AssertTrue(message = "ignore-store must be configured when ignore-store-enabled is true")
+    public boolean isIgnoreStoreConfigured() {
+        return !ignoreStoreEnabled || ignoreStore != null;
+    }
 }

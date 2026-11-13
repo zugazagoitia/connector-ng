@@ -15,6 +15,7 @@ import eu.ecodex.connector.domain.model.link.ConnectorConfigurationSource;
 import eu.ecodex.connector.domain.model.link.ConnectorLinkMode;
 import eu.ecodex.connector.domain.model.link.ConnectorLinkType;
 import eu.ecodex.connector.domain.model.link.partner.ConnectorLinkPartner;
+import java.net.URI;
 import lombok.Builder;
 
 /**
@@ -56,7 +57,7 @@ public record ConnectorLinkPartnerDto(
     ConnectorConfigurationSource source,
     String encryptionAlias,
     String certificateDn,
-    String pushAddress,
+    URI pushAddress,
     boolean testOnly
 ) {
     /**

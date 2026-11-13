@@ -43,7 +43,7 @@ public class ConnectorJmsOutboundEvidenceTriggerPublisher
         );
 
         this.jmsTemplate.convertAndSend(
-            this.queueProperties.getOutboundEvidenceTriggerQueue(), message
+            this.queueProperties.outboundEvidenceTriggerQueue(), message
         );
     }
 }

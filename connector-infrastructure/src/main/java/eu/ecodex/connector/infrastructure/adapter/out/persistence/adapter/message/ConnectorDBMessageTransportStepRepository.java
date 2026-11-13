@@ -29,6 +29,7 @@ import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.mess
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.repository.message.transport.ConnectorMessageTransportStepJpaRepository;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.repository.message.transport.ConnectorMessageTransportStepStatusJpaRepository;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.repository.message.transport.specification.TransportStepSpecification;
+import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -36,12 +37,14 @@ import java.util.stream.Collectors;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * RDBMS implementation of {@link ConnectorMessageTransportStepRepository}.
  */
 @Slf4j
 @Component
+@Transactional(readOnly = true)
 public class ConnectorDBMessageTransportStepRepository
     implements ConnectorMessageTransportStepRepository {
     private final ConnectorMessageTransportStepJpaRepository transportStepJpaRepository;
@@ -74,6 +77,7 @@ public class ConnectorDBMessageTransportStepRepository
     }
 
     @Override
+    @Transactional
     public ConnectorMessageTransportStep save(
         @NonNull ConnectorMessageTransportStep transportStep) {
         try {
@@ -94,9 +98,11 @@ public class ConnectorDBMessageTransportStepRepository
     }
 
     @Override
+    @Transactional
     public ConnectorMessageTransportStep update(
         @NonNull String identifier,
-        @NonNull ConnectorMessageTransportStep transportStep) {
+        @NonNull ConnectorMessageTransportStatus status,
+        int numberOfAttempts) {
         var entity = transportStepJpaRepository.findByIdentifier(identifier);
 
         if (entity == null) {
@@ -105,10 +111,13 @@ public class ConnectorDBMessageTransportStepRepository
             );
         }
 
-        var updatedEntity = updateEntity(entity, transportStep);
+        var updatedEntity = entity.toBuilder()
+                                  .numberOfAttempts(numberOfAttempts)
+                                  .status(status)
+                                  .build();
         var updated = this.transportStepJpaRepository.save(updatedEntity);
 
-        var stepStatusEntity = toEntity(transportStep.status());
+        var stepStatusEntity = toEntity(status);
         stepStatusEntity.setTransportStep(updated);
         var savedStepStatusEntity = this.stepStatusJpaRepository.save(stepStatusEntity);
 
@@ -118,12 +127,14 @@ public class ConnectorDBMessageTransportStepRepository
     }
 
     @Override
+    @Transactional
     public void updateStatus(
         @NonNull List<String> identifiers,
         @NonNull ConnectorMessageTransportStatus status) {
-        this.transportStepJpaRepository.updateStatus(identifiers, status.name());
+        var now = Instant.now();
+        this.transportStepJpaRepository.updateStatus(identifiers, status, now);
 
-        this.stepStatusJpaRepository.insert(identifiers, status.name());
+        this.stepStatusJpaRepository.insert(identifiers, status.name(), now);
     }
 
     @Override
@@ -151,7 +162,7 @@ public class ConnectorDBMessageTransportStepRepository
     public List<ConnectorMessageTransportStep> findReadyToDownloadTransportSteps(
         @NonNull String backendName) {
         return transportStepJpaRepository.findAllByStatusAndLinkPartnerNameOrderByCreatedAtAsc(
-            ConnectorMessageTransportStatus.READY_FOR_DOWNLOAD,
+            ConnectorMessageTransportStatus.READY_FOR_PULL,
             backendName
         ).stream().map(this::toDomain).toList();
     }
@@ -165,6 +176,12 @@ public class ConnectorDBMessageTransportStepRepository
                                                        .map(this::toDomain);
 
         return paginationMapper.toPageResult(transportSteps);
+    }
+
+    @Override
+    @Transactional
+    public void deleteByTransportedMessageIdentifier(@NonNull String messageIdentifier) {
+        transportStepJpaRepository.deleteByTransportedMessageIdentifier(messageIdentifier);
     }
 
     private ConnectorMessageTransportStep toDomain(ConnectorMessageTransportStepEntity entity) {
@@ -202,13 +219,8 @@ public class ConnectorDBMessageTransportStepRepository
             .identifier(transportStep.identifier())
             .numberOfAttempts(transportStep.numberOfAttempts())
             .linkPartnerName(transportStep.linkPartnerName())
-            .transportedMessageIdentifier(transportStep.transportedMessage().identifier())
-            .remoteSystemIdentifier(
-                transportedMessage.direction()
-                    == ConnectorMessageDirection.BACKEND_TO_GATEWAY
-                    ? transportedMessage.as4Properties().ebmsMessageIdentifier()
-                    : transportedMessage.backendMessageIdentifier()
-            )
+            .transportedMessageIdentifier(transportStep.transportedMessageIdentifier())
+            .remoteSystemIdentifier(transportStep.remoteSystemIdentifier())
             .transportedMessage(
                 objectMapper.writeValueAsString(transportStep.transportedMessage()))
             .status(transportStep.status())
@@ -218,15 +230,6 @@ public class ConnectorDBMessageTransportStepRepository
     private ConnectorMessageTransportStepStatusEntity toEntity(
         ConnectorMessageTransportStatus status) {
         return ConnectorMessageTransportStepStatusEntity.builder().status(status).build();
-    }
-
-    ConnectorMessageTransportStepEntity updateEntity(
-        ConnectorMessageTransportStepEntity entity,
-        ConnectorMessageTransportStep transportStep) {
-        return entity.toBuilder()
-                     .numberOfAttempts(transportStep.numberOfAttempts())
-                     .status(transportStep.status())
-                     .build();
     }
 
     private Set<ConnectorMessageTransportStepStatus> toStatuses(

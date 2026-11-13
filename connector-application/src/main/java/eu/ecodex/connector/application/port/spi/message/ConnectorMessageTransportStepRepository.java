@@ -10,7 +10,7 @@
 
 package eu.ecodex.connector.application.port.spi.message;
 
-import eu.ecodex.connector.application.port.api.transport.ConnectorSetMessagesTransportStepToDownload;
+import eu.ecodex.connector.application.port.api.transport.ConnectorSetMessagesTransportStepToPull;
 import eu.ecodex.connector.domain.model.filter.ConnectorTransportStepsListFilter;
 import eu.ecodex.connector.domain.model.message.transport.ConnectorMessageTransportStatus;
 import eu.ecodex.connector.domain.model.message.transport.ConnectorMessageTransportStep;
@@ -35,16 +35,16 @@ public interface ConnectorMessageTransportStepRepository {
     /**
      * Updates the transport step identified by the given identifier with the given state.
      *
-     * @param identifier    the unique identifier of the transport step to update (must not be
-     *                      null)
-     * @param transportStep the {@link ConnectorMessageTransportStep} carrying the new state (must
-     *                      not be null)
-     *
-     * @return the updated {@link ConnectorMessageTransportStep}, reflecting the saved changes
+     * @param identifier       the unique identifier of the transport step to update (must not be
+     *                         null)
+     * @param status           the new {@link ConnectorMessageTransportStatus} of the transport step
+     *                         (must not be null)
+     * @param numberOfAttempts the new number of transport attempts made so far
      */
     ConnectorMessageTransportStep update(
         @Nonnull String identifier,
-        @Nonnull ConnectorMessageTransportStep transportStep);
+        @Nonnull ConnectorMessageTransportStatus status,
+        int numberOfAttempts);
 
     /**
      * Updates the status of several transport steps at once.
@@ -85,7 +85,7 @@ public interface ConnectorMessageTransportStepRepository {
      *
      * <p>A transport step is ready to download when its message has been made available to the
      * backend and has not yet been retrieved (see
-     * {@link ConnectorSetMessagesTransportStepToDownload}).
+     * {@link ConnectorSetMessagesTransportStepToPull}).
      *
      * @param backendName the name of the backend system (must not be null or empty)
      *
@@ -120,4 +120,16 @@ public interface ConnectorMessageTransportStepRepository {
      */
     ConnectorPageResult<ConnectorMessageTransportStep> findAll(
         @Nonnull ConnectorTransportStepsListFilter filter);
+
+    /**
+     * Deletes all the transport steps of the message identified by the given identifier.
+     *
+     * <p>The transport steps are physically removed, not flagged as deleted. The message itself
+     * is not affected, and nothing happens if the message has no transport step. This is part of
+     * permanently deleting a message (see {@link ConnectorMessageRepository#deleteByIdentifier}).
+     *
+     * @param messageIdentifier the unique identifier of the transported business message whose
+     *                          transport steps are deleted (must not be null)
+     */
+    void deleteByTransportedMessageIdentifier(@Nonnull String messageIdentifier);
 }

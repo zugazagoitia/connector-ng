@@ -48,6 +48,7 @@ import org.testcontainers.utility.DockerImageName;
 @Testcontainers
 @Tag("integration")
 @ActiveProfiles("test")
+@WithUploadTempDirectory
 @AutoConfigureRestTestClient
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public abstract class AbstractIntegrationTest {
@@ -97,9 +98,9 @@ public abstract class AbstractIntegrationTest {
     @MockitoBean
     ConnectorJmsOutboundMessageStagingListener outboundMessageStagingListener;
     @Autowired
-    private JdbcTemplate jdbcTemplate;
+    protected JdbcTemplate jdbcTemplate;
     @Autowired
-    private ConnectorJwtGenerator jwtTokenService;
+    protected ConnectorJwtGenerator jwtTokenService;
 
     @DynamicPropertySource
     static void registerPropertiesMain(DynamicPropertyRegistry registry) {
@@ -155,7 +156,6 @@ public abstract class AbstractIntegrationTest {
                     "connector_message_transport_steps",
                     "connector_message_evidences",
                     "connector_message_errors",
-                    "connector_message_business_document_signatures",
                     "connector_message_business_documents",
                     "connector_message_business_contents",
                     "connector_message_as4_properties",

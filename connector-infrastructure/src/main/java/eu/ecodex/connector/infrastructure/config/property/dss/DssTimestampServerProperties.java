@@ -10,6 +10,8 @@
 
 package eu.ecodex.connector.infrastructure.config.property.dss;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -22,9 +24,12 @@ public class DssTimestampServerProperties {
     /**
      * TSA endpoint URL.
      */
+    @NotBlank
     private String url;
+
     /**
      * TSA policy OID.
      */
+    @Pattern(regexp = "[0-2](\\.\\d+)+", message = "must be a valid OID, e.g. 1.2.3.4")
     private String policyOid;
 }

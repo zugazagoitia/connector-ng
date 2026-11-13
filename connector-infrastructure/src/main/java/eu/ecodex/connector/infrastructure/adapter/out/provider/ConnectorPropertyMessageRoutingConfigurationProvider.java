@@ -99,12 +99,12 @@ public class ConnectorPropertyMessageRoutingConfigurationProvider implements
     private ConnectorMessageRoutingRule buildTestMessageRoutingRule() {
         log.info("Adding routing rule for Connector2Connector Test message");
 
-        var testService = testMessageProperties.getService();
-        var action = testMessageProperties.getAction();
+        var testService = testMessageProperties.service();
+        var action = testMessageProperties.action();
 
         var pattern = ("|(&(equals(ServiceName, '%s'),equals(ServiceType, '%s')), "
             + "equals(Action, '%s'))").formatted(
-            testService.getName(), testService.getType(), action
+            testService.name(), testService.type(), action
         );
 
         return ConnectorMessageRoutingRule

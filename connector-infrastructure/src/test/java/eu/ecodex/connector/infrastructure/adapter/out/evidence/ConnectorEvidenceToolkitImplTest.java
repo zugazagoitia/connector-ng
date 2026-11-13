@@ -16,6 +16,7 @@ import static org.mockito.Mockito.when;
 
 import eu.ecodex.connector.BusinessMessageTestFixtures;
 import eu.ecodex.connector.EvidenceContextConfiguration;
+import eu.ecodex.connector.WithUploadTempDirectory;
 import eu.ecodex.connector.application.port.spi.ConnectorEvidenceToolkit;
 import eu.ecodex.connector.application.port.spi.ConnectorFileStorageProvider;
 import eu.ecodex.connector.application.port.spi.message.ConnectorMessageAttachmentRepository;
@@ -24,6 +25,7 @@ import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessage;
 import eu.ecodex.connector.domain.model.message.attachment.ConnectorMessageAttachment;
 import eu.ecodex.connector.domain.model.message.evidence.ConnectorEvidenceType;
 import eu.ecodex.connector.domain.model.message.evidence.ConnectorMessageEvidence;
+import eu.ecodex.connector.infrastructure.config.PropertiesConfig;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -42,10 +44,11 @@ import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.test.context.ActiveProfiles;
 
-@ActiveProfiles({"evidence", "dss", "security"})
-@SpringBootTest(classes = EvidenceContextConfiguration.class)
-@Import(ConnectorEvidenceToolkitImplTest.MockAttachmentBeans.class)
+@WithUploadTempDirectory
 @DisplayName("ConnectorEvidenceToolkit")
+@ActiveProfiles({"evidence", "dss", "security", "local"})
+@SpringBootTest(classes = {EvidenceContextConfiguration.class, PropertiesConfig.class})
+@Import(ConnectorEvidenceToolkitImplTest.MockAttachmentBeans.class)
 class ConnectorEvidenceToolkitImplTest {
     private final Map<String, byte[]> storedContent = new ConcurrentHashMap<>();
 

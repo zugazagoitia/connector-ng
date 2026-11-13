@@ -12,19 +12,21 @@ package eu.ecodex.connector.infrastructure.adapter.in.web.rest.controller.admin.
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import eu.ecodex.connector.ConnectorUserTestFixtures;
-import eu.ecodex.connector.application.port.api.auth.role.ConnectorAssignRole;
-import eu.ecodex.connector.application.port.api.auth.role.ConnectorUnassignRole;
+import eu.ecodex.connector.application.exception.role.ConnectorRoleNotFoundException;
+import eu.ecodex.connector.application.port.api.auth.user.ConnectorEditUserRoles;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.controller.AbstractWebMvcTest;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.user.ConnectorUserDto;
+import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.user.ConnectorEditUserRolesRequest;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.client.RestTestClient;
@@ -34,28 +36,26 @@ class ConnectorRoleAssignmentControllerTest extends AbstractWebMvcTest {
     private static final String URL = "/api/v1/admin/users/%s/roles";
 
     @MockitoBean
-    ConnectorAssignRole connectorAssignRole;
-    @MockitoBean
-    ConnectorUnassignRole connectorUnassignRole;
+    ConnectorEditUserRoles connectorEditUserRoles;
 
     @Autowired
     private RestTestClient apiClient;
 
 
     @Test
-    void register_role_assignment_should_return_OK() {
+    void edit_user_roles_should_return_OK() {
         // Given
         var userIdentifier = "user-identifier";
-        var roleUser = "ROLE_USER";
         var connectorUser = ConnectorUserTestFixtures.createDefaultUserWithRoles();
+        var request = ConnectorUserTestFixtures.createEditUserRolesRequest();
 
-        when(connectorAssignRole.execute(any(), any())).thenReturn(connectorUser);
+        when(connectorEditUserRoles.execute(any(), anySet())).thenReturn(connectorUser);
 
         // When
-        var registeredUser = apiClient.post()
+        var registeredUser = apiClient.patch()
             .uri(String.format(URL, userIdentifier))
             .contentType(MediaType.APPLICATION_JSON)
-            .body(roleUser)
+            .body(request)
             .exchange()
             .expectStatus()
             .isOk()
@@ -66,34 +66,48 @@ class ConnectorRoleAssignmentControllerTest extends AbstractWebMvcTest {
         assertThat(registeredUser).isNotNull();
         assertThat(registeredUser.roles()).hasSize(1);
 
-        verify(connectorAssignRole).execute(userIdentifier, roleUser);
-        verifyNoMoreInteractions(connectorAssignRole);
+        verify(connectorEditUserRoles).execute(userIdentifier, Set.of("ROLE_ADMIN", "ROLE_USER"));
+        verifyNoMoreInteractions(connectorEditUserRoles);
     }
 
     @Test
-    void delete_role_assignment_should_return_OK() {
+    void edit_user_roles_should_return_400_when_empty_request() {
         // Given
         var userIdentifier = "user-identifier";
-        var roleUser = "ROLE_USER";
-        var connectorUser = ConnectorUserTestFixtures.createDefaultUser();
+        var request = ConnectorEditUserRolesRequest.builder().roles(Set.of()).build();
 
-        when(connectorUnassignRole.execute(any(), any())).thenReturn(connectorUser);
 
         // When
-        var registeredUser = apiClient.method(HttpMethod.DELETE)
+        apiClient.patch()
             .uri(String.format(URL, userIdentifier))
-            .body(roleUser)
+            .body(request)
             .exchange()
             .expectStatus()
-            .isOk()
-            .returnResult(ConnectorUserDto.class)
-            .getResponseBody();
+            .isBadRequest();
 
         // Then
-        assertThat(registeredUser).isNotNull();
-        assertThat(registeredUser.roles()).isNull();
+        verifyNoMoreInteractions(connectorEditUserRoles);
+    }
 
-        verify(connectorUnassignRole).execute(userIdentifier, roleUser);
-        verifyNoMoreInteractions(connectorAssignRole);
+    @Test
+    void edit_user_roles_should_return_400_when_invalid_role() {
+        // Given
+        var userIdentifier = "user-identifier";
+        var request = ConnectorUserTestFixtures.createInvalidEditUserRolesRequest();
+
+        when(connectorEditUserRoles.execute(any(), anySet())).thenThrow(
+            ConnectorRoleNotFoundException.class);
+
+        // When
+        apiClient.patch()
+            .uri(String.format(URL, userIdentifier))
+            .body(request)
+            .exchange()
+            .expectStatus()
+            .isNotFound();
+
+        // Then
+        verify(connectorEditUserRoles).execute(userIdentifier, Set.of("INVALID_ROLE_ADMIN"));
+        verifyNoMoreInteractions(connectorEditUserRoles);
     }
 }

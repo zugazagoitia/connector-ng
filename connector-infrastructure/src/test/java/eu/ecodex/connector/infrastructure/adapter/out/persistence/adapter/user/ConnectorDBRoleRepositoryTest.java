@@ -40,6 +40,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 class ConnectorDBRoleRepositoryTest {
     @Mock
     ConnectorUserRoleJpaRepository jpaRepository;
+
     @InjectMocks
     private ConnectorDBRoleRepository repository;
 

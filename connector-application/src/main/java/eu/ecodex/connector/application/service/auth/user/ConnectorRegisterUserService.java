@@ -11,6 +11,7 @@
 package eu.ecodex.connector.application.service.auth.user;
 
 import eu.ecodex.connector.application.exception.user.ConnectorUserIdentifierMismatchException;
+import eu.ecodex.connector.application.port.api.auth.user.ConnectorEditUserRoles;
 import eu.ecodex.connector.application.port.api.auth.user.ConnectorRegisterUser;
 import eu.ecodex.connector.application.port.api.auth.user.ConnectorVerifyUniqueUser;
 import eu.ecodex.connector.application.port.spi.auth.login.ConnectorUserPasswordEncoder;
@@ -42,6 +43,7 @@ public class ConnectorRegisterUserService implements ConnectorRegisterUser {
     private final ConnectorUserRepository repository;
     private final ConnectorVerifyUniqueUser verifyUniqueUser;
     private final ConnectorUserPasswordEncoder passwordEncoder;
+    private final ConnectorEditUserRoles editUserRoles;
 
     /**
      * Constructs an instance of {@code ConnectorRegisterUserService} with the specified
@@ -53,15 +55,18 @@ public class ConnectorRegisterUserService implements ConnectorRegisterUser {
      *                         uniqueness
      *                         of user attributes like username and email. Must not be null.
      * @param passwordEncoder  the {@code ConnectorUserPasswordEncoder} used for securing user
-     *                         passwords
-     *                         by encoding them. Must not be null.
+     *                         passwords by encoding them. Must not be null.
+     * @param editUserRoles    the {@code ConnectorEditUserRoles} used to set roles to user after
+     *                         creation
      */
     public ConnectorRegisterUserService(ConnectorUserRepository repository,
                                         ConnectorVerifyUniqueUser verifyUniqueUser,
-                                        ConnectorUserPasswordEncoder passwordEncoder) {
+                                        ConnectorUserPasswordEncoder passwordEncoder,
+                                        ConnectorEditUserRoles editUserRoles) {
         this.repository = repository;
         this.verifyUniqueUser = verifyUniqueUser;
         this.passwordEncoder = passwordEncoder;
+        this.editUserRoles = editUserRoles;
     }
 
     @Override
@@ -75,7 +80,13 @@ public class ConnectorRegisterUserService implements ConnectorRegisterUser {
         var updatedUser = user.changePassword(encodedPassword);
 
         // Users are created by Admin user. Password change will be forced after first login.
-        // TODO: Add a mechanism based on the password creation date to rotate password update.
-        return repository.save(updatedUser.forcePasswordChangeOnNextLogin());
+        var saved = repository.save(updatedUser.forcePasswordChangeOnNextLogin());
+
+        try {
+            saved = editUserRoles.execute(saved.uuid(), user.roleNames());
+        } catch (RuntimeException e) {
+            log.debug("Error occurred when registering user roles for user [{}] ", saved.uuid());
+        }
+        return saved;
     }
 }

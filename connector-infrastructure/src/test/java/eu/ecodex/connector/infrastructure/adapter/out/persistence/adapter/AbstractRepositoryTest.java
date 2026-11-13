@@ -11,12 +11,17 @@
 package eu.ecodex.connector.infrastructure.adapter.out.persistence.adapter;
 
 import eu.ecodex.connector.RepositoryContextConfiguration;
+import eu.ecodex.connector.WithUploadTempDirectory;
+import jakarta.persistence.EntityManager;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 @Transactional
-@ActiveProfiles(value = {"dss", "security"})
+@ActiveProfiles(value = {"dss", "security", "evidence", "local"})
+@WithUploadTempDirectory
 @SpringBootTest(
     classes = RepositoryContextConfiguration.class,
     properties = {
@@ -26,4 +31,9 @@ import org.springframework.transaction.annotation.Transactional;
     }
 )
 public abstract class AbstractRepositoryTest {
+    @Autowired
+    protected JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    protected EntityManager entityManager;
 }

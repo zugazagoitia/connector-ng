@@ -34,7 +34,6 @@ import java.util.ArrayList;
 import java.util.List;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
 
 /**
@@ -48,7 +47,6 @@ public class ConnectorContainerDocumentSignatureChecker {
     private final ConnectorProcessingModeRepository processingModeRepository;
     private final ConnectorDssCertificateVerifier dssCertificateVerifier;
     private final ConnectorDssCertificateSourceLoader dssCertificateSourceLoader;
-    private final ResourceLoader resourceLoader;
     private final ConnectorContainerProperties connectorContainerProperties;
 
     /**
@@ -62,9 +60,6 @@ public class ConnectorContainerDocumentSignatureChecker {
      * @param dssCertificateSourceLoader   the loader responsible for getting certificate sources
      *                                     used during the signature validation process; must not be
      *                                     null.
-     * @param resourceLoader               the resource loader for fetching external resources
-     *                                     required during the validation process; must not be
-     *                                     null.
      * @param connectorContainerProperties the property configuration object containing relevant
      *                                     settings for container signature validation, must not be
      *                                     null.
@@ -73,12 +68,10 @@ public class ConnectorContainerDocumentSignatureChecker {
         ConnectorProcessingModeRepository processingModeRepository,
         ConnectorDssCertificateVerifier dssCertificateVerifier,
         ConnectorDssCertificateSourceLoader dssCertificateSourceLoader,
-        ResourceLoader resourceLoader,
         ConnectorContainerProperties connectorContainerProperties) {
         this.processingModeRepository = processingModeRepository;
         this.dssCertificateVerifier = dssCertificateVerifier;
         this.dssCertificateSourceLoader = dssCertificateSourceLoader;
-        this.resourceLoader = resourceLoader;
         this.connectorContainerProperties = connectorContainerProperties;
     }
 
@@ -170,21 +163,21 @@ public class ConnectorContainerDocumentSignatureChecker {
     }
 
     private Reports validate(SignedDocumentValidator validator) {
-        var constraintsXml = connectorContainerProperties.getSignature()
+        var policy = connectorContainerProperties.getSignature()
                                                          .getValidation()
                                                          .getConstraintsXml();
 
-        if (constraintsXml == null) {
+        if (policy == null) {
             return validator.validateDocument();
         }
-
-        var policy = resourceLoader.getResource(constraintsXml);
 
         try (var policyStream = policy.getInputStream()) {
             return validator.validateDocument(policyStream);
         } catch (IOException e) {
             throw new IllegalStateException(
-                "Cannot open signature validation constraints [%s]".formatted(constraintsXml), e);
+                "Cannot open signature validation constraints [%s]"
+                    .formatted(policy.getDescription()), e
+            );
         }
     }
 

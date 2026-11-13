@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import eu.ecodex.connector.AbstractIntegrationTest;
 import eu.ecodex.connector.application.port.spi.auth.user.ConnectorUserRepository;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.user.ConnectorUserDto;
-import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.user.ConnectorUserCreationOrUpdateRequest;
+import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.user.ConnectorEditUserRequest;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -46,10 +46,7 @@ class ConnectorEditUserIT extends AbstractIntegrationTest {
         assertThat(before).isNotEmpty();
         assertThat(before.get().enabled()).isTrue();
 
-        var request = ConnectorUserCreationOrUpdateRequest
-            .builder()
-            .username(username)
-            .password("test-password")
+        var request = ConnectorEditUserRequest.builder()
             .enabled(false)
             .build();
 
@@ -76,16 +73,13 @@ class ConnectorEditUserIT extends AbstractIntegrationTest {
 
     @Test
     @Sql({"classpath:sql/user.sql"})
-    void register_should_failed_when_username_already_exists() {
+    void edit_should_failed_when_email_already_exists() {
         var username = "test-user2-it";
         var before = userRepository.findByUsername(username);
         assertThat(before).isNotEmpty();
 
-        var request = ConnectorUserCreationOrUpdateRequest
-            .builder()
-            .username("test-user-it")
-            .password("password")
-            .email("test@email.com")
+        var request = ConnectorEditUserRequest.builder()
+            .email("user-it@email.com")
             .enabled(true)
             .build();
 

@@ -8,7 +8,7 @@
  * You may obtain a copy at: https://joinup.ec.europa.eu/software/page/eupl
  */
 
-create table connector.connector_business_domains
+create table connector_business_domains
 (
     id          bigint auto_increment
         primary key,
@@ -25,78 +25,84 @@ create table connector.connector_business_domains
         unique (uuid)
 );
 
-create table connector.connector_message_transport_steps
+create table connector_message_transport_steps
 (
     id                             bigint auto_increment
         primary key,
-    created_at                     datetime(6)                                  not null,
-    updated_at                     datetime(6)                                  not null,
-    identifier                     varchar(255)                                 not null,
-    link_partner_name              varchar(255)                                 not null,
-    number_of_attempts             int                                          not null,
-    remote_system_identifier       varchar(255)                                 null,
+    created_at                     datetime(6)                          not null,
+    updated_at                     datetime(6)                          not null,
+    identifier                     varchar(255)                         not null,
+    link_partner_name              varchar(255)                         not null,
+    number_of_attempts             int                                  not null,
+    remote_system_identifier       varchar(255)                         null,
     status                         enum (
-        'DELIVERED', 'DOWNLOADED', 'FAILED', 'READY_FOR_DOWNLOAD', 'SUBMITTED') not null,
-    transported_message            mediumtext                                   not null,
-    transported_message_identifier varchar(255)                                 not null,
+        'DELIVERED', 'PULLED', 'FAILED', 'READY_FOR_PULL', 'SUBMITTED') not null,
+    transported_message            mediumtext                           not null,
+    transported_message_identifier varchar(255)                         not null,
     constraint UQ_CM_TS_IDENTIFIER
         unique (identifier)
 );
 
-create table connector.connector_message_transport_step_statuses
+create table connector_message_transport_step_statuses
 (
     id                bigint auto_increment
         primary key,
-    created_at        datetime(6)                                               not null,
-    updated_at        datetime(6)                                               not null,
+    created_at        datetime(6)                                       not null,
+    updated_at        datetime(6)                                       not null,
     status            enum (
-        'DELIVERED', 'DOWNLOADED', 'FAILED', 'READY_FOR_DOWNLOAD', 'SUBMITTED') not null,
-    transport_step_id bigint                                                    null,
+        'DELIVERED', 'PULLED', 'FAILED', 'READY_FOR_PULL', 'SUBMITTED') not null,
+    transport_step_id bigint                                            null,
     constraint FK_CM_TSS_TRANSPORT_STEP
-        foreign key (transport_step_id) references connector.connector_message_transport_steps (id)
+        foreign key (transport_step_id) references connector_message_transport_steps (id)
 );
 
 create index IDX_CM_TSS_TRANSPORT_STEP_ID
-    on connector.connector_message_transport_step_statuses (transport_step_id);
+    on connector_message_transport_step_statuses (transport_step_id);
 
 create index IDX_CM_TS_LINK_PARTNER
-    on connector.connector_message_transport_steps (link_partner_name);
+    on connector_message_transport_steps (link_partner_name);
 
 create index IDX_CM_TS_REMOTE_SYS_ID
-    on connector.connector_message_transport_steps (remote_system_identifier);
+    on connector_message_transport_steps (remote_system_identifier);
 
 create index IDX_CM_TS_STATUS
-    on connector.connector_message_transport_steps (status);
+    on connector_message_transport_steps (status);
 
-create table connector.connector_messages
+create table connector_messages
 (
     id                           bigint auto_increment
         primary key,
-    created_at                   datetime(6)        not null,
-    updated_at                   datetime(6)        not null,
-    backend_message_identifier   varchar(255)       null,
-    backend_name                 varchar(255)       null,
-    confirmed_at                 datetime(6)        null,
-    deleted_at                   datetime(6)        null,
-    delivered_to_link_partner_at datetime(6)        null,
+    created_at                   datetime(6)                       not null,
+    updated_at                   datetime(6)                       not null,
+    backend_message_identifier   varchar(255)                      null,
+    backend_name                 varchar(255)                      null,
+    confirmed_at                 datetime(6)                       null,
+    deleted_at                   datetime(6)                       null,
+    delivered_to_link_partner_at datetime(6)                       null,
     direction                    enum (
-        'BACKEND_TO_GATEWAY', 'GATEWAY_TO_BACKEND') not null,
-    gateway_name                 varchar(255)       null,
-    identifier                   varchar(255)       not null,
-    rejected_at                  datetime(6)        null,
-    business_domain_id           bigint             not null,
+        'BACKEND_TO_GATEWAY', 'GATEWAY_TO_BACKEND')                not null,
+    gateway_name                 varchar(255)                      null,
+    status                       enum (
+        'CONFIRMED', 'CREATED', 'DELETED', 'DELIVERED',
+        'FAILED', 'PULLED', 'READY_FOR_PULL',
+        'RECEIVED_BY_OPPOSITE_CONNECTOR', 'REJECTED', 'SUBMITTED') not null,
+
+    identifier                   varchar(255)                      not null,
+    rejected_at                  datetime(6)                       null,
+    business_domain_id           bigint                            not null,
     constraint UQ_CM_IDENTIFIER
         unique (identifier),
     constraint FK_CM_BUSINESS_DOMAIN
-        foreign key (business_domain_id) references connector.connector_business_domains (id)
+        foreign key (business_domain_id) references connector_business_domains (id)
 );
 
-create table connector.connector_message_attachments
+create table connector_message_attachments
 (
     id           bigint auto_increment
         primary key,
     created_at   datetime(6)                                            not null,
     updated_at   datetime(6)                                            not null,
+    deleted_at   datetime(6)                                            null,
     content_type varchar(255)                                           not null,
     description  varchar(255)                                           not null,
     identifier   varchar(255)                                           not null,
@@ -110,84 +116,70 @@ create table connector.connector_message_attachments
     constraint UQ_CM_ATTACHMENTS_IDENTIFIER
         unique (identifier),
     constraint FK_CM_ATTACHMENTS_MESSAGE
-        foreign key (message_id) references connector.connector_messages (id)
+        foreign key (message_id) references connector_messages (id)
 );
 
 create index IDX_CM_ATTACHMENTS_MESSAGE_ID
-    on connector.connector_message_attachments (message_id);
+    on connector_message_attachments (message_id);
 
 create index IDX_CM_ATTACHMENTS_NAME
-    on connector.connector_message_attachments (name);
+    on connector_message_attachments (name);
 
 create index IDX_CM_ATTACHMENTS_TYPE
-    on connector.connector_message_attachments (type);
+    on connector_message_attachments (type);
 
-create table connector.connector_message_business_contents
+create table connector_message_business_contents
 (
-    id            bigint auto_increment
+    id                        bigint auto_increment
         primary key,
-    created_at    datetime(6)  not null,
-    updated_at    datetime(6)  not null,
-    uuid          varchar(255) not null,
-    message_id    bigint       not null,
-    attachment_id bigint       not null,
+    created_at                datetime(6)  not null,
+    updated_at                datetime(6)  not null,
+    uuid                      varchar(255) not null,
+    message_id                bigint       not null,
+    xml_content_attachment_id bigint       not null,
     constraint UQ_CM_BC_ATTACHMENT
-        unique (attachment_id),
+        unique (xml_content_attachment_id),
     constraint UQ_CM_BC_MESSAGE
         unique (message_id),
     constraint UQ_CM_BC_UUID
         unique (uuid),
-    constraint FK_CM_BC_ATTACHMENT
-        foreign key (attachment_id) references connector.connector_message_attachments (id),
+    constraint FK_CM_BC_XML_CT_ATTACHMENT
+        foreign key (xml_content_attachment_id) references connector_message_attachments (id),
     constraint FK_CM_BC_MESSAGE
-        foreign key (message_id) references connector.connector_messages (id)
+        foreign key (message_id) references connector_messages (id)
 );
 
-create table connector.connector_message_business_documents
+create table connector_message_business_documents
 (
-    id                  bigint auto_increment
+    id                               bigint auto_increment
         primary key,
-    created_at          datetime(6)                                      not null,
-    updated_at          datetime(6)                                      not null,
-    aes_type            enum ('AUTHENTICATION_BASED', 'SIGNATURE_BASED') null,
-    uuid                varchar(255)                                     not null,
-    attachment_id       bigint                                           not null,
-    business_content_id bigint                                           not null,
+    created_at                       datetime(6)                                      not null,
+    updated_at                       datetime(6)                                      not null,
+    aes_type                         enum ('AUTHENTICATION_BASED', 'SIGNATURE_BASED') null,
+    uuid                             varchar(255)                                     not null,
+    business_content_id              bigint                                           not null,
+    content_attachment_id            bigint                                           not null,
+    detached_signature_attachment_id bigint                                           null,
     constraint UQ_CM_BD_ATTACHMENT
-        unique (attachment_id),
+        unique (content_attachment_id),
     constraint UQ_CM_BD_CONTENT
         unique (business_content_id),
+    constraint UQ_CM_BD_DS_ATTACHMENT
+        unique (detached_signature_attachment_id),
     constraint UQ_CM_BD_UUID
         unique (uuid),
-    constraint FK_CM_BD_ATTACHMENT
-        foreign key (attachment_id) references connector.connector_message_attachments (id),
     constraint FK_CM_BD_CONTENT
-        foreign key (business_content_id) references connector.connector_message_business_contents (id)
-);
-
-create table connector.connector_message_business_document_signatures
-(
-    id                   bigint auto_increment
-        primary key,
-    created_at           datetime(6)                     not null,
-    updated_at           datetime(6)                     not null,
-    mime_type            enum ('BINARY', 'PKCS7', 'XML') not null,
-    name                 varchar(255)                    not null,
-    signature            mediumblob                      not null,
-    uuid                 varchar(255)                    not null,
-    business_document_id bigint                          not null,
-    constraint UQ_CM_BDS_DOCUMENT
-        unique (business_document_id),
-    constraint UQ_CM_BDS_UUID
-        unique (uuid),
-    constraint FK_CM_BDS_DOCUMENT
-        foreign key (business_document_id) references connector.connector_message_business_documents (id)
+        foreign key (business_content_id) references connector_message_business_contents (id),
+    constraint FK_CM_BD_ATT_CONTENT
+        foreign key (content_attachment_id) references connector_message_attachments (id),
+    constraint FK_CM_BD_DS_ATTACHMENT
+        foreign key (detached_signature_attachment_id) references connector_message_attachments (id)
 );
 
 create index IDX_CM_BD_AES_TYPE
-    on connector.connector_message_business_documents (aes_type);
+    on connector_message_business_documents (aes_type);
 
-create table connector.connector_message_errors
+create table connector_message_errors
 (
     id         bigint auto_increment
         primary key,
@@ -198,13 +190,13 @@ create table connector.connector_message_errors
     source     varchar(255) not null,
     message_id bigint       not null,
     constraint FK_CM_ERRORS_MESSAGE
-        foreign key (message_id) references connector.connector_messages (id)
+        foreign key (message_id) references connector_messages (id)
 );
 
 create index IDX_CM_ERRORS_MESSAGE_ID
-    on connector.connector_message_errors (message_id);
+    on connector_message_errors (message_id);
 
-create table connector.connector_message_evidences
+create table connector_message_evidences
 (
     id                           bigint auto_increment
         primary key,
@@ -221,34 +213,34 @@ create table connector.connector_message_evidences
     constraint UQ_CM_EVIDENCES_UUID
         unique (uuid),
     constraint FK_CM_EVIDENCES_MESSAGE
-        foreign key (message_id) references connector.connector_messages (id)
+        foreign key (message_id) references connector_messages (id)
 );
 
 create index IDX_CM_EVIDENCES_MESSAGE_ID
-    on connector.connector_message_evidences (message_id);
+    on connector_message_evidences (message_id);
 
 create index IDX_CM_BACKEND_MSG_ID
-    on connector.connector_messages (backend_message_identifier);
+    on connector_messages (backend_message_identifier);
 
 create index IDX_CM_BACKEND_NAME
-    on connector.connector_messages (backend_name);
+    on connector_messages (backend_name);
 
 create index IDX_CM_BUSINESS_DOMAIN_ID
-    on connector.connector_messages (business_domain_id);
+    on connector_messages (business_domain_id);
 
 create index IDX_CM_CREATED_AT
-    on connector.connector_messages (created_at);
+    on connector_messages (created_at);
 
 create index IDX_CM_DELIVERED_AT
-    on connector.connector_messages (delivered_to_link_partner_at);
+    on connector_messages (delivered_to_link_partner_at);
 
 create index IDX_CM_DIRECTION
-    on connector.connector_messages (direction);
+    on connector_messages (direction);
 
 create index IDX_CM_GATEWAY_NAME
-    on connector.connector_messages (gateway_name);
+    on connector_messages (gateway_name);
 
-create table connector.connector_processing_modes
+create table connector_processing_modes
 (
     id                 bigint auto_increment
         primary key,
@@ -262,10 +254,10 @@ create table connector.connector_processing_modes
     constraint UQ_CPM_UUID
         unique (uuid),
     constraint FK_CPM_BUSINESS_DOMAIN
-        foreign key (business_domain_id) references connector.connector_business_domains (id)
+        foreign key (business_domain_id) references connector_business_domains (id)
 );
 
-create table connector.connector_processing_mode_actions
+create table connector_processing_mode_actions
 (
     id                 bigint auto_increment
         primary key,
@@ -277,16 +269,16 @@ create table connector.connector_processing_mode_actions
     constraint UQ_CPM_ACTIONS_UUID
         unique (uuid),
     constraint FK_CPM_ACTIONS_PM
-        foreign key (processing_mode_id) references connector.connector_processing_modes (id)
+        foreign key (processing_mode_id) references connector_processing_modes (id)
 );
 
 create index IDX_CPM_ACTIONS_NAME
-    on connector.connector_processing_mode_actions (name);
+    on connector_processing_mode_actions (name);
 
 create index IDX_CPM_ACTIONS_PM_ID
-    on connector.connector_processing_mode_actions (processing_mode_id);
+    on connector_processing_mode_actions (processing_mode_id);
 
-create table connector.connector_processing_mode_parties
+create table connector_processing_mode_parties
 (
     id                 bigint auto_increment
         primary key,
@@ -303,25 +295,25 @@ create table connector.connector_processing_mode_parties
     constraint UQ_CPM_PARTIES_UUID
         unique (uuid),
     constraint FK_CPM_PARTIES_PM
-        foreign key (processing_mode_id) references connector.connector_processing_modes (id)
+        foreign key (processing_mode_id) references connector_processing_modes (id)
 );
 
 create index IDX_CPM_PARTIES_IDENTIFIER
-    on connector.connector_processing_mode_parties (identifier);
+    on connector_processing_mode_parties (identifier);
 
 create index IDX_CPM_PARTIES_IDENT_TYPE
-    on connector.connector_processing_mode_parties (identifier_type);
+    on connector_processing_mode_parties (identifier_type);
 
 create index IDX_CPM_PARTIES_PM_ID
-    on connector.connector_processing_mode_parties (processing_mode_id);
+    on connector_processing_mode_parties (processing_mode_id);
 
 create index IDX_CPM_PARTIES_ROLE
-    on connector.connector_processing_mode_parties (role);
+    on connector_processing_mode_parties (role);
 
 create index IDX_CPM_PARTIES_ROLE_TYPE
-    on connector.connector_processing_mode_parties (role_type);
+    on connector_processing_mode_parties (role_type);
 
-create table connector.connector_processing_mode_services
+create table connector_processing_mode_services
 (
     id                 bigint auto_increment
         primary key,
@@ -334,10 +326,10 @@ create table connector.connector_processing_mode_services
     constraint UQ_CPM_SERVICES_UUID
         unique (uuid),
     constraint FK_CPM_SERVICES_PM
-        foreign key (processing_mode_id) references connector.connector_processing_modes (id)
+        foreign key (processing_mode_id) references connector_processing_modes (id)
 );
 
-create table connector.connector_message_as4_properties
+create table connector_message_as4_properties
 (
     id                      bigint auto_increment
         primary key,
@@ -356,54 +348,54 @@ create table connector.connector_message_as4_properties
     constraint UQ_CM_AS4_MESSAGE
         unique (message_id),
     constraint FK_CM_AS4_ACTION
-        foreign key (action_id) references connector.connector_processing_mode_actions (id),
+        foreign key (action_id) references connector_processing_mode_actions (id),
     constraint FK_CM_AS4_FROM_PARTY
-        foreign key (from_party_id) references connector.connector_processing_mode_parties (id),
+        foreign key (from_party_id) references connector_processing_mode_parties (id),
     constraint FK_CM_AS4_MESSAGE
-        foreign key (message_id) references connector.connector_messages (id),
+        foreign key (message_id) references connector_messages (id),
     constraint FK_CM_AS4_SERVICE
-        foreign key (service_id) references connector.connector_processing_mode_services (id),
+        foreign key (service_id) references connector_processing_mode_services (id),
     constraint FK_CM_AS4_TO_PARTY
-        foreign key (to_party_id) references connector.connector_processing_mode_parties (id)
+        foreign key (to_party_id) references connector_processing_mode_parties (id)
 );
 
 create index IDX_CM_AS4_ACTION_ID
-    on connector.connector_message_as4_properties (action_id);
+    on connector_message_as4_properties (action_id);
 
 create index IDX_CM_AS4_CONVERSATION_ID
-    on connector.connector_message_as4_properties (conversation_identifier);
+    on connector_message_as4_properties (conversation_identifier);
 
 create index IDX_CM_AS4_EBMS_MSG_ID
-    on connector.connector_message_as4_properties (ebms_message_identifier);
+    on connector_message_as4_properties (ebms_message_identifier);
 
 create index IDX_CM_AS4_FINAL_RECIPIENT
-    on connector.connector_message_as4_properties (final_recipient);
+    on connector_message_as4_properties (final_recipient);
 
 create index IDX_CM_AS4_FROM_PARTY_ID
-    on connector.connector_message_as4_properties (from_party_id);
+    on connector_message_as4_properties (from_party_id);
 
 create index IDX_CM_AS4_ORIG_SENDER
-    on connector.connector_message_as4_properties (original_sender);
+    on connector_message_as4_properties (original_sender);
 
 create index IDX_CM_AS4_REF_TO_ID
-    on connector.connector_message_as4_properties (reference_to_identifier);
+    on connector_message_as4_properties (reference_to_identifier);
 
 create index IDX_CM_AS4_SERVICE_ID
-    on connector.connector_message_as4_properties (service_id);
+    on connector_message_as4_properties (service_id);
 
 create index IDX_CM_AS4_TO_PARTY_ID
-    on connector.connector_message_as4_properties (to_party_id);
+    on connector_message_as4_properties (to_party_id);
 
 create index IDX_CPM_SERVICES_NAME
-    on connector.connector_processing_mode_services (name);
+    on connector_processing_mode_services (name);
 
 create index IDX_CPM_SERVICES_PM_ID
-    on connector.connector_processing_mode_services (processing_mode_id);
+    on connector_processing_mode_services (processing_mode_id);
 
 create index IDX_CPM_SERVICES_TYPE
-    on connector.connector_processing_mode_services (type);
+    on connector_processing_mode_services (type);
 
-create table connector.connector_processing_mode_truststores
+create table connector_processing_mode_truststores
 (
     id                 bigint auto_increment
         primary key,
@@ -417,13 +409,13 @@ create table connector.connector_processing_mode_truststores
     constraint UQ_CPM_TRUSTSTORES_PM
         unique (processing_mode_id),
     constraint FK_CPM_TRUSTSTORES_PM
-        foreign key (processing_mode_id) references connector.connector_processing_modes (id)
+        foreign key (processing_mode_id) references connector_processing_modes (id)
 );
 
 create index IDX_CPM_BUSINESS_DOMAIN_ID
-    on connector.connector_processing_modes (business_domain_id);
+    on connector_processing_modes (business_domain_id);
 
-create table connector.connector_roles
+create table connector_roles
 (
     id         bigint auto_increment
         primary key,
@@ -437,7 +429,7 @@ create table connector.connector_roles
         unique (uuid)
 );
 
-create table connector.connector_users
+create table connector_users
 (
     id                   bigint auto_increment
         primary key,
@@ -455,7 +447,7 @@ create table connector.connector_users
         unique (uuid)
 );
 
-create table connector.connector_refresh_tokens
+create table connector_refresh_tokens
 (
     id         bigint auto_increment
         primary key,
@@ -469,20 +461,20 @@ create table connector.connector_refresh_tokens
     constraint UQ_CRT_TOKEN
         unique (token),
     constraint FK_CRT_USER
-        foreign key (user_id) references connector.connector_users (id)
+        foreign key (user_id) references connector_users (id)
 );
 
 create index IDX_CRT_USER_ID
-    on connector.connector_refresh_tokens (user_id);
+    on connector_refresh_tokens (user_id);
 
-create table connector.connector_users_roles
+create table connector_users_roles
 (
     user_id bigint not null,
     role_id bigint not null,
     constraint UQ_CUR_USER_ROLE
         unique (user_id, role_id),
     constraint FK_CUR_ROLE
-        foreign key (role_id) references connector.connector_roles (id),
+        foreign key (role_id) references connector_roles (id),
     constraint FK_CUR_USER
-        foreign key (user_id) references connector.connector_users (id)
+        foreign key (user_id) references connector_users (id)
 );

@@ -21,6 +21,7 @@ import eu.ecodex.connector.domain.model.link.ConnectorLinkMode;
 import eu.ecodex.connector.domain.model.link.partner.ConnectorLinkPartner;
 import eu.ecodex.connector.domain.model.link.partner.ConnectorLinkPartnerName;
 import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessage;
+import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessageStatus;
 import eu.ecodex.connector.domain.model.message.ConnectorEvidenceMessage;
 import eu.ecodex.connector.domain.model.message.ConnectorMessage;
 import eu.ecodex.connector.domain.model.message.evidence.ConnectorEvidenceType;
@@ -134,7 +135,7 @@ public class ConnectorJmsBackendMessageDeliveryListener
     private void makeReadyForPull(ConnectorMessage message) {
         registerMessageTransportStep.execute(
             message,
-            ConnectorMessageTransportStatus.READY_FOR_DOWNLOAD
+            ConnectorMessageTransportStatus.READY_FOR_PULL
         );
         log.info("Message [{}] is ready for pull", message.identifier());
     }
@@ -181,6 +182,7 @@ public class ConnectorJmsBackendMessageDeliveryListener
                 markEvidenceMessageAsDelivered(evidenceMessage);
             default -> throw unsupportedMessageType(message);
         }
+
         registerMessageTransportStep.execute(message, ConnectorMessageTransportStatus.DELIVERED);
     }
 
@@ -197,6 +199,7 @@ public class ConnectorJmsBackendMessageDeliveryListener
         }
 
         messageRepository.setDeliveredToLinkPartnerAt(identifier);
+        messageRepository.updateStatus(identifier, ConnectorBusinessMessageStatus.DELIVERED);
 
         if (backendIdentifier != null) {
             messageRepository.updateBackendIdentifier(identifier, backendIdentifier);

@@ -10,6 +10,7 @@
 
 package eu.ecodex.connector.infrastructure.config.property.routing;
 
+import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -24,7 +25,11 @@ import lombok.Setter;
 @Getter
 @Setter
 public class BackendRuleProperties {
+    @NotBlank
     private String linkName;
+
     private String description;
+
+    @NotBlank
     private String matchClause;
 }

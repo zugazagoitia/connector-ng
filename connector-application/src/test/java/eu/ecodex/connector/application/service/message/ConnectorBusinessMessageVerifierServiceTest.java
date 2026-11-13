@@ -52,8 +52,8 @@ public class ConnectorBusinessMessageVerifierServiceTest {
     private ConnectorBusinessMessageVerifierService verifierService;
 
     @Nested
-    @DisplayName("in STRICT verification mode")
-    class InStrictMode {
+    @DisplayName("in RELAXED verification mode")
+    class InRelaxedMode {
         @Test
         void should_pass_when_the_message_is_valid() {
             when(serviceRepository.findByNameAndBusinessDomain(any(), any()))
@@ -65,7 +65,7 @@ public class ConnectorBusinessMessageVerifierServiceTest {
 
             assertThatCode(() -> verifierService.verify(
                 message,
-                ProcessingModeVerificationMode.STRICT
+                ProcessingModeVerificationMode.RELAXED
             ))
                 .doesNotThrowAnyException();
         }
@@ -78,7 +78,7 @@ public class ConnectorBusinessMessageVerifierServiceTest {
                 ConnectorProcessingModeVerificationException.class,
                 () -> verifierService.verify(
                     BusinessMessageTestFixtures.createOutboundMessage(),
-                    ProcessingModeVerificationMode.STRICT
+                    ProcessingModeVerificationMode.RELAXED
                 )
             );
 
@@ -98,7 +98,7 @@ public class ConnectorBusinessMessageVerifierServiceTest {
                 ConnectorProcessingModeVerificationException.class,
                 () -> verifierService.verify(
                     BusinessMessageTestFixtures.createOutboundMessage(),
-                    ProcessingModeVerificationMode.STRICT
+                    ProcessingModeVerificationMode.RELAXED
                 )
             );
 
@@ -110,8 +110,8 @@ public class ConnectorBusinessMessageVerifierServiceTest {
     }
 
     @Nested
-    @DisplayName("in RELAXED verification mode")
-    class InRelaxedMode {
+    @DisplayName("in STRICT verification mode")
+    class InStrictMode {
         @Test
         void should_pass_when_the_message_is_valid() {
             when(serviceRepository.findByNameAndBusinessDomain(any(), any()))
@@ -123,7 +123,7 @@ public class ConnectorBusinessMessageVerifierServiceTest {
 
             var message = BusinessMessageTestFixtures.createOutboundMessage();
 
-            verifierService.verify(message, ProcessingModeVerificationMode.RELAXED);
+            verifierService.verify(message, ProcessingModeVerificationMode.STRICT);
 
             verify(serviceRepository).findByNameAndBusinessDomain(any(), any());
             verify(actionRepository).findByNameAndBusinessDomain(any(), any());
@@ -144,7 +144,7 @@ public class ConnectorBusinessMessageVerifierServiceTest {
                 ConnectorProcessingModeVerificationException.class,
                 () -> verifierService.verify(
                     BusinessMessageTestFixtures.createOutboundMessage(),
-                    ProcessingModeVerificationMode.RELAXED
+                    ProcessingModeVerificationMode.STRICT
                 )
             );
 
@@ -167,7 +167,7 @@ public class ConnectorBusinessMessageVerifierServiceTest {
                 ConnectorProcessingModeVerificationException.class,
                 () -> verifierService.verify(
                     BusinessMessageTestFixtures.createEmptyToPartyOutboundBusinessMessage(),
-                    ProcessingModeVerificationMode.RELAXED
+                    ProcessingModeVerificationMode.STRICT
                 )
             );
 
@@ -190,7 +190,7 @@ public class ConnectorBusinessMessageVerifierServiceTest {
                 ConnectorProcessingModeVerificationException.class,
                 () -> verifierService.verify(
                     BusinessMessageTestFixtures.createOutboundMessage(),
-                    ProcessingModeVerificationMode.RELAXED
+                    ProcessingModeVerificationMode.STRICT
                 )
             );
 
@@ -211,7 +211,7 @@ public class ConnectorBusinessMessageVerifierServiceTest {
                 ConnectorProcessingModeVerificationException.class,
                 () -> verifierService.verify(
                     BusinessMessageTestFixtures.createEmptyFromPartyOutboundMessage(),
-                    ProcessingModeVerificationMode.RELAXED
+                    ProcessingModeVerificationMode.STRICT
                 )
             );
 

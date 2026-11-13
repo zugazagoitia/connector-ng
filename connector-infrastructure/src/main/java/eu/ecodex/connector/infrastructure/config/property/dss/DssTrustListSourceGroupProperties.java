@@ -10,6 +10,7 @@
 
 package eu.ecodex.connector.infrastructure.config.property.dss;
 
+import jakarta.validation.Valid;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.Getter;
@@ -24,9 +25,12 @@ public class DssTrustListSourceGroupProperties {
     /**
      * List of LOTL (List of Trusted Lists) source entries.
      */
+    @Valid
     private List<DssLotlSourceProperties> lotlSources = new ArrayList<>();
+
     /**
      * List of TL (Trusted List) source entries.
      */
+    @Valid
     private List<DssTlSourceProperties> tlSources = new ArrayList<>();
 }

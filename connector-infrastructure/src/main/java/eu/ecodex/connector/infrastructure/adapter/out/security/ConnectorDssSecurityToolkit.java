@@ -21,6 +21,7 @@ import eu.ecodex.connector.infrastructure.adapter.out.security.container.Connect
 import eu.ecodex.connector.infrastructure.adapter.out.security.container.ConnectorContainerValidator;
 import eu.ecodex.connector.infrastructure.adapter.out.security.exception.ConnectorContainerException;
 import eu.ecodex.connector.infrastructure.adapter.out.security.model.container.ConnectorContainer;
+import eu.ecodex.connector.infrastructure.helper.ConnectorTempFilesHelper;
 import eu.europa.esig.dss.model.DSSDocument;
 import eu.europa.esig.dss.model.InMemoryDocument;
 import java.io.IOException;
@@ -43,24 +44,35 @@ public class ConnectorDssSecurityToolkit implements ConnectorSecurityToolkit {
     private final ConnectorContainerValidator containerValidator;
     private final ConnectorMessageAttachmentRepository attachmentRepository;
     private final ConnectorFileStorageProvider fileStorageProvider;
+    private final ConnectorTempFilesHelper tempFilesHelper;
 
     /**
-     * Constructor for the ConnectorSecurityToolkitImpl.
+     * Creates the security toolkit, which builds and validates the ASiC containers of the messages
+     * using the DSS library.
      *
-     * @param containerBuilder     the builder used for creating ASiC containers
-     * @param containerValidator   the validator used for validating ASiC containers
-     * @param attachmentRepository the repository for managing message attachments
-     * @param fileStorageProvider  the provider for handling file storage operations
+     * @param containerBuilder     the builder used to create the ASiC containers of outbound
+     *                             messages (must not be null)
+     * @param containerValidator   the validator used to validate the ASiC containers of inbound
+     *                             messages (must not be null)
+     * @param attachmentRepository the repository used to find and save the attachments of the
+     *                             messages (must not be null)
+     * @param fileStorageProvider  the provider used to read and write the content of the
+     *                             attachments in the file storage (must not be null)
+     * @param tempFilesHelper      the helper used to create the temporary files needed while
+     *                             building or validating containers (must not be null)
      */
+
     public ConnectorDssSecurityToolkit(
         ConnectorContainerBuilder containerBuilder,
         ConnectorContainerValidator containerValidator,
         ConnectorMessageAttachmentRepository attachmentRepository,
-        ConnectorFileStorageProvider fileStorageProvider) {
+        ConnectorFileStorageProvider fileStorageProvider,
+        ConnectorTempFilesHelper tempFilesHelper) {
         this.containerBuilder = containerBuilder;
         this.containerValidator = containerValidator;
         this.attachmentRepository = attachmentRepository;
         this.fileStorageProvider = fileStorageProvider;
+        this.tempFilesHelper = tempFilesHelper;
     }
 
     @Override
@@ -170,8 +182,7 @@ public class ConnectorDssSecurityToolkit implements ConnectorSecurityToolkit {
         var savedAttachment = attachmentRepository.save(attachment);
         attachmentRepository.attachToMessage(savedAttachment.identifier(), messageIdentifier);
 
-        // Use system temp dir rather than a hardcoded relative path
-        var tempPath = Files.createTempFile("connector-", "-" + savedAttachment.identifier());
+        var tempPath = tempFilesHelper.create("connector", savedAttachment.identifier());
         try {
             saveOperation.save(tempPath);
             fileStorageProvider.save(savedAttachment, tempPath);

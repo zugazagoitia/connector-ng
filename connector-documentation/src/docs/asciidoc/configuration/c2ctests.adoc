@@ -6,6 +6,7 @@ endif::header[]
 
 The C2C test feature allows two connector instances to verify end-to-end AS4 connectivity without involving a real backend on either side.
 When enabled, any inbound message whose AS4 service/action pair matches the configured combination is intercepted and short-circuited: the connector generates synthetic REM evidence responses internally and never forwards the message to the backend.
+When disabled, such messages are handled like any other inbound message and forwarded to the backend.
 
 Test messages can be sent from the administration portal or with `POST /api/v1/admin/messages/outbound/test` (authenticated).
 
@@ -18,6 +19,7 @@ Test messages can be sent from the administration portal or with `POST /api/v1/a
 
 == Basic configuration
 Configuration is provided via `application.properties` under the `+connector.c2ctests.*+` prefix.
+All properties are optional: when a property is not set, its default value is used.
 
 .Connector-to-Connector (C2C) Test Configuration
 [cols="35,40,10,15", options="header"]
@@ -30,21 +32,25 @@ Configuration is provided via `application.properties` under the `+connector.c2c
 | By default, set to `true`
 
 | `connector.c2ctests.action`
-| The AS4 action value that identifies a message as a C2C test message. Must match the action defined in the P-Mode used for test traffic.
+| The AS4 action value that identifies a message as a C2C test message. Must match the action defined in the P-Mode used for test traffic. Must not be blank.
 | Yes
 | By default, set to `ConTest_Form`
 
 | `connector.c2ctests.service.name`
-| The AS4 service name used to identify C2C test messages, paired with `connector.c2ctests.action` to form the matching combination. Must match the service name in the P-Mode.
+| The AS4 service name used to identify C2C test messages, paired with `connector.c2ctests.action` to form the matching combination. Must match the service name in the P-Mode. Must not be blank.
 | Yes
 | By default, set to `Connector-TEST`
 
 | `connector.c2ctests.service.type`
-| The AS4 service type URI qualifying `connector.c2ctests.service.name`.
+| The AS4 service type URI qualifying `connector.c2ctests.service.name`. Must not be blank.
 | Yes
 | By default, set to `urn:e-codex:services:`
 
 |===
+
+NOTE: The configuration is validated at startup. An empty value (for example
+`connector.c2ctests.action=`) counts as set to blank and stops the connector.
+Remove or comment out the line to use the default.
 
 .Configuration Example
 [source,properties]
@@ -54,3 +60,26 @@ connector.c2ctests.action=ConTest_Form
 connector.c2ctests.service.name=Connector-TEST
 connector.c2ctests.service.type=urn:e-codex:services:
 ----
+
+== Migration from 6.x
+
+In 6.x these properties used the prefix `c2ctests.*`. In 7.x they are renamed as follows:
+
+[cols="50,50"]
+|===
+| 6.x property | 7.x property
+
+| `c2ctests.enabled`
+| `connector.c2ctests.enabled`
+
+| `c2ctests.action`
+| `connector.c2ctests.action`
+
+| `c2ctests.service.name`
+| `connector.c2ctests.service.name`
+
+| `c2ctests.service.serviceType`
+| `connector.c2ctests.service.type`
+|===
+
+WARNING: The 6.x property names are no longer recognized in 7.x and are silently ignored.

@@ -11,10 +11,13 @@
 package eu.ecodex.connector.infrastructure.adapter.out.security;
 
 import eu.ecodex.connector.ContainerContextConfiguration;
+import eu.ecodex.connector.WithUploadTempDirectory;
+import eu.ecodex.connector.infrastructure.config.PropertiesConfig;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
-@ActiveProfiles(value = {"dss", "security", "evidence"})
-@SpringBootTest(classes = ContainerContextConfiguration.class)
+@WithUploadTempDirectory
+@ActiveProfiles(value = {"dss", "security", "evidence", "local"})
+@SpringBootTest(classes = {ContainerContextConfiguration.class, PropertiesConfig.class})
 public class BaseContainerTest {
 }

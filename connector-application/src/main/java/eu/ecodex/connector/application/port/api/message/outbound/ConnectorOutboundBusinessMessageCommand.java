@@ -40,7 +40,7 @@ import lombok.Builder;
  *                                            message, such as supplementary documents or metadata.
  *                                            Defaults to an empty list if not provided.
  */
-@Builder
+@Builder(toBuilder = true)
 public record ConnectorOutboundBusinessMessageCommand(
     @Nonnull ConnectorBusinessDomainIdentifier businessDomainIdentifier,
     @Nullable String backendMessageIdentifier,

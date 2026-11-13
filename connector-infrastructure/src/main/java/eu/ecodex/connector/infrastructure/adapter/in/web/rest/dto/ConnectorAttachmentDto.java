@@ -32,6 +32,7 @@ import lombok.Builder;
  * @param type        the type of the attachment (e.g. {@code BUSINESS_DOCUMENT})
  * @param createdAt   the timestamp when the attachment was created
  * @param updatedAt   the timestamp when the attachment was last updated
+ * @param deletedAt   the deletion date of the attachment.
  */
 @Builder
 public record ConnectorAttachmentDto(
@@ -43,7 +44,8 @@ public record ConnectorAttachmentDto(
     ConnectorAttachmentStorage storage,
     ConnectorAttachmentType type,
     Instant createdAt,
-    Instant updatedAt
+    Instant updatedAt,
+    Instant deletedAt
 ) {
     /**
      * Creates an instance of {@code ConnectorAttachmentDto} from a given
@@ -67,6 +69,7 @@ public record ConnectorAttachmentDto(
             .type(attachment.type())
             .createdAt(attachment.createdAt())
             .updatedAt(attachment.updatedAt())
+            .deletedAt(attachment.deletedAt())
             .build();
     }
 }

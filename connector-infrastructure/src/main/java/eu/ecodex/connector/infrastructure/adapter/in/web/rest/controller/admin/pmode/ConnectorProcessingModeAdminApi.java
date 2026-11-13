@@ -17,7 +17,6 @@ import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.pmode.Conn
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.pmode.ConnectorProcessingModeTruststoreRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.io.IOException;
@@ -49,51 +48,41 @@ public interface ConnectorProcessingModeAdminApi {
     @PostMapping(value = "", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Creates a new processing mode.")
-    @ApiResponses({
-        @ApiResponse(responseCode = "201", description = "Created"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "403", description = "Forbidden"),
-        @ApiResponse(responseCode = "400", description = "Bad Request")
-    })
+    @ApiResponse(responseCode = "201", description = "Created")
+    @ApiResponse(responseCode = "401", description = "Unauthorized")
+    @ApiResponse(responseCode = "403", description = "Forbidden")
+    @ApiResponse(responseCode = "400", description = "Bad Request")
     ConnectorProcessingModeDto registerPmode(
         @Valid @ModelAttribute ConnectorProcessingModeCreationRequest request) throws IOException;
 
     @GetMapping("")
     @ResponseStatus(HttpStatus.OK)
     @Operation(summary = "Get all processing modes.")
-    @ApiResponses({
-        @ApiResponse(responseCode = "401", description = "Unauthorized")
-    })
+    @ApiResponse(responseCode = "401", description = "Unauthorized")
     List<ConnectorProcessingModeDto> listPmodes();
 
     @GetMapping("/{uuid}")
     @ResponseStatus(HttpStatus.OK)
     @Operation(summary = "Get a processing mode by identifier.")
-    @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Success"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "404", description = "Not Found")
-    })
+    @ApiResponse(responseCode = "200", description = "Success")
+    @ApiResponse(responseCode = "401", description = "Unauthorized")
+    @ApiResponse(responseCode = "404", description = "Not Found")
     ConnectorProcessingModeDetailDto retrievePmode(@PathVariable String uuid);
 
     @GetMapping("/{uuid}/download")
     @Operation(summary = "Download a processing mode")
-    @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Success"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "404", description = "Not Found")
-    })
+    @ApiResponse(responseCode = "200", description = "Success")
+    @ApiResponse(responseCode = "401", description = "Unauthorized")
+    @ApiResponse(responseCode = "404", description = "Not Found")
     ResponseEntity<byte[]> downloadPmode(@PathVariable String uuid);
 
     @PatchMapping(value = "/{uuid}/truststore", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.OK)
     @Operation(summary = "Update the truststore of a processing mode")
-    @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Success"),
-        @ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @ApiResponse(responseCode = "403", description = "Forbidden"),
-        @ApiResponse(responseCode = "404", description = "Not Found")
-    })
+    @ApiResponse(responseCode = "200", description = "Success")
+    @ApiResponse(responseCode = "401", description = "Unauthorized")
+    @ApiResponse(responseCode = "403", description = "Forbidden")
+    @ApiResponse(responseCode = "404", description = "Not Found")
     ConnectorProcessingModeTruststoreDto updateTruststore(
         @PathVariable String uuid,
         @Valid @ModelAttribute ConnectorProcessingModeTruststoreRequest request);

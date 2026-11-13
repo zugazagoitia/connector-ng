@@ -97,15 +97,15 @@ public class ConnectorListTransportStepsIT extends AbstractIntegrationTest {
             ),
 
             arguments("status SUBMITTED", Map.of("statuses", "SUBMITTED"), 1),
-            arguments("status DOWNLOADED", Map.of("statuses", "DOWNLOADED"), 1),
+            arguments("status PULLED", Map.of("statuses", "PULLED"), 1),
             arguments(
-                "status READY_FOR_DOWNLOAD",
-                Map.of("statuses", "READY_FOR_DOWNLOAD"),
+                "status READY_FOR_PULL",
+                Map.of("statuses", "READY_FOR_PULL"),
                 2
             ),
             arguments(
                 "several statuses (union)",
-                Map.of("statuses", "SUBMITTED,DOWNLOADED"),
+                Map.of("statuses", "SUBMITTED,PULLED"),
                 2
             ),
             arguments(

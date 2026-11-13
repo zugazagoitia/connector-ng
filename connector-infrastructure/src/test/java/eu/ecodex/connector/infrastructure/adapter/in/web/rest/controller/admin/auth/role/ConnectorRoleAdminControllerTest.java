@@ -11,18 +11,11 @@
 package eu.ecodex.connector.infrastructure.adapter.in.web.rest.controller.admin.auth.role;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import eu.ecodex.connector.application.exception.role.ConnectorRoleNotFoundException;
-import eu.ecodex.connector.application.port.api.auth.role.ConnectorEditRole;
 import eu.ecodex.connector.application.port.api.auth.role.ConnectorListRole;
-import eu.ecodex.connector.application.port.api.auth.role.ConnectorRegisterRole;
-import eu.ecodex.connector.application.port.api.auth.role.ConnectorRemoveRole;
-import eu.ecodex.connector.application.port.api.auth.role.ConnectorRetrieveRoleByIdentifier;
 import eu.ecodex.connector.domain.model.user.ConnectorRole;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.controller.AbstractWebMvcTest;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.user.ConnectorRoleDto;
@@ -31,7 +24,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
@@ -40,118 +32,10 @@ class ConnectorRoleAdminControllerTest extends AbstractWebMvcTest {
     private static final String URL = "/api/v1/admin/users/roles";
 
     @MockitoBean
-    ConnectorRegisterRole registerRole;
-    @MockitoBean
-    ConnectorEditRole updateRole;
-    @MockitoBean
-    ConnectorRetrieveRoleByIdentifier retrieveRole;
-    @MockitoBean
-    ConnectorRemoveRole removeRole;
-    @MockitoBean
     ConnectorListRole listRole;
 
     @Autowired
     private RestTestClient apiClient;
-
-    @Test
-    void register_should_register_new_role() {
-        // Given
-        var roleDto = ConnectorRoleDto.builder().name("new_role").build();
-        var role = ConnectorRole.builder().name("new_role").build();
-
-        when(registerRole.execute(any())).thenReturn(role);
-
-        // When
-        var response = apiClient.post()
-                                .uri(URL)
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .body(roleDto)
-                                .exchange()
-                                .expectStatus()
-                                .isCreated()
-                                .returnResult(ConnectorRoleDto.class);
-
-        // Then
-        var responseBody = response.getResponseBody();
-        assertThat(responseBody).isNotNull();
-        assertThat(responseBody).isEqualTo(roleDto);
-
-        verify(registerRole).execute(role);
-        assertNoMoreInteractions();
-    }
-
-    @Test
-    void update_should_update_existing_role() {
-        // Given
-        var identifier = "uuid";
-        var roleDto = ConnectorRoleDto.builder().name("new_role").build();
-        var role = ConnectorRole.builder().name("new_role").build();
-
-        when(updateRole.execute(any(), any())).thenReturn(role);
-
-        // When
-        var response = apiClient.put()
-                                .uri(URL + "/" + identifier)
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .body(roleDto)
-                                .exchange()
-                                .expectStatus()
-                                .isOk()
-                                .returnResult(ConnectorRoleDto.class);
-
-        // Then
-        var responseBody = response.getResponseBody();
-        assertThat(responseBody).isNotNull();
-        assertThat(responseBody).isEqualTo(roleDto);
-
-        verify(updateRole).execute(identifier, role);
-        assertNoMoreInteractions();
-    }
-
-    @Test
-    void getByIdentifier_should_return_role_found() {
-        // Given
-        var identifier = "uuid";
-        var roleDto = ConnectorRoleDto.builder().name("new_role").build();
-        var role = ConnectorRole.builder().name("new_role").build();
-
-        when(retrieveRole.execute(any())).thenReturn(role);
-
-        // When
-        var response = apiClient.get()
-                                .uri(URL + "/" + identifier)
-                                .exchange()
-                                .expectStatus()
-                                .isOk()
-                                .returnResult(ConnectorRoleDto.class);
-
-        // Then
-        var responseBody = response.getResponseBody();
-        assertThat(responseBody).isNotNull();
-        assertThat(responseBody).isEqualTo(roleDto);
-
-        verify(retrieveRole).execute(identifier);
-        assertNoMoreInteractions();
-    }
-
-    @Test
-    void getByIdentifier_should_return_404_when_role_not_found() {
-        // Given
-        var identifier = "uuid";
-
-        when(retrieveRole.execute(any())).thenThrow(ConnectorRoleNotFoundException.class);
-
-        // When
-        apiClient.get()
-                 .uri(URL + "/" + identifier)
-                 .exchange()
-                 .expectStatus()
-                 .isNotFound();
-
-        // Then
-        verify(retrieveRole).execute(identifier);
-        assertNoMoreInteractions();
-    }
 
 
     @Test
@@ -164,12 +48,12 @@ class ConnectorRoleAdminControllerTest extends AbstractWebMvcTest {
 
         // When
         var response = apiClient.get()
-                                .uri(URL)
-                                .exchange()
-                                .expectStatus()
-                                .isOk()
-                                .returnResult(new ParameterizedTypeReference<List<ConnectorRoleDto>>() {
-                                });
+            .uri(URL)
+            .exchange()
+            .expectStatus()
+            .isOk()
+            .returnResult(new ParameterizedTypeReference<List<ConnectorRoleDto>>() {
+            });
 
         // Then
         var responseBody = response.getResponseBody();
@@ -177,29 +61,7 @@ class ConnectorRoleAdminControllerTest extends AbstractWebMvcTest {
         assertThat(responseBody).usingRecursiveComparison().isEqualTo(List.of(roleDto));
 
         verify(listRole).execute();
-        assertNoMoreInteractions();
+        verifyNoMoreInteractions(listRole);
     }
 
-    @Test
-    void deleteByIdentifier() {
-        // Given
-        var identifier = "uuid";
-
-        doNothing().when(removeRole).execute(any());
-
-        // When
-        apiClient.delete()
-                 .uri(URL + "/" + identifier)
-                 .exchange()
-                 .expectStatus()
-                 .isNoContent();
-
-        // Then
-        verify(removeRole).execute(identifier);
-        assertNoMoreInteractions();
-    }
-
-    private void assertNoMoreInteractions() {
-        verifyNoMoreInteractions(registerRole, removeRole, listRole, retrieveRole);
-    }
 }

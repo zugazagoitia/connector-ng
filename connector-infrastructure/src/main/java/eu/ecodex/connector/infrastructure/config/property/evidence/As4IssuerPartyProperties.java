@@ -22,6 +22,7 @@ import lombok.Setter;
 public class As4IssuerPartyProperties {
     @NotBlank
     private String name;
+    
     @NotBlank
     private String endpointAddress;
 }

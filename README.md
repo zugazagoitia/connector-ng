@@ -10,6 +10,9 @@ It receives business messages from backends, packages and signs them (ASiC-S con
 ### Branches
 ![Branches](.github/badges/branches.svg)
 
+## Admin console
+An admin panel for the connector is available in a dedicated repository: [connector-ng-admin-console](https://github.com/e-CODEX/connector-ng-admin-console). Refer to the README.md of that repository for installation and usage instructions.
+
 ## Documentation
 
 The full documentation is written in AsciiDoc under [`connector-documentation/src/docs/asciidoc`](connector-documentation/src/docs/asciidoc):
@@ -52,6 +55,20 @@ The distribution is generated in `connector-distribution/build/` (`connector-dis
 The `docker-compose.yml` file starts the connector together with the services it needs: MySQL (connector and gateway databases), Apache ActiveMQ Classic, MinIO (S3) and the Domibus gateway.
 It also defines optional MariaDB, PostgreSQL and Oracle services that are not needed for the default (MySQL) setup.
 
+### Temporary upload directory
+
+Uploaded attachments are first written to a temporary directory. Its location is set with `connector.file.storage.upload-temp-directory`, fed by the `TEMP_DIR_LOCATION` environment variable. The connector does **not** create it. At startup it checks that the directory exists, is writable, is not a symbolic link and is not writable by group or others (for example mode `700`); otherwise it refuses to start. Do not use a shared directory such as `/tmp`.
+
+The Docker image already provides `/app/temp` with the right owner and permissions. Outside Docker, create the directory beforehand:
+
+```shell
+install -d -m 700 -o <connector-user> /path/to/connector/temp
+export TEMP_DIR_LOCATION=/path/to/connector/temp
+```
+
+> [!NOTE]
+> If you mount a volume or a host folder on `/app/temp`, the owner and permissions of the mount replace the ones set in the image. Make sure the mounted folder is owned by the container user (UID 1000 by default) and has `700` permissions, for example: `install -d -m 700 -o 1000 -g 1000 <host-folder>`.
+
 Prerequisites: Docker Engine 24+ and Docker Compose 2.x, and read access to the e-CODEX registry for the gateway image (`docker login scm.ecodex.eu`).
 
 ### 1. Build the connector image
@@ -92,7 +109,7 @@ For a local evaluation you only need the adjustments below; for any other use, r
 Edit `docker/connector/config/application.properties`:
 
 - the template declares a P-Mode file `./config/pmode/pmode-blue.xml`: place your gateway P-Mode there, or remove the `connector.business-domains.defaults[0].pmode.*` lines and upload it later from the administration portal — the connector does not start if the file is missing;
-- create the `attachments` bucket in MinIO (console at `http://localhost:9001`) before the first message is sent.
+- the connector creates the `attachments` bucket in MinIO at startup when it is missing (`connector.file.storage.s3.auto-create-bucket`, enabled by default); the MinIO console is at `http://localhost:9001`.
 
 > [!WARNING]
 > Pay particular attention to the database connection settings, the JMS broker credentials, the S3 storage parameters, and the keystore/truststore configuration (paths, passwords and aliases). They are required for TLS and WS-Security communication, ASiC-S signing, business document verification and other features.
@@ -122,7 +139,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the build, code style, commit message
 ## Security
 
 See the security guidance of the installation guide before deploying the connector outside a development environment.
-Report suspected vulnerabilities privately to the e-CODEX team rather than in a public issue.
+Report suspected vulnerabilities privately; see [SECURITY.md](SECURITY.md).
 
 ## License
 

@@ -12,6 +12,7 @@ package eu.ecodex.connector.infrastructure.adapter.in.web.rest.controller;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -22,6 +23,8 @@ import eu.ecodex.connector.FileTestFixtures;
 import eu.ecodex.connector.MessageAttachmentTestFixtures;
 import eu.ecodex.connector.application.port.api.attachment.ConnectorUploadAttachments;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.controller.attachment.ConnectorAttachmentController;
+import eu.ecodex.connector.infrastructure.helper.ConnectorTempFilesHelper;
+import java.nio.file.Files;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -40,6 +43,8 @@ public class ConnectorAttachmentControllerTest extends AbstractWebMvcTest {
 
     @MockitoBean
     private ConnectorUploadAttachments uploadAttachments;
+    @MockitoBean
+    private ConnectorTempFilesHelper tempFilesHelper;
 
     @Autowired
     private MockMvc mockMvc;
@@ -48,6 +53,8 @@ public class ConnectorAttachmentControllerTest extends AbstractWebMvcTest {
     void should_return_201_when_uploading_attachments() throws Exception {
         when(uploadAttachments.execute(any()))
             .thenReturn(List.of(MessageAttachmentTestFixtures.createAttachment()));
+        when(tempFilesHelper.create(anyString(), anyString()))
+            .thenAnswer(invocation -> Files.createTempFile("test-attachment-", ".tmp"));
 
         mockMvc.perform(multipart(HttpMethod.POST, URL)
                             .file(getAttachment("raw/fake_file.pdf", "fake_file.pdf"))

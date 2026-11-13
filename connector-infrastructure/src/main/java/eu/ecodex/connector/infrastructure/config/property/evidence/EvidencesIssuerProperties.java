@@ -25,10 +25,10 @@ public class EvidencesIssuerProperties {
     @Valid
     @NotNull
     @NestedConfigurationProperty
-    private PostalAddressProperties postalAddress = new PostalAddressProperties();
+    private PostalAddressProperties postalAddress;
 
     @Valid
     @NotNull
     @NestedConfigurationProperty
-    private As4IssuerPartyProperties as4Party = new As4IssuerPartyProperties();
+    private As4IssuerPartyProperties as4Party;
 }

@@ -11,6 +11,7 @@
 package eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.message;
 
 import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessage;
+import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessageStatus;
 import eu.ecodex.connector.domain.model.message.ConnectorMessageDirection;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.BaseEntity;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.ConnectorBusinessDomainEntity;
@@ -35,7 +36,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import lombok.AllArgsConstructor;
@@ -91,6 +92,12 @@ public class ConnectorMessageEntity extends BaseEntity {
     @Column(name = "DIRECTION", nullable = false)
     private ConnectorMessageDirection direction;
 
+    @Setter
+    @Enumerated(EnumType.STRING)
+    @Column(name = "STATUS", nullable = false)
+    private ConnectorBusinessMessageStatus status;
+
+    @Setter
     @Column(name = "DELETED_AT")
     private Instant deletedAt;
 
@@ -115,11 +122,11 @@ public class ConnectorMessageEntity extends BaseEntity {
     private ConnectorBusinessDomainEntity businessDomain;
 
     @Setter
-    @OneToOne(mappedBy = "message", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToOne(mappedBy = "message", orphanRemoval = true)
     private ConnectorMessageBusinessContentEntity businessContent;
 
     @Setter
-    @OneToOne(mappedBy = "message", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToOne(mappedBy = "message", cascade = CascadeType.REMOVE, orphanRemoval = true)
     private ConnectorMessageAS4PropertiesEntity as4Properties;
 
     @Builder.Default
@@ -127,9 +134,9 @@ public class ConnectorMessageEntity extends BaseEntity {
     private List<ConnectorMessageAttachmentEntity> attachments = new ArrayList<>();
 
     @Builder.Default
-    @OrderBy("createdAt ASC")
+    @OrderBy("createdAt DESC")
     @OneToMany(mappedBy = "message", cascade = CascadeType.ALL, orphanRemoval = true)
-    private Set<ConnectorMessageEvidenceEntity> evidences = new HashSet<>();
+    private Set<ConnectorMessageEvidenceEntity> evidences = new LinkedHashSet<>();
 
     @Builder.Default
     @OneToMany(mappedBy = "message", cascade = CascadeType.ALL, orphanRemoval = true)

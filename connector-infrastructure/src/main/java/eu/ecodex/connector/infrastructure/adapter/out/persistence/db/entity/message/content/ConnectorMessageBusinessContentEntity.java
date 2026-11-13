@@ -14,6 +14,7 @@ import eu.ecodex.connector.domain.model.message.content.ConnectorMessageBusiness
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.BaseEntity;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.message.ConnectorMessageAttachmentEntity;
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.message.ConnectorMessageEntity;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -45,7 +46,7 @@ import org.hibernate.annotations.UuidGenerator;
     name = "CONNECTOR_MESSAGE_BUSINESS_CONTENTS",
     uniqueConstraints = {
         @UniqueConstraint(name = "UQ_CM_BC_UUID", columnNames = "UUID"),
-        @UniqueConstraint(name = "UQ_CM_BC_ATTACHMENT", columnNames = "ATTACHMENT_ID"),
+        @UniqueConstraint(name = "UQ_CM_BC_ATTACHMENT", columnNames = "XML_CONTENT_ATTACHMENT_ID"),
         @UniqueConstraint(name = "UQ_CM_BC_MESSAGE", columnNames = "MESSAGE_ID")
     }
 )
@@ -59,11 +60,11 @@ public class ConnectorMessageBusinessContentEntity extends BaseEntity {
     @Column(name = "UUID", unique = true, nullable = false, updatable = false)
     private String uuid;
 
-    @OneToOne(fetch = FetchType.LAZY, optional = false)
+    @OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.REMOVE, optional = false)
     @JoinColumn(
-        name = "ATTACHMENT_ID",
+        name = "XML_CONTENT_ATTACHMENT_ID",
         nullable = false,
-        foreignKey = @ForeignKey(name = "FK_CM_BC_ATTACHMENT"))
+        foreignKey = @ForeignKey(name = "FK_CM_BC_XML_CT_ATTACHMENT"))
     private ConnectorMessageAttachmentEntity xmlContent;
 
     @OneToOne(fetch = FetchType.LAZY, optional = false)
@@ -74,6 +75,6 @@ public class ConnectorMessageBusinessContentEntity extends BaseEntity {
     private ConnectorMessageEntity message;
 
     @Setter
-    @OneToOne(mappedBy = "businessContent")
+    @OneToOne(mappedBy = "businessContent", cascade = CascadeType.REMOVE, orphanRemoval = true)
     private ConnectorMessageBusinessDocumentEntity businessDocument;
 }

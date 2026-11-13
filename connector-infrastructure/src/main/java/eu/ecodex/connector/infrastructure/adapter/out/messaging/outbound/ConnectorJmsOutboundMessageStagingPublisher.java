@@ -44,7 +44,7 @@ public class ConnectorJmsOutboundMessageStagingPublisher
         log.info("Submitting message [{}] to outbound message staging queue", message.identifier());
 
         this.jmsTemplate.convertAndSend(
-            this.queueProperties.getOutboundMessageStagingQueue(), message
+            this.queueProperties.outboundMessageStagingQueue(), message
         );
     }
 }

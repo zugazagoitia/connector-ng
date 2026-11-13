@@ -25,6 +25,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.Size;
@@ -89,6 +90,7 @@ public class ConnectorMessageTransportStepEntity extends BaseEntity {
 
     @Setter
     @Builder.Default
+    @OrderBy("createdAt DESC")
     @OneToMany(mappedBy = "transportStep", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<ConnectorMessageTransportStepStatusEntity> statuses = new LinkedHashSet<>();
 }

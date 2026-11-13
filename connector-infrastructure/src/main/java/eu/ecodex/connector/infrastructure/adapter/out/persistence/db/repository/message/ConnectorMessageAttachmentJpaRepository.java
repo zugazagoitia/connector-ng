@@ -11,10 +11,15 @@
 package eu.ecodex.connector.infrastructure.adapter.out.persistence.db.repository.message;
 
 import eu.ecodex.connector.infrastructure.adapter.out.persistence.db.entity.message.ConnectorMessageAttachmentEntity;
+import java.time.Instant;
 import java.util.List;
+import lombok.NonNull;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -28,5 +33,35 @@ public interface ConnectorMessageAttachmentJpaRepository extends
     @EntityGraph(attributePaths = {"message"})
     ConnectorMessageAttachmentEntity findByIdentifier(String identifier);
 
-    List<ConnectorMessageAttachmentEntity> findAllByMessageIdentifier(String messageIdentifier);
+    @Query("""
+        SELECT cma
+        FROM ConnectorMessageAttachmentEntity cma
+        WHERE cma.message IS NULL
+            AND cma.deletedAt IS NULL
+            AND cma.createdAt <= :threshold
+        """
+    )
+    List<ConnectorMessageAttachmentEntity> findOrphansToDelete(
+        @Param("threshold") Instant threshold);
+
+    List<ConnectorMessageAttachmentEntity> findAllByMessageIdentifierAndDeletedAtIsNull(
+        @Param("messageIdentifier") String messageIdentifier);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+        UPDATE ConnectorMessageAttachmentEntity cma
+        SET cma.deletedAt = :deletedAt
+        WHERE cma.identifier IN :identifiers
+            AND cma.deletedAt IS NULL
+        """
+    )
+    void markAsDeleted(
+        @Param("identifiers") List<String> identifiers,
+        @Param("deletedAt") Instant deletedAt);
+
+    boolean existsByIdentifier(@NonNull String identifier);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("DELETE FROM ConnectorMessageAttachmentEntity a WHERE a.identifier IN (:identifiers)")
+    void deleteAllByIdentifiers(@Param("identifiers") List<String> identifiers);
 }

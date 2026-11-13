@@ -158,7 +158,7 @@ public class ConnectorJmsGatewayMessageListener {
                 "Invalid Gateway reception messageId: " + ebmsMessageIdentifier);
         }
 
-        int total = message.getIntProperty("totalNumberOfPayloads");
+        var total = message.getIntProperty("totalNumberOfPayloads");
 
         if (total <= 0) {
             throw new IllegalArgumentException(
@@ -216,12 +216,12 @@ public class ConnectorJmsGatewayMessageListener {
     }
 
     private ParsedPayloads parsePayloads(MapMessage message) throws JMSException {
-        int total = message.getIntProperty("totalNumberOfPayloads");
+        var total = message.getIntProperty("totalNumberOfPayloads");
         var attachments = new ArrayList<ConnectorMessageAttachment>();
         var evidences = new ArrayList<ConnectorMessageEvidence>();
         ConnectorMessageBusinessContent businessContent = null;
 
-        for (int i = 1; i <= total; i++) {
+        for (var i = 1; i <= total; i++) {
             var prefix = "payload_" + i;
             var description = message.getStringProperty(prefix + "_description");
             var name = message.getStringProperty(prefix + "_name");

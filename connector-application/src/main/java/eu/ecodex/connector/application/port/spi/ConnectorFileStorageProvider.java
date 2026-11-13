@@ -10,6 +10,8 @@
 
 package eu.ecodex.connector.application.port.spi;
 
+import eu.ecodex.connector.application.port.api.attachment.ConnectorCleanupOrphanedAttachments;
+import eu.ecodex.connector.application.port.spi.message.ConnectorMessageAttachmentRepository;
 import eu.ecodex.connector.domain.model.message.attachment.ConnectorAttachmentStorage;
 import eu.ecodex.connector.domain.model.message.attachment.ConnectorMessageAttachment;
 import jakarta.annotation.Nonnull;
@@ -63,4 +65,16 @@ public interface ConnectorFileStorageProvider {
      * @return the {@link ConnectorAttachmentStorage} identifying this provider's storage mode
      */
     ConnectorAttachmentStorage getStorage();
+
+    /**
+     * Deletes the content of an attachment from the underlying storage system.
+     *
+     * <p>Only the stored content is removed; the attachment metadata is handled separately (see
+     * {@link ConnectorMessageAttachmentRepository#markAsDeleted}). This is used, for example, by
+     * {@link ConnectorCleanupOrphanedAttachments} to remove the content of orphaned attachments.
+     *
+     * @param identifier the identifier of the attachment whose content is deleted (must not be
+     *                   null)
+     */
+    void deleteByIdentifier(@Nonnull String identifier);
 }

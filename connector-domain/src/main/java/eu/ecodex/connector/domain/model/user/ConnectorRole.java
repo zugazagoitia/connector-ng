@@ -17,15 +17,14 @@ import lombok.Builder;
 /**
  * Represents a role assigned to a user in the Connector system.
  *
- * <p>This record provides metadata about the role, including a unique identifier,
- * the role's name, and its creation and last updated timestamps.
- * It is an immutable data structure designed to store and share
- * role-specific information across the Connector system.
+ * <p>This record provides metadata about the role, including a unique identifier,the role's name,
+ * and its creation and last updated timestamps.
+ * It is an immutable data structure designed to store and share role-specific information across
+ * the Connector system.
  *
  * <p>The class supports the builder pattern, offering a nested {@code Builder} class
  * that provides a flexible API for incrementally constructing instances of
- * {@code ConnectorUserRole}.
- * Additionally, it includes a method to create a pre-populated builder
+ * {@code ConnectorUserRole}. Additionally, it includes a method to create a pre-populated builder
  * from an existing object.
  *
  * <p>This record is used as a field in other classes, such as {@code ConnectorUser},
@@ -37,10 +36,10 @@ public record ConnectorRole(String uuid,
                             Instant createdAt,
                             Instant updatedAt) {
 
-    public static final String DEFAULT_ADMIN_ROLE = "ROLE_".concat(ConnectorRoleName.ADMIN.name());
-    public static final String DEFAULT_USER_ROLE = "ROLE_".concat(ConnectorRoleName.USER.name());
+    public static final String DEFAULT_ADMIN_ROLE = ConnectorRoleName.ADMIN.prefixedWithRole();
+    public static final String DEFAULT_USER_ROLE = ConnectorRoleName.USER.prefixedWithRole();
     public static final String DEFAULT_LOAD_TESTER_ROLE =
-        "ROLE_".concat(ConnectorRoleName.LOAD_TESTER.name());
+        ConnectorRoleName.LOAD_TESTER.prefixedWithRole();
 
     /**
      * Create Default Administrator role.

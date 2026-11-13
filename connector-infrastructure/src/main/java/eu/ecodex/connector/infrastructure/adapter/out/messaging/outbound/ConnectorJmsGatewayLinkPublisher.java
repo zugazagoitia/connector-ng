@@ -81,7 +81,7 @@ public class ConnectorJmsGatewayLinkPublisher
                 ConnectorMessageTransportStatus.SUBMITTED
             );
             this.jmsTemplate.send(
-                queueProperties.getGatewaySubmissionQueue(),
+                queueProperties.gatewaySubmissionQueue(),
                 session -> toMapMessage(message, session)
             );
         } catch (Exception e) {

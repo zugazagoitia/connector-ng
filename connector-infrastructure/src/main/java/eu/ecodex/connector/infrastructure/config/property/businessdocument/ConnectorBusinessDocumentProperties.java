@@ -11,15 +11,17 @@
 package eu.ecodex.connector.infrastructure.config.property.businessdocument;
 
 import eu.ecodex.connector.domain.model.message.content.ConnectorBusinessDocumentAESType;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
-import java.util.HashSet;
-import java.util.List;
+import java.util.EnumSet;
 import java.util.Set;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.context.properties.NestedConfigurationProperty;
 import org.springframework.validation.annotation.Validated;
 
 /**
@@ -28,18 +30,36 @@ import org.springframework.validation.annotation.Validated;
 @Getter
 @Setter
 @Validated
-@Configuration
 @ConfigurationProperties(prefix = "connector.business-document")
 public class ConnectorBusinessDocumentProperties {
     @NotBlank
     String country;
+
     @NotBlank
     String serviceProvider;
+
+    @NotNull
     ConnectorBusinessDocumentAESType defaultAdvancedSystemType;
+
+    @Valid
+    @NotNull
+    @NestedConfigurationProperty
     AuthenticationValidationProperties authenticationValidation;
+
+    @Valid
     @NotNull
-    BusinessDocumentSignatureProperties signature;
-    @NotNull
+    @NestedConfigurationProperty
+    BusinessDocumentSignatureProperties signature = new BusinessDocumentSignatureProperties();
+
+    @NotEmpty
     Set<ConnectorBusinessDocumentAESType> allowedAdvancedSystemTypes =
-        new HashSet<>(List.of(ConnectorBusinessDocumentAESType.values()));
+        EnumSet.allOf(ConnectorBusinessDocumentAESType.class);
+
+
+    @AssertTrue(
+        message = "default-advanced-system-type must be one of allowed-advanced-system-types"
+    )
+    public boolean isDefaultAdvancedSystemTypeAllowed() {
+        return allowedAdvancedSystemTypes.contains(defaultAdvancedSystemType);
+    }
 }

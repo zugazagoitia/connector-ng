@@ -11,6 +11,7 @@
 package eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.message;
 
 import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessage;
+import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessageStatus;
 import eu.ecodex.connector.domain.model.message.ConnectorMessageAS4Properties;
 import eu.ecodex.connector.domain.model.message.ConnectorMessageDirection;
 import java.time.Instant;
@@ -28,26 +29,24 @@ import lombok.Builder;
  * <p>This DTO is primarily used for tracking, processing, auditing, and managing
  * the state of messages.
  *
- * @param businessDomainIdentifier            The identifier for the business domain associated with
- *                                            the message.
- * @param identifier                          The unique identifier for this message.
- * @param backendMessageIdentifier            The identifier for the message in the backend system.
- * @param backendName                         The name of the backend system processing this
- *                                            message.
- * @param gatewayName                         The name of the gateway involved in processing this
- *                                            message.
- * @param as4Properties                       AS4-specific properties associated with this message.
- * @param direction                           The direction of the message flow, either from the
- *                                            backend to the gateway or vice versa.
- * @param delivered                           A flag indicating whether the message has been
- *                                            delivered
- * @param createdAt                           The creation timestamp for the message.
- * @param updatedAt                           The timestamp when the message was last updated.
- * @param deletedAt                           The timestamp when the message was deleted.
- * @param rejectedAt                          The timestamp when the message was rejected.
- * @param confirmedAt                         The timestamp when the message was confirmed.
- * @param deliveredToLinkPartnerAt            The timestamp when the message was delivered to the
- *                                            link partner.
+ * @param businessDomainIdentifier The identifier for the business domain associated with the
+ *                                 message.
+ * @param identifier               The unique identifier for this message.
+ * @param backendMessageIdentifier The identifier for the message in the backend system.
+ * @param backendName              The name of the backend system processing this message.
+ * @param gatewayName              The name of the gateway involved in processing this message.
+ * @param as4Properties            AS4-specific properties associated with this message.
+ * @param direction                The direction of the message flow, either from the backend to the
+ *                                 gateway or vice versa.
+ * @param status                   current {@link ConnectorBusinessMessageStatus} of the message
+ * @param delivered                A flag indicating whether the message has been delivered
+ * @param createdAt                The creation timestamp for the message.
+ * @param updatedAt                The timestamp when the message was last updated.
+ * @param deletedAt                The timestamp when the message was deleted.
+ * @param rejectedAt               The timestamp when the message was rejected.
+ * @param confirmedAt              The timestamp when the message was confirmed.
+ * @param deliveredToLinkPartnerAt The timestamp when the message was delivered to the link
+ *                                 partner.
  */
 @Builder
 public record ConnectorMessageDto(
@@ -58,6 +57,7 @@ public record ConnectorMessageDto(
     String gatewayName,
     ConnectorMessageAS4Properties as4Properties,
     ConnectorMessageDirection direction,
+    ConnectorBusinessMessageStatus status,
     boolean delivered,
     Instant createdAt,
     Instant updatedAt,
@@ -81,6 +81,7 @@ public record ConnectorMessageDto(
             .identifier(message.identifier())
             .backendMessageIdentifier(message.backendMessageIdentifier())
             .direction(Objects.requireNonNull(message.direction()))
+            .status(message.status())
             .delivered(isDelivered(message))
             .backendName(message.backendName())
             .gatewayName(message.gatewayName())

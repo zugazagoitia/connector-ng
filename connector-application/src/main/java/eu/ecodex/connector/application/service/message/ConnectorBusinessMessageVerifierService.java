@@ -66,11 +66,11 @@ public class ConnectorBusinessMessageVerifierService implements ConnectorBusines
         }
     }
 
-    private void processStrictVerification(ConnectorMessage message) {
+    private void processRelaxedVerification(ConnectorMessage message) {
         this.processServiceAndActionVerification(message);
     }
 
-    private void processRelaxedVerification(ConnectorMessage message) {
+    private void processStrictVerification(ConnectorMessage message) {
         this.processServiceAndActionVerification(message);
 
         if (message.businessDomainIdentifier() == null) {
@@ -148,7 +148,6 @@ public class ConnectorBusinessMessageVerifierService implements ConnectorBusines
         var as4Properties = message.as4Properties();
 
         try {
-
             var serviceName = as4Properties.service().name();
             var service = this.serviceRepository.findByNameAndBusinessDomain(
                 serviceName,

@@ -54,7 +54,7 @@ class ConnectorListAttachmentsIT extends AbstractIntegrationTest {
 
     static Stream<Arguments> attachmentFilters() {
         return Stream.of(
-            arguments(new AttachmentFilter(null, null, null, null, null, null), 14),
+            arguments(new AttachmentFilter(null, null, null, null, null, null), 15),
             arguments(new AttachmentFilter(MESSAGE_ID, null, null, null, null, null), 4),
             arguments(new AttachmentFilter(MESSAGE_ID, "fake_file.pdf", null, null, null, null), 2),
             arguments(
@@ -86,12 +86,12 @@ class ConnectorListAttachmentsIT extends AbstractIntegrationTest {
                     "S3_BUCKET",
                     null,
                     null
-                ), 3
+                ), 4
             ),
-            arguments(new AttachmentFilter(null, "fake_file", "ATTACHMENT", null, null, null), 3),
-            arguments(new AttachmentFilter(null, "fake_file", null, null, null, null), 3),
-            arguments(new AttachmentFilter(null, null, "ATTACHMENT", null, null, null), 3),
-            arguments(new AttachmentFilter(null, null, null, "S3_BUCKET", null, null), 14)
+            arguments(new AttachmentFilter(null, "fake_file", "ATTACHMENT", null, null, null), 4),
+            arguments(new AttachmentFilter(null, "fake_file", null, null, null, null), 4),
+            arguments(new AttachmentFilter(null, null, "ATTACHMENT", null, null, null), 4),
+            arguments(new AttachmentFilter(null, null, null, "S3_BUCKET", null, null), 15)
         );
     }
 

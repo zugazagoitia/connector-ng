@@ -43,7 +43,7 @@ public class ConnectorJmsInboundMessageStagingPublisher
         log.info("Submitting message [{}] to inbound message staging queue", message.identifier());
 
         this.jmsTemplate.convertAndSend(
-            this.queueProperties.getInboundMessageStagingQueue(),
+            this.queueProperties.inboundMessageStagingQueue(),
             message
         );
     }

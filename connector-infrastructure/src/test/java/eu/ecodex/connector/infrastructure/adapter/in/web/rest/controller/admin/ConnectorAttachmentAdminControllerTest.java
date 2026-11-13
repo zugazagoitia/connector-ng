@@ -19,8 +19,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import eu.ecodex.connector.MessageAttachmentTestFixtures;
-import eu.ecodex.connector.application.exception.message.ConnectorMessageAttachmentException;
-import eu.ecodex.connector.application.exception.message.ConnectorMessageAttachmentNotFoundException;
+import eu.ecodex.connector.application.exception.attachment.ConnectorMessageAttachmentDeletedException;
+import eu.ecodex.connector.application.exception.attachment.ConnectorMessageAttachmentException;
+import eu.ecodex.connector.application.exception.attachment.ConnectorMessageAttachmentNotFoundException;
 import eu.ecodex.connector.application.port.api.attachment.ConnectorDownloadAttachment;
 import eu.ecodex.connector.application.port.api.attachment.ConnectorListAttachments;
 import eu.ecodex.connector.application.port.api.attachment.ConnectorRetrieveAttachment;
@@ -82,6 +83,8 @@ public class ConnectorAttachmentAdminControllerTest extends AbstractWebMvcTest {
     @Nested
     @DisplayName("GET (download attachment)")
     class DownloadAttachment {
+        private static final String IDENTIFIER = "c12f879b-3c9a-4d26-b36c-b6d67a84f0ed_test_attachment";
+
         @Test
         void should_return_200_when_downloading_the_attachment() throws Exception {
             when(retrieveAttachment.execute(any()))
@@ -89,7 +92,7 @@ public class ConnectorAttachmentAdminControllerTest extends AbstractWebMvcTest {
             when(downloadAttachment.execute(any())).thenReturn(new byte[1]);
 
             mockMvc.perform(
-                       get("/api/v1/admin/attachments/1234567890abcdef/download")
+                       get("/api/v1/admin/attachments/%s/download".formatted(IDENTIFIER))
                            .contentType(MediaType.APPLICATION_JSON))
                    .andExpect(status().isOk());
         }
@@ -106,6 +109,18 @@ public class ConnectorAttachmentAdminControllerTest extends AbstractWebMvcTest {
         }
 
         @Test
+        void should_return_409_when_attachment_is_deleted_from_storage() throws Exception {
+            doThrow(ConnectorMessageAttachmentDeletedException.class)
+                .when(retrieveAttachment).execute(any());
+
+            mockMvc.perform(
+                       get("/api/v1/admin/attachments/%s/download".formatted(IDENTIFIER))
+                           .contentType(MediaType.APPLICATION_JSON))
+                   .andExpect(status().isConflict())
+                   .andExpect(content().contentType(MediaType.APPLICATION_JSON));
+        }
+
+        @Test
         void should_return_409_when_attachment_is_no_longer_available_in_the_storage()
             throws Exception {
             when(retrieveAttachment.execute(any()))
@@ -113,8 +128,9 @@ public class ConnectorAttachmentAdminControllerTest extends AbstractWebMvcTest {
             doThrow(ConnectorMessageAttachmentException.class).when(retrieveAttachment)
                                                               .execute(any());
 
-            mockMvc.perform(get("/api/v1/admin/attachments/unknown-id/download")
-                                .contentType(MediaType.APPLICATION_JSON))
+            mockMvc.perform(
+                       get("/api/v1/admin/attachments/%s/download".formatted(IDENTIFIER))
+                           .contentType(MediaType.APPLICATION_JSON))
                    .andExpect(status().is4xxClientError())
                    .andExpect(content().contentType(MediaType.APPLICATION_JSON));
         }

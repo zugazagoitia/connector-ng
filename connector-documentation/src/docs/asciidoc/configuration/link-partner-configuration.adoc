@@ -30,6 +30,8 @@ See the certificates chapter of the installation guide for step-by-step key gene
 Configuration is provided via `application.properties` under the `+connector.link.backend[n].*+` prefix.
 Several links can be declared by incrementing the index `n`, and several partners per link with `link-partners[m]`.
 
+NOTE: The configuration is validated at startup. A missing mandatory value, a path that does not exist, or an invalid URL stops the connector with an error naming the offending property.
+
 .Link configuration properties
 [cols="35,40,10,15", options="header"]
 |===
@@ -37,6 +39,7 @@ Several links can be declared by incrementing the index `n`, and several partner
 
 | `connector.link.backend[n].link-config.name`
 | Free label of the link, used in logs and the administration portal.
+Must be unique across all backend links.
 | No
 | `<national-backends>`
 
@@ -91,7 +94,7 @@ Several links can be declared by incrementing the index `n`, and several partner
 | By default, `false`
 
 | `connector.link.backend[n].link-config.properties.ws-policy`
-| WS-SecurityPolicy applied to the endpoint. Change it only if agreed with all backend applications.
+| WS-SecurityPolicy applied to the endpoint. Change it only if agreed with all backend applications. Accepts a `classpath:` or `file:` location; the file must exist, otherwise the startup fails.
 | Yes
 | By default, `classpath:/policy/backend.policy.xml`
 
@@ -118,8 +121,8 @@ Several links can be declared by incrementing the index `n`, and several partner
 
 | `connector.link.backend[n].link-partners[m].enabled`
 | Whether the partner may exchange messages.
-| No
-| `true`
+| Yes
+| By default, `false`
 
 | `connector.link.backend[n].link-partners[m].sender-mode`
 | How inbound messages are delivered to this partner (see <<backend-delivery-modes>>): `push`, or `pull` / `passive`.
@@ -137,7 +140,7 @@ Several links can be declared by incrementing the index `n`, and several partner
 | `<backend-courts-cert>`
 
 | `connector.link.backend[n].link-partners[m].properties.push-address`
-| URL of the partner's `DomibusConnectorBackendDeliveryWebService` endpoint, provided by the backend team. Required for `push`, ignored otherwise.
+| URL of the partner's `DomibusConnectorBackendDeliveryWebService` endpoint, provided by the backend team. Required for `push`, ignored otherwise. Must be an absolute `http` or `https` URL including the host.
 | Required for `push`
 | `+https://<backend-host>/services/domibusConnectorDeliveryWebservice+`
 |===
@@ -178,6 +181,8 @@ For messages received from the gateway, two delivery modes exist:
 |===
 
 A backend can only list, download and acknowledge its own messages.
+
+NOTE: The 6.x property `receiver-mode` (and `rcv-link-mode`) is not read in 7.x. Remove it from your configuration file.
 
 == Example
 

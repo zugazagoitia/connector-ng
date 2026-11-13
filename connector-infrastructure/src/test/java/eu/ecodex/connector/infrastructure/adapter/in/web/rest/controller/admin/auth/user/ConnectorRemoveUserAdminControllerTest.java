@@ -22,7 +22,6 @@ import eu.ecodex.connector.application.port.api.auth.user.ConnectorListUsers;
 import eu.ecodex.connector.application.port.api.auth.user.ConnectorRegisterUser;
 import eu.ecodex.connector.application.port.api.auth.user.ConnectorRemoveUser;
 import eu.ecodex.connector.application.port.api.auth.user.ConnectorRetrieveUserByIdentifier;
-import eu.ecodex.connector.application.port.api.auth.user.ConnectorUpdateUser;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.controller.AbstractWebMvcTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,8 +37,6 @@ class ConnectorRemoveUserAdminControllerTest extends AbstractWebMvcTest {
     private ConnectorRetrieveUserByIdentifier connectorRetrieveUserByIdentifier;
     @MockitoBean
     private ConnectorRegisterUser connectorRegisterUser;
-    @MockitoBean
-    private ConnectorUpdateUser connectorUpdateUser;
     @MockitoBean
     private ConnectorEditUser connectorEditUser;
     @MockitoBean
@@ -90,8 +87,7 @@ class ConnectorRemoveUserAdminControllerTest extends AbstractWebMvcTest {
     }
 
     private void assertNoMoreInteractions() {
-        verifyNoMoreInteractions(connectorEditUser,
-                                 connectorListUsers, connectorRemoveUser,
-                                 connectorRegisterUser, connectorUpdateUser, connectorRetrieveUserByIdentifier);
+        verifyNoMoreInteractions(connectorEditUser, connectorListUsers, connectorRemoveUser,
+            connectorRegisterUser, connectorRetrieveUserByIdentifier);
     }
 }

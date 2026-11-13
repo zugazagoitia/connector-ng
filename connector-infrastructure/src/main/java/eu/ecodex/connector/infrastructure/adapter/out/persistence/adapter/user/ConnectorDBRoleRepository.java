@@ -84,8 +84,7 @@ public class ConnectorDBRoleRepository implements ConnectorRoleRepository {
 
     @Override
     public Set<ConnectorRole> findByNameIn(@NonNull Set<String> names) {
-        return jpaRepository
-            .findByNameIn(names)
+        return jpaRepository.findByNameIn(names)
             .stream()
             .map(this::toDomain)
             .collect(Collectors.toUnmodifiableSet());

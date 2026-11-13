@@ -25,6 +25,7 @@ import eu.ecodex.connector.MessageContentTestFixtures;
 import eu.ecodex.connector.application.exception.evidence.ConnectorEvidenceException;
 import eu.ecodex.connector.application.port.spi.ConnectorFileStorageProvider;
 import eu.ecodex.connector.application.port.spi.message.ConnectorMessageAttachmentRepository;
+import eu.ecodex.connector.config.properties.ConnectorEvidencesPropertiesTestFixture;
 import eu.ecodex.connector.domain.model.ConnectorMessageRejectionReason;
 import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessage;
 import eu.ecodex.connector.domain.model.message.attachment.ConnectorMessageAttachment;
@@ -81,14 +82,6 @@ class ConnectorEvidenceToolkitImplUnitTest {
 
     @BeforeEach
     void setUp() throws ConnectorEvidenceBuilderException {
-        var evidencesProperties = new ConnectorEvidencesProperties();
-        evidencesProperties.getIssuer().getAs4Party().setName("issuer-gw");
-        evidencesProperties.getIssuer().getAs4Party().setEndpointAddress("https://gw.example/rem");
-        evidencesProperties.getIssuer().getPostalAddress().setStreet("Main 1");
-        evidencesProperties.getIssuer().getPostalAddress().setLocality("Town");
-        evidencesProperties.getIssuer().getPostalAddress().setZipCode("1000");
-        evidencesProperties.getIssuer().getPostalAddress().setCountry("EU");
-
         when(attachmentRepository.save(any(ConnectorMessageAttachment.class)))
             .thenAnswer(inv -> inv.getArgument(0));
         when(fileStorageProvider.findByIdentifier(PRIOR_EVIDENCE_ATTACHMENT_ID)).thenReturn(PREV);
@@ -99,6 +92,8 @@ class ConnectorEvidenceToolkitImplUnitTest {
 
         when(hashValueBuilder.getAlgorithm()).thenReturn("SHA-256");
         defaultEvidenceBuilderStubs();
+
+        var evidencesProperties = ConnectorEvidencesPropertiesTestFixture.evidencesProperties();
 
         toolkit = new ConnectorEvidenceToolkitImpl(
             attachmentRepository,

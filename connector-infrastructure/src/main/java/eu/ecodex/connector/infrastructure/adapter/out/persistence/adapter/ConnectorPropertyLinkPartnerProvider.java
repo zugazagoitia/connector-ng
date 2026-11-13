@@ -13,7 +13,6 @@ package eu.ecodex.connector.infrastructure.adapter.out.persistence.adapter;
 import eu.ecodex.connector.application.port.spi.link.ConnectorLinkPartnerProvider;
 import eu.ecodex.connector.domain.ConnectorDefaults;
 import eu.ecodex.connector.domain.model.link.ConnectorConfigurationSource;
-import eu.ecodex.connector.domain.model.link.ConnectorLinkMode;
 import eu.ecodex.connector.domain.model.link.ConnectorLinkType;
 import eu.ecodex.connector.domain.model.link.partner.ConnectorLinkPartner;
 import eu.ecodex.connector.domain.model.link.partner.ConnectorLinkPartnerName;
@@ -157,7 +156,7 @@ public class ConnectorPropertyLinkPartnerProvider implements ConnectorLinkPartne
             .enabled(properties.isEnabled())
             .type(ConnectorLinkType.BACKEND)
             .source(ConnectorConfigurationSource.IMPLEMENTATION)
-            .senderMode(ConnectorLinkMode.valueOf(properties.getSenderMode().toUpperCase()))
+            .senderMode(properties.getSenderMode())
             .encryptionAlias(properties.getProperties().getEncryptionAlias())
             .pushAddress(properties.getProperties().getPushAddress())
             .certificateDn(properties.getProperties().getCertificateDn())

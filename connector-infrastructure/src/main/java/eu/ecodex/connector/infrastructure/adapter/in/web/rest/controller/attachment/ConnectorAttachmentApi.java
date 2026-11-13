@@ -10,9 +10,9 @@
 
 package eu.ecodex.connector.infrastructure.adapter.in.web.rest.controller.attachment;
 
+import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -26,14 +26,13 @@ import org.springframework.web.multipart.MultipartFile;
 /**
  * Defines the API for managing message attachments.
  */
+@Hidden
 @RequestMapping("/api/v1/attachments")
 @Tag(name = "MessageAttachment", description = "API for managing message attachments")
 public interface ConnectorAttachmentApi {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Persist a message attachment.")
     @PostMapping(path = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @ApiResponses(
-        @ApiResponse(responseCode = "400", description = "Bad Request")
-    )
+    @ApiResponse(responseCode = "400", description = "Bad Request")
     List<String> uploadAttachment(@RequestPart("attachments") List<MultipartFile> attachments);
 }

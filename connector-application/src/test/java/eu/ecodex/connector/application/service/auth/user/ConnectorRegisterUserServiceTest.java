@@ -13,6 +13,8 @@ package eu.ecodex.connector.application.service.auth.user;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
@@ -20,6 +22,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import eu.ecodex.connector.application.exception.user.ConnectorUserAlreadyExistsException;
+import eu.ecodex.connector.application.port.api.auth.user.ConnectorEditUserRoles;
 import eu.ecodex.connector.application.port.spi.auth.login.ConnectorUserPasswordEncoder;
 import eu.ecodex.connector.application.port.spi.auth.user.ConnectorUserRepository;
 import eu.ecodex.connector.domain.model.user.ConnectorRole;
@@ -39,6 +42,8 @@ class ConnectorRegisterUserServiceTest {
     private ConnectorUserRepository repository;
     @Mock
     private ConnectorUserPasswordEncoder passwordEncoder;
+    @Mock
+    private ConnectorEditUserRoles editUserRoles;
 
     @InjectMocks
     private ConnectorRegisterUserService service;
@@ -50,22 +55,25 @@ class ConnectorRegisterUserServiceTest {
         var email = "email@test.com";
         var pwd = "password";
 
+        var roleSet = Set.of(ConnectorRole.builder().name("ROLE_USER").build());
         var user = ConnectorUser.builder()
             .username(username)
             .password(pwd)
             .email(email)
-            .roles(Set.of(ConnectorRole.builder().name("ROLE_USER").build()))
+            .roles(roleSet)
             .build();
 
         var encodedPwdUser = user.toBuilder()
             .password("encoded")
             .mustChangePassword(Boolean.TRUE)
             .build();
-        var expected = encodedPwdUser.toBuilder().uuid("identifier").build();
+        var identifier = "identifier";
+        var expected = encodedPwdUser.toBuilder().uuid(identifier).build();
 
         doNothing().when(verifyUniqueUser).execute(any());
         when(passwordEncoder.encodePassword(any())).thenReturn("encoded");
         when(repository.save(any())).thenReturn(expected);
+        when(editUserRoles.execute(anyString(), anySet())).thenReturn(expected);
 
         // When
         var registered = service.execute(user);
@@ -76,12 +84,13 @@ class ConnectorRegisterUserServiceTest {
         verify(verifyUniqueUser).execute(user);
         verify(passwordEncoder).encodePassword(pwd);
         verify(repository).save(encodedPwdUser);
+        verify(editUserRoles).execute(identifier, user.roleNames());
 
         assertNoMoreInteractions();
     }
 
     private void assertNoMoreInteractions() {
-        verifyNoMoreInteractions(repository, passwordEncoder);
+        verifyNoMoreInteractions(repository, passwordEncoder, editUserRoles);
     }
 
     @Test
@@ -89,22 +98,25 @@ class ConnectorRegisterUserServiceTest {
         // Given
         var username = "user";
         var pwd = "password";
+        var roleSet = Set.of(ConnectorRole.builder().name("ROLE_USER").build());
         var user = ConnectorUser.builder()
             .username(username)
             .password(pwd)
-            .roles(Set.of(ConnectorRole.builder().name("ROLE_USER").build()))
+            .roles(roleSet)
             .build();
         var encodedPwdUser = user.toBuilder()
             .password("encoded")
             .mustChangePassword(Boolean.TRUE)
             .build();
+        var identifier = "identifier";
         var expected = encodedPwdUser.toBuilder()
-            .uuid("identifier")
+            .uuid(identifier)
             .build();
 
         doNothing().when(verifyUniqueUser).execute(any());
         when(passwordEncoder.encodePassword(any())).thenReturn("encoded");
         when(repository.save(any())).thenReturn(expected);
+        when(editUserRoles.execute(anyString(), anySet())).thenReturn(expected);
 
         // When
         var registered = service.execute(user);
@@ -115,6 +127,7 @@ class ConnectorRegisterUserServiceTest {
         verify(verifyUniqueUser).execute(user);
         verify(passwordEncoder).encodePassword(pwd);
         verify(repository).save(encodedPwdUser);
+        verify(editUserRoles).execute(identifier, user.roleNames());
 
         assertNoMoreInteractions();
     }

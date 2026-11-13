@@ -10,6 +10,10 @@
 
 package eu.ecodex.connector.infrastructure.config.property.link;
 
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import java.net.URI;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -22,7 +26,31 @@ import lombok.Setter;
 @Getter
 @Setter
 public class LinkPartnerDetailProperties {
+    @NotBlank
     private String encryptionAlias;
+
+    @NotBlank
     private String certificateDn;
-    private String pushAddress;
+
+    @NotNull
+    private URI pushAddress;
+
+    /**
+     * Validates that the push address, when present, is an absolute {@code http} or {@code https}
+     * URL with a host.
+     *
+     * <p>A {@code null} address is considered valid here, since {@link NotNull} on
+     * {@link #pushAddress} already reports it.
+     *
+     * @return {@code true} if the push address is {@code null} or an absolute http(s) URL with a
+     *     host, {@code false} otherwise
+     */
+
+    @AssertTrue(message = "push-address must be an absolute http(s) URL")
+    public boolean isPushAddressValid() {
+        return pushAddress == null
+            || (pushAddress.getHost() != null
+            && ("http".equalsIgnoreCase(pushAddress.getScheme())
+            || "https".equalsIgnoreCase(pushAddress.getScheme())));
+    }
 }

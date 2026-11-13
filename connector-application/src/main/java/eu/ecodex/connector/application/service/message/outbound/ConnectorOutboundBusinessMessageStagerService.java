@@ -110,9 +110,19 @@ public class ConnectorOutboundBusinessMessageStagerService
         );
 
         attachmentLinkerService.execute(
-            businessDocument.attachment().identifier(),
+            businessDocument.content().identifier(),
             messageIdentifier,
             ConnectorAttachmentType.BUSINESS_DOCUMENT
         );
+
+        var detachedSignature = businessDocument.detachedSignature();
+
+        if (detachedSignature != null) {
+            attachmentLinkerService.execute(
+                detachedSignature.identifier(),
+                messageIdentifier,
+                ConnectorAttachmentType.DETACHED_SIGNATURE
+            );
+        }
     }
 }

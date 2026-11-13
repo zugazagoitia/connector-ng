@@ -12,6 +12,8 @@ package eu.ecodex.connector.infrastructure.config.property.link;
 
 import eu.ecodex.connector.infrastructure.config.property.common.KeystoreProperties;
 import eu.ecodex.connector.infrastructure.config.property.common.PrivateKeyProperties;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -24,8 +26,19 @@ import lombok.Setter;
 @Getter
 @Setter
 public class LinkEndpointProperties {
+    @Valid
+    @NotNull
     private KeystoreProperties keystore;
+
+    @Valid
+    @NotNull
     private PrivateKeyProperties privateKey;
+
+    @Valid
+    @NotNull
     private KeystoreProperties truststore;
+
+    @Valid
+    @NotNull
     private String encryptAlias;
 }

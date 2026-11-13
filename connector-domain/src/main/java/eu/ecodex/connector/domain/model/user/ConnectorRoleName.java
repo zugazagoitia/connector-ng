@@ -25,5 +25,11 @@ package eu.ecodex.connector.domain.model.user;
 public enum ConnectorRoleName {
     ADMIN,
     USER,
-    LOAD_TESTER
+    LOAD_TESTER;
+
+    private static final String ROLE_PREFIX = "ROLE_";
+
+    public String prefixedWithRole() {
+        return ROLE_PREFIX + name();
+    }
 }

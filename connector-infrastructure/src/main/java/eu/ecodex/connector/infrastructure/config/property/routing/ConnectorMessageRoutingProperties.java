@@ -10,22 +10,34 @@
 
 package eu.ecodex.connector.infrastructure.config.property.routing;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.NotNull;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * Configuration properties for the connector message routing.
  */
 @Getter
 @Setter
-@Configuration
+@Validated
 @ConfigurationProperties(prefix = "connector.routing")
 public class ConnectorMessageRoutingProperties {
     private boolean enabled;
+
     private String defaultBackendName;
+
+    @Valid
+    @NotNull
     private List<BackendRuleProperties> backendRules = new ArrayList<>();
+
+    @AssertTrue(message = "default-backend-name is required when routing is enabled")
+    public boolean isDefaultBackendNameConfigured() {
+        return !enabled || (defaultBackendName != null && !defaultBackendName.isBlank());
+    }
 }

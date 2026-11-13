@@ -10,6 +10,7 @@
 
 package eu.ecodex.connector.application.service.message.outbound;
 
+import eu.ecodex.connector.application.port.api.attachment.ConnectorAttachmentVerifier;
 import eu.ecodex.connector.application.port.api.businessdomain.ConnectorBusinessDomainVerifier;
 import eu.ecodex.connector.application.port.api.message.ConnectorBusinessMessageVerifier;
 import eu.ecodex.connector.application.port.api.message.ConnectorMessageIdGenerator;
@@ -19,6 +20,7 @@ import eu.ecodex.connector.application.port.api.pmode.ConnectorProcessingModeVer
 import eu.ecodex.connector.application.port.spi.ConnectorMessageEventPublisher;
 import eu.ecodex.connector.application.port.spi.ConnectorMessageProcessingConfigurationProvider;
 import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessage;
+import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessageStatus;
 import eu.ecodex.connector.domain.model.message.processing.ConnectorMessageProcessingConfiguration;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -40,6 +42,7 @@ public class ConnectorOutboundBusinessMessageReceiverService
     private final ConnectorMessageIdGenerator messageIdGeneratorService;
     private final ConnectorBusinessDomainVerifier businessDomainVerifierService;
     private final ConnectorProcessingModeVerifier processingModeVerifierService;
+    private final ConnectorAttachmentVerifier attachmentVerifierService;
 
     /**
      * Constructs a new {@code ConnectorOutboundMessageReceiverService}.
@@ -57,6 +60,8 @@ public class ConnectorOutboundBusinessMessageReceiverService
      *                                      messages
      * @param processingModeVerifierService verifier used to validate processing modes of outbound
      *                                      messages
+     * @param attachmentVerifierService     verifier used to validate attachments identifier of
+     *                                      outbound message
      */
     public ConnectorOutboundBusinessMessageReceiverService(
         ConnectorMessageProcessingConfigurationProvider configurationProvider,
@@ -65,20 +70,24 @@ public class ConnectorOutboundBusinessMessageReceiverService
         ConnectorMessageEventPublisher<ConnectorBusinessMessage> stagingEventPublisher,
         ConnectorMessageIdGenerator messageIdGeneratorService,
         ConnectorBusinessDomainVerifier businessDomainVerifierService,
-        ConnectorProcessingModeVerifier processingModeVerifierService) {
+        ConnectorProcessingModeVerifier processingModeVerifierService,
+        ConnectorAttachmentVerifier attachmentVerifierService) {
         this.configurationProvider = configurationProvider;
         this.messageVerifierService = messageVerifierService;
         this.stagingEventPublisher = stagingEventPublisher;
         this.messageIdGeneratorService = messageIdGeneratorService;
         this.businessDomainVerifierService = businessDomainVerifierService;
         this.processingModeVerifierService = processingModeVerifierService;
+        this.attachmentVerifierService = attachmentVerifierService;
     }
 
     @Override
     public ConnectorBusinessMessage execute(
         @NonNull ConnectorOutboundBusinessMessageCommand command) {
+        log.info("Received outbound business message {}", command);
         businessDomainVerifierService.execute(command.businessDomainIdentifier());
         processingModeVerifierService.execute(command.businessDomainIdentifier());
+        attachmentVerifierService.execute(command.attachments());
 
         var message = ConnectorBusinessMessage
             .builder()
@@ -88,6 +97,7 @@ public class ConnectorOutboundBusinessMessageReceiverService
             .backendName(command.backendName())
             .as4Properties(command.as4Properties())
             .direction(command.direction())
+            .status(ConnectorBusinessMessageStatus.CREATED)
             .businessContent(command.businessContent())
             .attachments(command.attachments())
             .build();

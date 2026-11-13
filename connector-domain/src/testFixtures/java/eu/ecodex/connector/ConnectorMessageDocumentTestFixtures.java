@@ -17,26 +17,29 @@ import eu.ecodex.connector.domain.model.message.content.ConnectorMessageBusiness
 public class ConnectorMessageDocumentTestFixtures {
     public static ConnectorMessageBusinessDocument createSignatureBasedDocument() {
         return ConnectorMessageBusinessDocument
-                .builder()
-                .attachment(MessageAttachmentTestFixtures.createBusinessDocumentAttachment())
-                .aesType(ConnectorBusinessDocumentAESType.SIGNATURE_BASED)
-                .detachedSignature(DetachedSignatureTestFixtures.createDetachedSignature())
-                .build();
+            .builder()
+            .content(MessageAttachmentTestFixtures.createBusinessDocumentAttachment())
+            .aesType(ConnectorBusinessDocumentAESType.SIGNATURE_BASED)
+            .detachedSignature(
+                MessageAttachmentTestFixtures.createPKCS7DetachedSignatureAttachment())
+            .build();
     }
 
     public static ConnectorMessageBusinessDocument createAuthenticationBasedDocument() {
         return ConnectorMessageBusinessDocument
-                .builder()
-                .attachment(MessageAttachmentTestFixtures.createBusinessDocumentAttachment())
-                .aesType(ConnectorBusinessDocumentAESType.AUTHENTICATION_BASED)
-                .detachedSignature(DetachedSignatureTestFixtures.createDetachedSignature())
-                .build();
+            .builder()
+            .content(MessageAttachmentTestFixtures.createBusinessDocumentAttachment())
+            .aesType(ConnectorBusinessDocumentAESType.AUTHENTICATION_BASED)
+            .detachedSignature(
+                MessageAttachmentTestFixtures.createPKCS7DetachedSignatureAttachment())
+            .build();
     }
 
     public static ConnectorMessageBusinessDocument createDocumentWithoutSignature() {
         return ConnectorMessageBusinessDocument
-                .builder()
-                .attachment(MessageAttachmentTestFixtures.createBusinessDocumentAttachment())
-                .build();
+            .builder()
+            .content(MessageAttachmentTestFixtures.createBusinessDocumentAttachment())
+            .detachedSignature(null)
+            .build();
     }
 }

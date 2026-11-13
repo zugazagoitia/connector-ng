@@ -11,6 +11,7 @@
 package eu.ecodex.connector;
 
 import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessage;
+import eu.ecodex.connector.domain.model.message.ConnectorBusinessMessageStatus;
 import eu.ecodex.connector.domain.model.message.ConnectorMessageDirection;
 import eu.ecodex.connector.domain.model.message.evidence.ConnectorMessageEvidence;
 import java.time.Instant;
@@ -174,6 +175,7 @@ public class BusinessMessageTestFixtures {
             .gatewayName("default_gateway")
             .as4Properties(AS4PropertiesTestFixtures.defaultAS4Properties().build())
             .direction(ConnectorMessageDirection.BACKEND_TO_GATEWAY)
+            .status(ConnectorBusinessMessageStatus.CREATED)
             .evidences(new ArrayList<>())
             .transportedEvidences(new ArrayList<>())
             .createdAt(Instant.now())

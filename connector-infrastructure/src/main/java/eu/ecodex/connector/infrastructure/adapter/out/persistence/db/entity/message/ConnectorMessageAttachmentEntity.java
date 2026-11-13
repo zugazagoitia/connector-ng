@@ -28,6 +28,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import java.time.Instant;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -83,6 +84,9 @@ public class ConnectorMessageAttachmentEntity extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "TYPE")
     private ConnectorAttachmentType type;
+
+    @Column(name = "DELETED_AT")
+    private Instant deletedAt;
 
     @Setter
     @ManyToOne(fetch = FetchType.LAZY)

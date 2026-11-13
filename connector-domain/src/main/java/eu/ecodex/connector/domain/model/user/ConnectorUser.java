@@ -11,9 +11,11 @@
 package eu.ecodex.connector.domain.model.user;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.Builder;
 
 /**
@@ -70,6 +72,21 @@ public record ConnectorUser(
     }
 
     /**
+     * Replace the current user roles with new roles in parameter.
+     *
+     * @param newRoles new roles to apply
+     *
+     * @return updated user
+     */
+    public ConnectorUser editRoles(@NotEmpty Set<ConnectorRole> newRoles) {
+        if (newRoles.isEmpty()) {
+            return this;
+        }
+        var updatedRoles = new HashSet<>(newRoles);
+        return toBuilder().roles(updatedRoles).build();
+    }
+
+    /**
      * Add a new role to the current user.
      *
      * @param role new role to add
@@ -83,23 +100,6 @@ public record ConnectorUser(
 
         boolean added = updatedRoles.add(role);
         return added ? toBuilder().roles(updatedRoles).build() : this;
-    }
-
-    /**
-     * Remove a role from the current user.
-     *
-     * @param role role to remove
-     *
-     * @return updated user
-     */
-    public ConnectorUser removeRole(ConnectorRole role) {
-        if (roles == null) {
-            return this;
-        }
-        var updatedRoles = new HashSet<>(roles);
-        boolean removed = updatedRoles.remove(role);
-
-        return removed ? toBuilder().roles(updatedRoles).build() : this;
     }
 
     /**
@@ -125,5 +125,20 @@ public record ConnectorUser(
         return this.toBuilder()
             .mustChangePassword(true)
             .build();
+    }
+
+    /**
+     * Retrieve current user roles name.
+     *
+     * @return user roles name
+     */
+    public Set<String> roleNames() {
+        if (this.roles == null) {
+            return Set.of();
+        }
+
+        return this.roles.stream()
+            .map(ConnectorRole::name)
+            .collect(Collectors.toUnmodifiableSet());
     }
 }

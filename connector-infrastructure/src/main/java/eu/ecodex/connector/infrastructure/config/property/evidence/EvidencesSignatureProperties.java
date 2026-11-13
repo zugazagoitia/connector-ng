@@ -13,9 +13,11 @@ package eu.ecodex.connector.infrastructure.config.property.evidence;
 import eu.ecodex.connector.infrastructure.config.property.ConnectorSignatureProperties;
 import eu.ecodex.connector.infrastructure.config.property.common.KeystoreProperties;
 import eu.ecodex.connector.infrastructure.config.property.common.PrivateKeyProperties;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
 /**
  * Keystore for signing REM evidences and digest for hashing business payload bytes.
@@ -23,8 +25,13 @@ import lombok.Setter;
 @Getter
 @Setter
 public class EvidencesSignatureProperties extends ConnectorSignatureProperties {
+    @Valid
     @NotNull
-    private KeystoreProperties keystore = new KeystoreProperties();
+    @NestedConfigurationProperty
+    private KeystoreProperties keystore;
+
+    @Valid
     @NotNull
-    private PrivateKeyProperties privateKey = new PrivateKeyProperties();
+    @NestedConfigurationProperty
+    private PrivateKeyProperties privateKey;
 }

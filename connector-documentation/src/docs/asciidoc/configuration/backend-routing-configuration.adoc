@@ -32,8 +32,8 @@ Configuration is provided via `application.properties` under the `+connector.rou
 | By default, `false` (in connector 6.x the default was `true`)
 
 | `connector.routing.default-backend-name`
-| Name of the link partner that receives inbound messages when routing is disabled or no rule matches. If omitted, the Connector uses `default_backend`, which only works if a link partner has that name.
-| No (effectively)
+| Name of the link partner that receives inbound messages when routing is disabled or no rule matches. Required when `connector.routing.enabled` is `true` (the startup validation fails otherwise). If routing is disabled and the property is omitted, the Connector uses `default_backend`, which only works if a link partner has that name.
+| Yes (No if routing is enabled)
 | `<backend-courts>`
 
 | `connector.routing.backend-rules[*index*].link-name`
@@ -53,6 +53,10 @@ Configuration is provided via `application.properties` under the `+connector.rou
 
 |===
 
+NOTE: The configuration is validated at startup. If routing is enabled, a missing
+`default-backend-name`, or a rule without `link-name` or `match-clause`, stops the connector
+with an error naming the offending property.
+
 .Configuration Example
 [source,properties]
 ----
@@ -66,10 +70,14 @@ connector.routing.backend-rules[0].match-clause=equals(ServiceName, '<registry-s
 # several conditions for the same backend are combined in ONE rule ('|' = or, '&' = and)
 connector.routing.backend-rules[1].link-name=<backend-insolvency>
 connector.routing.backend-rules[1].match-clause=|(equals(ServiceName, '<service-a>'),startswith(Action, '<prefix>'))
+# several conditions can also be nested: Action starts with a prefix and the service is not a given one
+connector.routing.backend-rules[2].link-name=<backend-orders>
+connector.routing.backend-rules[2].match-clause=&(startswith(Action, '<prefix>'),not(equals(ServiceName, '<service-b>')))
 ----
 
 TIP: Service names, service types and actions are those of your P-Mode. Party identifiers (`FromPartyId`, ...) and `FinalRecipient` can also be used.
 
+[[routing-pattern]]
 .Match clause grammar
 [source]
 ----

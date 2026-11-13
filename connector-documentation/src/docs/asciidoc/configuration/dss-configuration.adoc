@@ -7,6 +7,8 @@ endif::header[]
 The connector uses the link:https://github.com/esig/dss[DSS (Digital Signature Service) library] of the European Commission to validate signatures and certificates.
 This chapter describes how DSS is configured: the trusted list cache, the outbound proxy, the trusted list sources and the time-stamp servers.
 
+NOTE: The configuration is validated at startup. A blank mandatory value (for example an empty `tl-url`), an invalid cron expression or a non-positive cache expiration stops the connector with an error naming the offending property.
+
 == Trusted list configurations
 
 The connector supports the use of trusted lists as a trust source for certificate validation. Trusted lists can currently **only** be configured via the (spring environment) property file.
@@ -23,16 +25,20 @@ Configuration is provided via `application.properties` under the `+connector.dss
 | Property | Description | Optional | Example
 
 | `connector.dss.cache.location`
-| Local filesystem cache where DSS persists downloaded/parsed Trusted List (TL) and List of Trusted Lists (LOTL) data, so it doesn't have to re-fetch everything on every application restart. Must be writable.
+| Local filesystem cache where DSS persists downloaded/parsed Trusted List (TL) and List of Trusted Lists (LOTL) data, so it doesn't have to re-fetch everything on every application restart. Must be writable. Use a resource location with the `file:` prefix.
 | Recommended
 | `file:./data/tlcache`. By default, `<java.io.tmpdir>/dss-cache`
 
 | `connector.dss.cache.expiration`
 | Max age of the cached trust data before DSS treats it as stale and re-downloads from the sources configured below.
-Format: Spring Boot duration shorthand (e.g., "1d", "12h", "30m").
+Format: Spring Boot duration shorthand (e.g., "1d", "12h", "30m"). Must be positive.
 | Yes
 | By default, set to `1d`
 
+| `connector.dss.cache.refresh-cron`
+| Schedule on which the trusted lists are refreshed, as a Spring cron expression with 6 fields (seconds first).
+| Yes
+| `0 0 */6 * * *`. By default, set to *every 6 hours*
 |===
 
 .Configuration Example
@@ -41,6 +47,7 @@ Format: Spring Boot duration shorthand (e.g., "1d", "12h", "30m").
 # cache configuration
 connector.dss.cache.location=file:./data/tlcache
 connector.dss.cache.expiration=1d
+connector.dss.cache.refresh-cron=0 0 */6 * * *
 ----
 
 ==== Proxy configuration
@@ -52,6 +59,7 @@ A proxy can be configured for every outbound connection made by DSS. This proxy 
 * connect to time-stamp servers
 
 Configuration is provided via `application.properties` under the `+connector.dss.proxy.*+` prefix.
+The proxy is optional. If you configure a proxy, set both its host and its port.
 
 .DSS Proxy Configuration Properties
 [cols="35,40,10,15", options="header"]
@@ -77,7 +85,6 @@ Configuration is provided via `application.properties` under the `+connector.dss
 | Port of the HTTPS proxy server.
 | Yes
 | `8080`
-
 |===
 
 NOTE: `connector.dss.proxy.http` and `connector.dss.proxy.https` are bound to the DSS `ProxyProperties` class, so its other fields (such as `user`, `password` and `excluded-hosts`) can be set in the same way, e.g. `connector.dss.proxy.https.user`.
@@ -107,15 +114,17 @@ Configuration is provided via `application.properties` under the `+connector.dss
 |===
 | Property | Description | Optional | Example
 
-| `connector.dss.trust-list-sources.*key*.lotl-sources[*index*].lotl-url`
+| `connector.dss.trust-list-sources.<name>.lotl-sources[<index>].lotl-url`
 | LOTL source: the EU master list that points to each member state's national Trusted List.
+Must not be blank.
 | Yes
-| `https://ec.europa.eu/tools/lotl/eu-lotl.xml`
+| `https://ec.europa.eu/tools/lotl/eu-lotl.xml`. By default, set to the *EU LOTL*.
 
-| `connector.dss.trust-list-sources.*key*.lotl-sources[*index*].signing-certificates-announcement-uri`
+| `connector.dss.trust-list-sources.<name>.lotl-sources[<index>].signing-certificates-announcement-uri`
 | URL of the Official Journal notice announcing the certificates used to verify the LOTL's own signature (the trust anchor for the LOTL).
+Must not be blank.
 | Yes
-| `https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=uriserv:OJ.C_.2019.276.01.0001.01.ENG`
+| `https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=uriserv:OJ.C_.2019.276.01.0001.01.ENG`. By default, set to the *EU Official Journal notice*.
 
 | `connector.dss.trust-list-sources.*key*.lotl-sources[*index*].pivot-support`
 | Enables pivot support, so DSS can follow historical LOTL "pivot" versions and keep trust anchors valid as the EU rotates LOTL signing certificates over time.
@@ -137,6 +146,21 @@ Configuration is provided via `application.properties` under the `+connector.dss
 | Yes
 | `file:./config/keystores/tl-signers.jks`
 
+| `connector.dss.trust-list-sources.<name>.lotl-sources[<index>].signing-certs.*`
+| Optional keystore (`path`, `password`, `type`) holding the certificates used to verify the signature of the LOTL.
+| Yes
+| `file:./config/keystores/lotl-signing.jks`
+
+| `connector.dss.trust-list-sources.<name>.tl-sources[<index>].tl-url`
+| Direct Trusted List (TL) source, for a national trusted list that is not reached through a LOTL.
+Required for every `tl-sources` entry, and must not be blank.
+| No (per entry)
+| `https://www.signatur.rtr.at/currenttl.xml`
+
+| `connector.dss.trust-list-sources.<name>.tl-sources[<index>].signing-certs.*`
+| Optional keystore (`path`, `password`, `type`) holding the certificates used to verify the signature of the TL.
+| Yes
+| `file:./config/keystores/tl-signing.jks`
 |===
 
 .Configuration Example
@@ -160,7 +184,7 @@ Configuration is provided via `application.properties` under the `+connector.dss
 | Property | Description | Optional | Example
 
 | `connector.dss.time-stamp-servers.*key*.url`
-| URL of the RFC 3161 Time-Stamping Authority (TSA). The `dss.nowina.lu/pki-factory` URLs of the examples and of the template are public *test* TSAs of the DSS project; never use them in production.
+| URL of the RFC 3161 Time-Stamping Authority (TSA). The `dss.nowina.lu/pki-factory` URLs of the examples and of the template are public *test* TSAs of the DSS project; never use them in production. Required for every configured server.
 | Yes
 | `http://dss.nowina.lu/pki-factory/tsa/good-tsa`
 
@@ -188,6 +212,7 @@ NOTE: Currently, timestamping is not used by the connector.
 # Cache configuration
 connector.dss.cache.location=file:./data/tlcache
 connector.dss.cache.expiration=1d
+connector.dss.cache.refresh-cron=0 0 */6 * * *
 
 # Proxy configuration
 connector.dss.proxy.http.host=proxy1.example.com

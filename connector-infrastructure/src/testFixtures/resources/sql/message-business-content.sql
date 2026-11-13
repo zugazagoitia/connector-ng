@@ -11,7 +11,12 @@
 INSERT
 INTO connector_message_business_contents
 (
-    id, uuid, attachment_id, message_id, created_at, updated_at
+    id,
+    uuid,
+    xml_content_attachment_id,
+    message_id,
+    created_at,
+    updated_at
 )
 VALUES
     (

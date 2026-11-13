@@ -18,7 +18,7 @@ import eu.ecodex.connector.application.port.spi.auth.user.ConnectorUserRepositor
 import eu.ecodex.connector.domain.model.auth.ConnectorUserAuthenticationResult;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.dto.user.ConnectorUserDto;
 import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.login.ConnectorLoginRequest;
-import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.user.ConnectorUserCreationOrUpdateRequest;
+import eu.ecodex.connector.infrastructure.adapter.in.web.rest.request.user.ConnectorCreateUserRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -73,7 +73,7 @@ class ConnectorRetrieveSelfIT extends AbstractIntegrationTest {
         assertThat(existing).isEmpty();
 
         // register user
-        var request = ConnectorUserCreationOrUpdateRequest
+        var request = ConnectorCreateUserRequest
             .builder()
             .username(username)
             .password("password")

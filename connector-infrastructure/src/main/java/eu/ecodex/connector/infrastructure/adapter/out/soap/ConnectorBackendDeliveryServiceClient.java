@@ -92,7 +92,7 @@ public class ConnectorBackendDeliveryServiceClient {
 
         var factory = new JaxWsProxyFactoryBean();
         factory.setServiceClass(DomibusConnectorBackendDeliveryWebService.class);
-        factory.setAddress(linkPartner.pushAddress());
+        factory.setAddress(linkPartner.pushAddress().toString());
         factory.setWsdlURL("classpath:wsdl/v1/DomibusConnectorBackendDeliveryWebService.wsdl");
 
         if (linkPartnerConfig.getProperties().isLoggingEnabled()) {

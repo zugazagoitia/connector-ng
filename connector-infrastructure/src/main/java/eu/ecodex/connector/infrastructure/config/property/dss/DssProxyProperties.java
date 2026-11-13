@@ -11,8 +11,10 @@
 package eu.ecodex.connector.infrastructure.config.property.dss;
 
 import eu.europa.esig.dss.service.http.proxy.ProxyProperties;
+import jakarta.validation.Valid;
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
 /**
  * DSS proxy configuration.
@@ -20,6 +22,11 @@ import lombok.Setter;
 @Getter
 @Setter
 public class DssProxyProperties {
+    @Valid
+    @NestedConfigurationProperty
     ProxyProperties http;
+
+    @Valid
+    @NestedConfigurationProperty
     ProxyProperties https;
 }

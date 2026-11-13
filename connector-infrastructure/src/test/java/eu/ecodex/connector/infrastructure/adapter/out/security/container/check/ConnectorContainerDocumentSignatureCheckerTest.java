@@ -14,6 +14,7 @@ import static org.assertj.core.api.AssertionsForClassTypes.assertThatCode;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
@@ -52,6 +53,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 
@@ -91,14 +93,14 @@ class ConnectorContainerDocumentSignatureCheckerTest {
 
     private ConnectorContainerDocumentSignatureChecker newChecker() {
         return new ConnectorContainerDocumentSignatureChecker(
-            processingModeRepository, verifierFactory, sourceLoader, resourceLoader, properties);
+            processingModeRepository, verifierFactory, sourceLoader, properties);
     }
 
     private ConnectorContainer container() {
         return new ConnectorContainer(null, null, tokenXml, tokenPdf, asicDocument);
     }
 
-    private void stubPipeline(String constraintsXml, KeyStoreCertificateSource source) {
+    private void stubPipeline(Resource constraintsXml, KeyStoreCertificateSource source) {
         when(properties.getSignature().getValidation().getConstraintsXml())
             .thenReturn(constraintsXml);
 
@@ -270,10 +272,10 @@ class ConnectorContainerDocumentSignatureCheckerTest {
         @Test
         void should_wrap_an_io_error_while_reading_the_constraints() throws IOException {
             var resource = mock(Resource.class);
-            when(resource.getInputStream()).thenThrow(new IOException("boom"));
-            when(resourceLoader.getResource("classpath:policy.xml")).thenReturn(resource);
+            lenient().when(resource.getInputStream()).thenThrow(new IOException("boom"));
+            lenient().when(resourceLoader.getResource("classpath:policy.xml")).thenReturn(resource);
 
-            stubPipeline("classpath:policy.xml", null);
+            stubPipeline(new ClassPathResource("classpath:policy.xml"), null);
 
             assertThatThrownBy(checking(newChecker(), mock(SignedDocumentValidator.class)))
                 .isInstanceOf(IllegalStateException.class)

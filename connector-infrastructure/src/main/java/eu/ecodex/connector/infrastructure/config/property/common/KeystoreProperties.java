@@ -26,8 +26,10 @@ import lombok.Setter;
 public class KeystoreProperties {
     @NotBlank
     private String path;
+
     @NotBlank
     private String password;
+
     @NotNull
     private KeystoreType type = KeystoreType.JKS;
 

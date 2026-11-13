@@ -11,6 +11,7 @@
 package eu.ecodex.connector.application.service.message.c2ctest;
 
 import eu.ecodex.connector.application.exception.c2ctest.ConnectorC2CTestMessageDisabledException;
+import eu.ecodex.connector.application.port.api.attachment.ConnectorAttachmentVerifier;
 import eu.ecodex.connector.application.port.api.businessdomain.ConnectorBusinessDomainVerifier;
 import eu.ecodex.connector.application.port.api.message.ConnectorBusinessMessageVerifier;
 import eu.ecodex.connector.application.port.api.message.ConnectorMessageIdGenerator;
@@ -48,6 +49,7 @@ public class ConnectorSendOutboundC2CTestMessageService
     private final ConnectorProcessingModeVerifier processingModeVerifierService;
     private final ConnectorBusinessMessageVerifier messageVerifierService;
     private final ConnectorMessageEventPublisher<ConnectorBusinessMessage> stagingEventPublisher;
+    private final ConnectorAttachmentVerifier attachmentVerifierService;
 
     /**
      * Creates a new service for sending connector test messages.
@@ -62,6 +64,8 @@ public class ConnectorSendOutboundC2CTestMessageService
      * @param messageVerifierService          Verifies business messages before they are sent.
      * @param stagingEventPublisher           Publishes business messages to the outbound staging
      *                                        area.
+     * @param attachmentVerifierService       verifier used to validate attachments identifier of
+     *                                        outbound message
      */
 
     public ConnectorSendOutboundC2CTestMessageService(
@@ -72,7 +76,8 @@ public class ConnectorSendOutboundC2CTestMessageService
         ConnectorProcessingModeVerifier processingModeVerifierService,
         ConnectorBusinessMessageVerifier messageVerifierService,
         @Qualifier("connectorJmsOutboundMessageStagingPublisher")
-        ConnectorMessageEventPublisher<ConnectorBusinessMessage> stagingEventPublisher) {
+        ConnectorMessageEventPublisher<ConnectorBusinessMessage> stagingEventPublisher,
+        ConnectorAttachmentVerifier attachmentVerifierService) {
         this.testMessageConfigProvider = testMessageConfigProvider;
         this.messageProcessingConfigProvider = messageProcessingConfigProvider;
         this.messageIdGeneratorService = messageIdGeneratorService;
@@ -80,6 +85,7 @@ public class ConnectorSendOutboundC2CTestMessageService
         this.processingModeVerifierService = processingModeVerifierService;
         this.messageVerifierService = messageVerifierService;
         this.stagingEventPublisher = stagingEventPublisher;
+        this.attachmentVerifierService = attachmentVerifierService;
     }
 
     @Override
@@ -94,6 +100,7 @@ public class ConnectorSendOutboundC2CTestMessageService
 
         businessDomainVerifierService.execute(command.businessDomainIdentifier());
         processingModeVerifierService.execute(command.businessDomainIdentifier());
+        attachmentVerifierService.execute(command.attachments());
 
         var message = ConnectorBusinessMessage
             .builder()

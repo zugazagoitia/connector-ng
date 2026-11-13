@@ -60,7 +60,10 @@ public class ConnectorProcessingModeControllerTest extends AbstractWebMvcTest {
     void should_return_200_with_the_services() throws Exception {
         when(listProcessingModeServices.execute(any()))
             .thenReturn(List.of(ServiceTestFixtures.createService()));
-        when(testMessageProperties.getService()).thenReturn(new TestServiceProperties());
+        when(testMessageProperties.service()).thenReturn(new TestServiceProperties(
+            ConnectorDefaults.DEFAULT_TEST_SERVICE_NAME,
+            ConnectorDefaults.DEFAULT_TEST_SERVICE_TYPE
+        ));
 
         mockMvc.perform(get(SERVICE_URL.formatted(BUSINESS_DOMAIN))
                             .contentType(MediaType.APPLICATION_JSON))
@@ -74,7 +77,7 @@ public class ConnectorProcessingModeControllerTest extends AbstractWebMvcTest {
     void should_return_200_with_the_actions() throws Exception {
         when(listProcessingModeActions.execute(any()))
             .thenReturn(List.of(ActionTestFixtures.createAction()));
-        when(testMessageProperties.getAction()).thenReturn(ConnectorDefaults.DEFAULT_TEST_ACTION_NAME);
+        when(testMessageProperties.action()).thenReturn(ConnectorDefaults.DEFAULT_TEST_ACTION_NAME);
 
         mockMvc.perform(get(ACTION_URL.formatted(BUSINESS_DOMAIN))
                             .contentType(MediaType.APPLICATION_JSON))

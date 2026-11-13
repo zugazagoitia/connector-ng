@@ -106,7 +106,7 @@ public class ConnectorMessageTransportStepAdminController
 
     private Instant isDeliveredAt(ConnectorMessageTransportStep transportStep) {
         if (transportStep.status() == ConnectorMessageTransportStatus.DELIVERED
-            || transportStep.status() == ConnectorMessageTransportStatus.DOWNLOADED) {
+            || transportStep.status() == ConnectorMessageTransportStatus.PULLED) {
             return transportStep.updatedAt();
         }
 

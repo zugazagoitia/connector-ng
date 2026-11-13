@@ -28,7 +28,7 @@ The application server is the Tomcat server embedded in the Connector; no extern
 | Ubuntu 26.04 LTS
 | Eclipse Temurin 21.0.11
 | Tomcat 11.0.15
-| MariaDB Connector 3.5.10
+| MariaDB Connector 4.0.0
 | MariaDB 12.3.2
 | App init, DB Scripts
 
@@ -36,7 +36,7 @@ The application server is the Tomcat server embedded in the Connector; no extern
 | Ubuntu 26.04 LTS
 | Eclipse Temurin 21.0.11
 | Tomcat 11.0.15
-| PostgreSQL JDBC 42.7.13
+| PostgreSQL JDBC 42.7.14
 | PostgreSQL 17.0
 | App init, DB Scripts
 
@@ -44,7 +44,7 @@ The application server is the Tomcat server embedded in the Connector; no extern
 | Ubuntu 26.04 LTS
 | Eclipse Temurin 21.0.11
 | Tomcat 11.0.15
-| Oracle Connector 23.26.2.0.0
+| Oracle Connector 23.26.4.0.0
 | Oracle 23
 | App init, DB Scripts
 
@@ -55,16 +55,19 @@ The application server is the Tomcat server embedded in the Connector; no extern
 .Gateway Connection
 [options="header"]
 |===
-| Connector Version | Gateway Version | ActiveMQ Classic Version | MinIO Version
+| Connector Version | Gateway Version | ActiveMQ Classic Version | MinIO Version | Silo Version
 
 | {project-version}
 | 5.1.9
 | 6.2.0
 | RELEASE.2025-09-07T16-13-09Z (go1.24.6 linux/amd64)
+| N/A
 
 | {project-version}
 | 5.1.9
 | 6.2.7
 | RELEASE.2025-09-07T16-13-09Z (go1.24.6 linux/amd64)
+| RELEASE.2026-08-04T00-00-00Z
 
 |===
+

@@ -17,31 +17,38 @@ import java.io.Serializable;
 import lombok.Builder;
 
 /**
- * Holds the printable businessDocument to a message. The businessDocument itself is a byte[]. A
- * name that the businessDocument is identified with and optionally a {@link DetachedSignature} that
- * the businessDocument is signed with are also businessContent of this object.
+ * Holds the printable business document of a message.
  *
- * @param uuid              The unique uuid of the businessDocument.
- * @param attachment        the {@link ConnectorMessageAttachment} containing the actual
- *                          businessDocument payload
- * @param detachedSignature The detached signature of the businessDocument.
- * @param aesType           the optional AES encryption type applied to the businessDocument; may be
- *                          {@code null} if the businessDocument is unsigned may be {@code null} if
- *                          the businessDocument is not encrypted
+ * <p>The content of the document is not held in this object: it is stored in an attachment (see
+ * {@link ConnectorMessageAttachment}, which is read from the file storage). The record also holds
+ * the optional detached signature of the document, which is another attachment, and the optional
+ * AES encryption type applied to it.
+ *
+ * @param uuid              the unique identifier of the business document; may be {@code null} if
+ *                          the document has not been persisted yet
+ * @param content           the {@link ConnectorMessageAttachment} containing the payload of the
+ *                          business document (must not be null)
+ * @param detachedSignature the {@link ConnectorMessageAttachment} containing the detached signature
+ *                          of the business document; may be {@code null} if the document has no
+ *                          detached signature
+ * @param aesType           the {@link ConnectorBusinessDocumentAESType} of the AES encryption
+ *                          applied to the business document; may be {@code null} if the document is
+ *                          not encrypted
  */
+
 @Builder(toBuilder = true)
 public record ConnectorMessageBusinessDocument(
-        @Nullable String uuid,
-        @Nonnull ConnectorMessageAttachment attachment,
-        @Nullable DetachedSignature detachedSignature,
-        @Nullable ConnectorBusinessDocumentAESType aesType
+    @Nullable String uuid,
+    @Nonnull ConnectorMessageAttachment content,
+    @Nullable ConnectorMessageAttachment detachedSignature,
+    @Nullable ConnectorBusinessDocumentAESType aesType
 ) implements Serializable {
     @Override
     @Nonnull
     public String toString() {
         return String.format(
-                "{attachment=%s, detachedSignature=%s, aesType=%s}",
-                attachment, detachedSignature, aesType
+            "{content=%s, detachedSignature=%s, aesType=%s}",
+            content, detachedSignature, aesType
         );
     }
 }
