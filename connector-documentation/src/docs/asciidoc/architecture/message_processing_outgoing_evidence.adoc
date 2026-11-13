@@ -2,6 +2,7 @@ ifndef::header[]
 include::{basepath}/header.adoc[]
 endif::header[]
 
+[[message-processing-outgoing-evidence]]
 = Processing of an outgoing evidence message
 
 This chapter describes how evidence is generated and submitted when triggered from the backend or as a side effect of outbound business message processing.

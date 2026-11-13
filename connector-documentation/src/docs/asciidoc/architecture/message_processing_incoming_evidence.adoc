@@ -2,6 +2,7 @@ ifndef::header[]
 include::{basepath}/header.adoc[]
 endif::header[]
 
+[[message-processing-incoming-evidence]]
 = Processing of an incoming evidence message
 
 This chapter describes how an evidence confirmation message delivered by the gateway is processed.

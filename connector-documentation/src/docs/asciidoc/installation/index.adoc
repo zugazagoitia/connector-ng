@@ -21,4 +21,6 @@ include::{basepath}/installation/mtls.adoc[leveloffset=+1]
 
 include::{basepath}/installation/security-guidance.adoc[leveloffset=+1]
 
+include::{basepath}/installation/operations.adoc[leveloffset=+1]
+
 include::{basepath}/installation/troubleshooting.adoc[leveloffset=+1]

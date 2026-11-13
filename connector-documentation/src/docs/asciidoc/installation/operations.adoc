@@ -1,0 +1,118 @@
+ifndef::header[]
+include::{basepath}/header.adoc[]
+endif::header[]
+
+[[operations]]
+= Operating the Connector
+
+This chapter collects the information needed to run the Connector after the installation: logging, monitoring, what to back up, failed messages, and routine maintenance.
+
+[NOTE]
+====
+This chapter only describes behaviour that can be verified in the code and in the shipped files.
+Topics that depend on your environment or on decisions of the maintainers (sizing, high availability, scaling) are listed at the end as open points.
+====
+
+== Logging
+
+The Connector uses Log4j 2. The configuration file is `config/log4j2.xml`, selected by `logging.config=file:./config/log4j2.xml` in `application.properties`.
+
+The shipped file writes everything to the console, with the trace identifier in every line:
+
+* the logger `eu.ecodex.connector` is set to `DEBUG`;
+* all other loggers use `INFO`.
+
+[WARNING]
+====
+`DEBUG` is very verbose and includes details such as the certificate DN received from backends. For production, set `eu.ecodex.connector` to `INFO` and decide how the console output is collected (container log driver, `journald`, or a file appender added to `log4j2.xml`).
+Do not enable the link traffic logging (`connector.link.backend[n].link-config.properties.logging-enabled`) unless you need it; it can write personal data to the log. See <<security-checklist>>.
+====
+
+Changing `log4j2.xml` requires a restart.
+
+== Health and monitoring
+
+Spring Boot Actuator is enabled. In the shipped configuration only `health` and `info` are exposed (`management.endpoints.web.exposure.include=health,info`):
+
+[cols="2,3", options="header"]
+|===
+| Endpoint | Use
+
+| `/actuator/health`
+| Liveness and readiness check, for example for a container health check or a load balancer.
+
+| `/actuator/info`
+| Build information.
+|===
+
+The actuator endpoints do not require authentication; see <<public-endpoints>>. Restrict access to them at the network level.
+
+The administration API (`/api/v1/admin/**`, authenticated) provides the application-level view: message lists and details, per-business-domain statistics and reports, the transport steps of a message, and the number of messages in each JMS queue, including its dead-letter queue.
+
+The `metrics` actuator endpoint is not available. Metrics can be exported with OpenTelemetry (`management.otlp.metrics.export.enabled`, off in the template).
+
+== What to back up
+
+[cols="2,4", options="header"]
+|===
+| Data | Notes
+
+| Database
+| All message metadata, evidence references, users, business domains and the P-Mode data. Use your database's normal backup procedure.
+
+| S3 bucket
+| The message content, attachments and ASiC-S containers. Back it up (or enable versioning) together with the database; the two must be consistent.
+
+| `config/` directory
+| `application.properties`, `log4j2.xml` and the keystores and truststores referenced from it. The keystores contain the private keys of the Connector: store backups encrypted.
+
+| `data/jtalog`
+| The transaction log of the XA transaction manager. It is needed to recover transactions that were in progress when the Connector stopped. In a container, mount `/app/data` as a volume.
+
+| `data/tlcache` (or the DSS cache location)
+| The cache of trusted lists. It can be rebuilt from the internet, so a backup is optional.
+|===
+
+The ActiveMQ broker is shared with the gateway. Back up and secure the broker data according to the gateway's installation.
+
+== Failed messages
+
+The Connector processes messages through JMS queues. When processing a queue message keeps failing, ActiveMQ retries it and finally moves it to the dead-letter queue of that queue, named `ActiveMQ.DLQ.<queue-name>`.
+
+* Monitor the dead-letter queues with the broker's web console or through the queue statistics of the administration API.
+* The retry settings (5 delivery attempts, 60 seconds delay, multiplier 2) are fixed in the current version and cannot be configured.
+* Moving a message back from the dead-letter queue to its queue (after the cause is fixed) is done with the broker's tools. Find the cause in the Connector log first, using the message identifier.
+
+Delivery to a backend or to the gateway that failed is recorded in the transport steps of the message with status `FAILED`. A failed transport step is *not* retried automatically in the current version.
+
+== Routine maintenance
+
+Certificate rotation::
+See <<certificates-setup>>: import the new certificate under a new alias, update the configuration and restart.
+
+Trusted lists (TL, LOTL)::
+The trusted lists are downloaded when the Connector starts and cached on disk. The configured refresh schedule (`connector.dss.cache.refresh-cron`) is not used yet, so *restart the Connector* to refresh them.
+
+Admin and user passwords::
+Passwords do not expire. Change them with the administration API when staff change.
+
+JWT secret::
+Rotating `connector.auth.security.jwt.secret` invalidates all issued tokens.
+
+Database upgrades::
+Only the initial scripts exist (`dbscripts/initial`). There is no upgrade script between releases: read the upgrade notes in the changelog and back up before upgrading.
+
+Content deletion::
+The Connector does not delete message content automatically. Use S3 lifecycle rules and database housekeeping that match your retention rules.
+
+== Stopping the Connector
+
+Stop the Connector with a normal termination signal (`SIGTERM`; `docker stop`) so that transactions can complete and the transaction log stays consistent.
+
+== Open points
+
+The following topics are not covered because they cannot be derived from the code. Ask the project maintainers:
+
+* sizing recommendations (CPU, memory, Java heap), in particular for large attachments, which are processed in memory;
+* whether several Connector instances may share one broker and one database (high availability, scaling);
+* a systemd unit example for the JAR distribution.

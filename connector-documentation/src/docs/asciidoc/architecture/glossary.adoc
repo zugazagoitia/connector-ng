@@ -1,0 +1,67 @@
+ifndef::header[]
+include::{basepath}/header.adoc[]
+endif::header[]
+
+[[glossary]]
+= Glossary
+
+[glossary]
+AES type::
+The type of advanced electronic signature (or seal) carried by a business document. The allowed types are set with `connector.business-document.allowed-advanced-system-types`.
+
+AS4::
+The OASIS ebMS 3.0 profile used by the e-CODEX gateway to exchange messages between access points.
+
+ASiC-S::
+The signed container format (Associated Signature Container, simple) in which the Connector packages the business document, its attachments and the trust-ok token for transport.
+
+Backend::
+The national application that submits business messages to the Connector and receives messages from it. The Connector knows each backend as a *link partner* of type `backend`.
+
+Business domain::
+A named lane of the Connector that groups a P-Mode and its services, actions and parties. The default business domain is `default_business_domain`.
+
+Business message::
+A message that carries a business document and optional attachments between two parties.
+
+Conversation identifier::
+The AS4 identifier that groups related messages. It can be used by the routing to deliver replies to the backend that started a conversation.
+
+DSS::
+The Digital Signature Service library of the European Commission. The Connector uses it to build and validate signatures and to read trusted lists.
+
+ebMS identifier::
+The identifier that the AS4 layer assigns to a message. Evidences refer to the business message by this identifier.
+
+Evidence::
+A signed receipt about a step in the life of a business message, based on the ETSI REM standard: for example `SUBMISSION_ACCEPTANCE`, `RELAY_REMMD_ACCEPTANCE`, `DELIVERY` or `RETRIEVAL`, and their negative counterparts.
+
+Gateway::
+The e-CODEX access point (Domibus) that exchanges AS4 messages with the gateways of other participants. The Connector reaches it through JMS. A gateway is a *link partner* of type `gateway`.
+
+Link partner::
+A system the Connector exchanges messages with: either a backend or the gateway. Link partners are configured under `connector.link.*`.
+
+LOTL::
+The List of Trusted Lists published by the European Commission. It points to the trusted lists of the member states.
+
+P-Mode::
+The processing mode: the XML configuration that defines which services, actions and parties are allowed and how messages are exchanged. The Connector loads the P-Mode of each business domain and uses its truststore to validate inbound containers.
+
+REM::
+Registered Electronic Mail, the ETSI standard on which the e-CODEX evidences are based. *REM-MD* is the message dispatcher; the *relay REM-MD* evidences confirm that the message was passed on.
+
+Routing rule::
+A rule that selects the backend that receives an inbound message, based on a match clause over the message properties. Rules are configured under `connector.routing.*`.
+
+Sender mode::
+The way the Connector hands over a message to a backend: `push` (the Connector calls the backend), or `pull` and `passive` (the backend downloads the message).
+
+TL::
+A Trusted List published by a member state. It lists the qualified trust service providers.
+
+Transport step::
+The record of one attempt to move a message to a link partner, with its status (for example `READY_FOR_DOWNLOAD`, `DELIVERED` or `FAILED`).
+
+Trust-ok token::
+A token added to the ASiC-S container that states the result of the validation of the business document's signature.

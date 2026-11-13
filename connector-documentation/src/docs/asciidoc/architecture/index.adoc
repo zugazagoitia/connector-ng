@@ -7,8 +7,12 @@ endif::header[]
 
 include::{basepath}/architecture/overview.adoc[leveloffset=+1]
 
+include::{basepath}/architecture/backend-api.adoc[leveloffset=+1]
+
 include::{basepath}/architecture/evidence_schemas.adoc[leveloffset=+1]
 
 include::{basepath}/architecture/message_processing_incoming_evidence.adoc[leveloffset=+1]
 
 include::{basepath}/architecture/message_processing_outgoing_evidence.adoc[leveloffset=+1]
+
+include::{basepath}/architecture/glossary.adoc[leveloffset=+1]

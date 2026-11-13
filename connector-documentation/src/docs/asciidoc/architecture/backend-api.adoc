@@ -1,0 +1,171 @@
+ifndef::header[]
+include::{basepath}/header.adoc[]
+endif::header[]
+
+[[backend-api]]
+= Backend APIs
+
+A backend application talks to the Connector through two interfaces:
+
+* the *REST API* (`/api/v1/...`) to submit outbound messages and evidence triggers;
+* the *SOAP API* (`/services/backend`) to submit messages and, depending on the link partner's `sender-mode`, to receive them.
+
+The OpenAPI description of the REST API is served by the running Connector at `/swagger-ui/index.html` and `/v3/api-docs`. This chapter explains the flows that the OpenAPI description cannot show.
+
+[IMPORTANT]
+====
+The REST message endpoints do not identify the calling backend yet: the Connector attributes every submission to the link partner with the DN `cn=alice` (hard-coded in `ConnectorMessageController`). They also do not require a JWT token.
+See <<public-endpoints>>. Until this is changed, put the REST API behind a reverse proxy that authenticates your backend, or use the SOAP API, which identifies the caller from its WS-Security certificate.
+====
+
+== REST API
+
+=== Submit a business message
+
+The submission is a two-step flow when the message has attachments.
+
+. *(Optional) Upload the attachments.* `POST /api/v1/attachments/upload` with `multipart/form-data`, one part per file. The response is the list of attachment identifiers, in the order of the files.
+. *Submit the message.* `POST /api/v1/messages/outbound` with `multipart/form-data`. The response is `201 Created` and contains the identifier assigned by the Connector.
+
+The parts of the outbound request are bound by name:
+
+[cols="3,1,4", options="header"]
+|===
+| Part | Required | Content
+
+| `businessDomainIdentifier`
+| Yes
+| Identifier of the business domain (the P-Mode lane). `default_business_domain` for a standard installation.
+
+| `backendMessageIdentifier`
+| Yes
+| Your own identifier for the message, at most 255 characters.
+
+| `businessContent.xmlContent`
+| Yes
+| The XML business content (a file; must not be empty).
+
+| `businessContent.businessDocument.document`
+| Yes
+| The business document, usually a PDF (a file; must not be empty).
+
+| `businessContent.businessDocument.detachedSignature.*`
+| No
+| A detached signature of the business document.
+
+| `businessContent.businessDocument.aesType`
+| No
+| The advanced-electronic-signature type of the document. Must be allowed by `connector.business-document.allowed-advanced-system-types`.
+
+| `as4Properties.originalSender`, `as4Properties.finalRecipient`
+| Yes
+| The original sender and final recipient, at most 255 characters each.
+
+| `as4Properties.service.name`, `as4Properties.service.type`
+| Yes
+| The service of the P-Mode.
+
+| `as4Properties.action.name`
+| Yes
+| The action of the P-Mode.
+
+| `as4Properties.fromParty.{identifier,identifierType,role}`, `as4Properties.toParty.{identifier,identifierType,role}`
+| Yes
+| The parties of the P-Mode.
+
+| `as4Properties.ebmsIdentifier`, `as4Properties.conversationIdentifier`
+| No
+| Set only when you must choose these identifiers yourself.
+
+| `attachments`
+| No
+| Identifiers returned by the upload call. Repeat the part for each attachment.
+|===
+
+The values of service, action and parties are checked against the P-Mode of the business domain (see <<message-processing-configuration>>). The lookups `GET /api/v1/services`, `GET /api/v1/link-partners` and `GET /api/v1/processing-modes/{businessDomainIdentifier}/{services|actions|parties}` return the values that are configured.
+
+An example with `curl`:
+
+[source,shell]
+----
+curl -X POST "http://<connector-host>:<port>/api/v1/messages/outbound" \
+  -F "businessDomainIdentifier=default_business_domain" \
+  -F "backendMessageIdentifier=<your-message-id>" \
+  -F "businessContent.xmlContent=@content.xml;type=application/xml" \
+  -F "businessContent.businessDocument.document=@document.pdf;type=application/pdf" \
+  -F "as4Properties.originalSender=<original-sender>" \
+  -F "as4Properties.finalRecipient=<final-recipient>" \
+  -F "as4Properties.service.name=<service>" \
+  -F "as4Properties.service.type=<service-type>" \
+  -F "as4Properties.action.name=<action>" \
+  -F "as4Properties.fromParty.identifier=<from-id>" \
+  -F "as4Properties.fromParty.identifierType=<from-id-type>" \
+  -F "as4Properties.fromParty.role=<from-role>" \
+  -F "as4Properties.toParty.identifier=<to-id>" \
+  -F "as4Properties.toParty.identifierType=<to-id-type>" \
+  -F "as4Properties.toParty.role=<to-role>"
+----
+
+Validation errors (a missing or blank part, a value that is too long) return `400`.
+
+=== Trigger an evidence
+
+`POST /api/v1/messages/evidence-trigger` with a JSON body asks the Connector to create an evidence for a message that the backend received:
+
+[source,json]
+----
+{
+  "evidenceType": "DELIVERY",
+  "referenceToMessageIdentifier": "<ebms-message-identifier>"
+}
+----
+
+`evidenceType` is one of `SUBMISSION_ACCEPTANCE`, `SUBMISSION_REJECTION`, `RELAY_REMMD_ACCEPTANCE`, `RELAY_REMMD_REJECTION`, `RELAY_REMMD_FAILURE`, `DELIVERY`, `NON_DELIVERY`, `RETRIEVAL` and `NON_RETRIEVAL`. The response is `201 Created` and contains the identifier of the evidence message. `400`, `404` and `409` are returned for an invalid request, an unknown message and a conflicting state.
+
+=== Download an evidence
+
+`GET /api/v1/evidences/{uuid}/download` returns the evidence document, or `404` if the evidence does not exist.
+
+=== Authentication and administration
+
+`POST /api/v1/auth/login`, `/refresh`, `/change-password` and `/logout` handle JWT tokens for users; see <<user-authentication>>. The endpoints under `/api/v1/admin/**` serve the administration portal (messages, reports and statistics, transport steps, business domains, P-Modes, users, queues and configuration) and require an authenticated user.
+
+== SOAP API
+
+The SOAP API is described by two WSDL files in the `connector-soap-api` module:
+
+[cols="2,3", options="header"]
+|===
+| WSDL | Role
+
+| `DomibusConnectorBackendWebService.wsdl`
+| Implemented by the *Connector*, at `/services/backend` (the WSDL is available at `/services/backend?wsdl`). Operations: `submitMessage`, `requestMessages`, `listPendingMessageIds`, `getMessageById`, `acknowledgeMessage`.
+
+| `DomibusConnectorBackendDeliveryWebService.wsdl`
+| Implemented by the *backend*, for `push` delivery. The Connector calls `deliverMessage` at the `push-address` of the link partner.
+|===
+
+Messages are protected with WS-Security (signature and encryption) according to the policy in `backend.policy.xml`. The Connector identifies the caller by the DN of its certificate and looks it up among the configured link partners (<<certificate-dn-format>>).
+
+The delivery modes and the acknowledged pull mechanism are described in <<backend-delivery-modes>>.
+
+== Lifecycle of a message sent by the backend
+
+[cols="1,4", options="header"]
+|===
+| Step | What happens
+
+| 1
+| The backend submits the message (REST or SOAP). The Connector validates it against the P-Mode and registers it.
+
+| 2
+| The Connector builds the ASiC-S container and publishes the message to the gateway.
+
+| 3
+| The gateway sends the message. Evidences for it come back and are delivered to the backend according to its `sender-mode`.
+
+| 4
+| The administration endpoints and the transport steps show the state of the message.
+|===
+
+An evidence trigger can also be submitted through the SOAP API. The detailed processing steps are described in <<message-processing-outgoing-evidence>> and <<message-processing-incoming-evidence>>.

@@ -2,6 +2,7 @@ ifndef::header[]
 include::{basepath}/header.adoc[]
 endif::header[]
 
+[[message-processing-configuration]]
 = Message Processing Configuration
 
 This configuration defines message processing behavior for the connector platform, including:
