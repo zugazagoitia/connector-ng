@@ -65,35 +65,14 @@ Alternatively, uncomment the `build` section of that service.
 
 ### 2. Set the environment variables
 
-Create a file named `docker.env` in the root directory of the project.
-Host names are those of the Compose services, and ports are the ports *inside* the Compose network:
+Copy the example file to `docker.env` in the root directory of the project (it is ignored by git) and adjust the values:
 
-```env
-# MySQL
-DB_USERNAME=connector
-DB_PASSWORD=connector
-DB_URL=jdbc:mysql://connector-ng-db:3306/connector
-DB_DRIVER_CLASSNAME=com.mysql.cj.jdbc.MysqlXADataSource
-DB_DIALECT=org.hibernate.dialect.MySQLDialect
-
-# JWT authentication (at least 32 characters, e.g. the output of `openssl rand -base64 32`)
-JWT_SECRET_KEY=<jwt_key>
-
-# S3 (MinIO)
-S3_ACCESS_KEY=admin
-S3_SECRET_KEY=admin123
-S3_REGION=us-east-1
-S3_BUCKET=attachments
-S3_ENDPOINT=http://minio-s3:9000
-
-# Temporary directory
-TEMP_DIR_LOCATION=/app/temp
-
-# ActiveMQ
-BROKER_URL=tcp://activemq:61616
-BROKER_USER=admin
-BROKER_PASSWORD=admin
+```shell
+cp docker.env.example docker.env
 ```
+
+Host names in the example are those of the Compose services, and ports are the ports *inside* the Compose network.
+Set `JWT_SECRET_KEY` to at least 32 characters, for example the output of `openssl rand -base64 32`.
 
 > [!NOTE]
 > These values can also be set directly in `docker/connector/config/application.properties`.
@@ -135,6 +114,10 @@ Once the containers are running, you can access:
 | MinIO console | `http://localhost:9001` | `admin` / `admin123` |
 | ActiveMQ web console | `http://localhost:8161` | `admin` / `admin` |
 | Domibus gateway console | `http://localhost:30010` | `admin` / `123456` (see also [gw-container](https://github.com/e-CODEX/gw-container/)) |
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the build, code style, commit message and documentation rules.
 
 ## Security
 
