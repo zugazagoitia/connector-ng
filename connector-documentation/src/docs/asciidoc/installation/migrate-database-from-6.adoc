@@ -13,7 +13,8 @@ The data of a 6.x installation is copied into a new 7.1.0 database and bucket wi
 
 * reads the 6.x database (schema `V6.0.2`, connector 6.0.x and 6.1.x) on PostgreSQL, MySQL, MariaDB, Oracle or H2, and never writes to it,
 * writes an empty 7.1.0 database on PostgreSQL, MySQL, MariaDB or Oracle 23. Source and target engines can differ, for example MariaDB to PostgreSQL,
-* uploads the message contents to the S3 bucket configured in `+connector.file.storage.s3.*+`,
+* uploads the message contents to the S3 bucket configured in `+connector.file.storage.s3.*+` (other storages, such as a local
+  directory or MongoDB GridFS, are prepared for later 7.x releases and refused for 7.1.0),
 * writes a report, the new passwords of the migrated users and a draft 7.1.0 `application.properties` converted from the 6.x
   `connector.properties`.
 
@@ -38,7 +39,7 @@ file is uploaded. JCEKS truststores are rewritten as JKS.
 | Messages, message info, evidences, errors
 | Messages with their status, AS4 properties, evidences and errors.
 
-| Message contents: database (`jpa`) and unencrypted filesystem storage
+| Message contents: database (`jpa`) and filesystem storage, encrypted or not
 | Attachment rows and S3 objects: business XML, business document, detached signature, ASiC-S, tokens, attachments.
 
 | Transport steps and their states
@@ -55,9 +56,13 @@ Every rule, column by column, is documented in the tool (`docs/MAPPING.md`).
 
 == What cannot be migrated
 
-* *Contents of the 6.x filesystem storage with `connector.persistence.filesystem.encryption-active=true`* (the 6.x default). 6.x encrypted
-  each file with a key it kept only in memory and never stored; the files cannot be decrypted by anyone after 6.x stopped. Their
-  attachment rows are migrated and marked deleted, and the report lists them (`PAYLOAD_UNRECOVERABLE`).
+* *Encrypted filesystem contents whose key is lost*. With `connector.persistence.filesystem.encryption-active=true` (the 6.x
+  default) 6.x encrypted each file with its own AES key. The key travelled with the JSON of the message (queues, transport steps); 6.x
+  intended to store it in the database too, but a defect of 6.0.0 to 6.1.0 prevents that. The tool finds the keys in the transport
+  steps, the Artemis data directory of 6.x, the database or a key file, and migrates the files decrypted. Only files of messages that
+  never reached a transport step and are no longer in the Artemis journal cannot be decrypted. Their attachment rows are migrated and
+  marked deleted, and the report lists them (`PAYLOAD_UNRECOVERABLE`). Run `extract-keys` before you clean up the 6.x installation;
+  it writes all keys into a file that `migrate --legacy-fs-key-file` reads.
 * *Passwords* of 6.x users. Each user gets a random password (or is disabled, `--users=disable`) and must change it at the first login.
 * *Messages still in the embedded Artemis queues of 6.x*. Let 6.x finish processing before you stop it.
 * *Values longer than the 7.1.0 columns*, for example error stack traces (255 characters in 7.1.0). They are shortened, and the complete
@@ -120,6 +125,10 @@ The 6.x database is read through the 6.x configuration: `spring.datasource.*`, `
 | `--source-timezone`
 | Time zone of the 6.x server. 6.x stored timestamps without a time zone; a wrong value shifts every timestamp. Default: the zone of the
 machine running the tool.
+
+| `--legacy-artemis-dir`, `--legacy-fs-key-file`
+| Where to look for the keys of encrypted filesystem contents besides the transport steps. The Artemis directory defaults to
+`spring.artemis.embedded.data-directory` of the 6.x configuration.
 
 | `--legacy-fs-storage-path`, `--legacy-fs-encrypted`
 | Overrides `connector.persistence.filesystem.storage-path` and `encryption-active` when the 6.x configuration is not given or is
