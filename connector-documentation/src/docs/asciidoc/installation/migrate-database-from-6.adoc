@@ -12,7 +12,7 @@ The data of a 6.x installation is copied into a new 7.1.0 database and bucket wi
 (separate repository: https://github.com/zugazagoitia/connector-db-migration). The tool:
 
 * reads the 6.x database (schema `V6.0.2`, connector 6.0.x and 6.1.x) on PostgreSQL, MySQL, MariaDB, Oracle or H2, and never writes to it,
-* writes an empty 7.1.0 database on PostgreSQL, MySQL, MariaDB or Oracle 23. Source and target engines can differ, for example MariaDB to PostgreSQL,
+* writes a new 7.1.0 database (empty, or initialised by a first start of 7.1.0 without messages) on PostgreSQL, MySQL, MariaDB or Oracle 23. Source and target engines can differ, for example MariaDB to PostgreSQL,
 * uploads the message contents to the S3 bucket configured in `+connector.file.storage.s3.*+` (other storages, such as a local
   directory or MongoDB GridFS, are prepared for later 7.x releases and refused for 7.1.0),
 * writes a report, the new passwords of the migrated users and a draft 7.1.0 `application.properties` converted from the 6.x
@@ -64,7 +64,13 @@ Every rule, column by column, is documented in the tool (`docs/MAPPING.md`).
   marked deleted, and the report lists them (`PAYLOAD_UNRECOVERABLE`). Run `extract-keys` before you clean up the 6.x installation;
   it writes all keys into a file that `migrate --legacy-fs-key-file` reads.
 * *Passwords* of 6.x users. Each user gets a random password (or is disabled, `--users=disable`) and must change it at the first login.
-* *Messages still in the embedded Artemis queues of 6.x*. Let 6.x finish processing before you stop it.
+* *Messages still in the embedded Artemis queues of 6.x*. The tool reads the Artemis journal and reports how many are left
+  (`LEGACY_QUEUES_NOT_EMPTY`). Let 6.x empty its queues before you stop it (see <<migrate-6-cutover>>).
+* *Messages the gateway handed to the Domibus connector plugin that 6.x never fetched*. They are not in the 6.x database, and the tool
+  cannot see them. The cut-over drains the connector plugin before 6.x is stopped.
+* *The 6.x processing state of unfinished messages*. 7.1.0 does not continue a 6.x step. Such messages are migrated with their status
+  (`CREATED`, `FAILED`, ...) and listed as `LEGACY_IN_FLIGHT`. Let 6.x finish first; `flush-status` tells when it has.
+* *Evidences without XML*. 7.1.0 requires the content. They are not migrated, but their type still decides the message status.
 * *Values longer than the 7.1.0 columns*, for example error stack traces (255 characters in 7.1.0). They are shortened, and the complete
   value is written to `truncated-values.jsonl` in the report.
 * *Elements of former P-Modes*: 7.1.0 keeps one processing mode per domain. Historical messages that reference services, actions or
@@ -72,13 +78,92 @@ Every rule, column by column, is documented in the tool (`docs/MAPPING.md`).
   declares.
 * *A P-Mode that 7.1.0 rejects* (for example processes with different roles, or a service without `type`) is not migrated. Upload a corrected
   P-Mode after the migration.
+* *The 6.x P-Mode of a domain for which 7.1.0 already has one* (7.1.0 was started with a P-Mode before the migration). The P-Mode of 7.1.0
+  is kept, and the migrated messages resolve against it (`PMODE_NOT_MIGRATED_TARGET_HAS_ONE`).
+* *A 6.x user whose name already exists in 7.1.0* (usually `admin`, created by the first start of 7.1.0). The 7.1.0 user and its password are
+  kept (`USER_EXISTS_IN_TARGET`).
 
+Some values are changed so that 7.1.0 can work with them:
+
+* *Backend message ids and ebMS ids shared by several 6.x messages* (for example a backend that resent a message with the same id).
+  7.1.0 looks messages up by these ids and expects one result. The newest message keeps the id; older ones get
+  `<id>#6x-<connector message id>`. The originals are written to `changed-values.jsonl` (`DUPLICATE_BACKEND_MESSAGE_ID`,
+  `DUPLICATE_EBMS_ID`).
+* *Several transport attempts of one message* become one transport step with the history of all attempts.
+* *Empty values of required columns* become `unknown`, because Oracle cannot store an empty string.
+
+The complete list, with the reasons, is in the tool (`docs/LIMITATIONS.md`).
+
+[[migrate-6-cutover]]
 == Procedure
 
-. Let 6.x finish the messages in progress, then stop it. The database must not change during the migration.
-. Back up the 6.x database and, if used, the filesystem storage directory.
-. Create an empty 7.1.0 database and user as described in <<database-configuration>>. The tool creates the tables if they do not exist.
-. Make the S3 bucket reachable (see the file storage chapter of the configuration guide).
+The migration copies what the 6.x database holds at one moment. Messages can also be in three other places, and none of them is migrated:
+
+* in 6.x itself: messages it is processing, and messages in the queues of its embedded Artemis broker,
+* in the gateway: in 6.x, Domibus talked to the connector through the *Domibus connector plugin* (6.x gateway link `gwwspullplugin` or
+  `gwwspushplugin`). In 7.x it talks through the Domibus *default JMS plugin* and the ActiveMQ broker (see the gateway chapters of the
+  configuration guide). A message the connector plugin received and 6.x never fetched is not delivered to 7.x,
+* in the backends: submissions not yet sent to 6.x, and deliveries a backend in pull mode has not fetched yet.
+
+The procedure empties these places in an order that loses nothing. Rehearse it first.
+
+=== Rehearse on a copy
+
+Rehearse days or weeks before the cut-over, on copies, never against production:
+
+. Copy the production data: a backup of the 6.x database restored on a staging server (any engine), the filesystem storage directory
+  (`connector.persistence.filesystem.storage-path`) if used, the Artemis data directory (`spring.artemis.embedded.data-directory`), which
+  holds encryption keys and queued messages, and the 6.x `connector.properties` with its environment.
+. Run `analyze` against the copy and read `migration-report.md`. Resolve every `ERROR` and decide on every `WARNING`. The usual decisions
+  are about P-Modes 7.1.0 rejects, contents without key, duplicate ids, users and the time zone.
+. Run `migrate` into a staging 7.1.0 database and bucket, then `verify`. Note the duration: it is the downtime of the real cut-over,
+  because 6.x is stopped while the tool runs. For large installations measure with `--upload-threads` 4, 8 and 16.
+. Start a staging 7.1.0 with the generated `application.properties`, after its `# REVIEW` markers are resolved. Check in the
+  administration portal that messages, attachments, evidences and P-Modes are there. With a staging gateway and backend, also exchange test
+  messages, including an evidence for a message that 6.x sent before the migration.
+. Run `extract-keys` against production (and again just before the cut-over) if 6.x encrypted its filesystem storage. Keep the key file
+  secret.
+. Write down the commands, the duration and the decisions. Repeat the rehearsal when production changes significantly (new lanes, new
+  P-Mode, another 6.x version).
+
+=== Prepare
+
+* 7.1.0 is installed and configured, but not started, or started only on the empty database (the tool accepts a database that 7.1.0
+  initialised, as long as it holds no messages).
+* The ActiveMQ broker of 7.x runs, and the Domibus default JMS plugin is installed on the gateway. It does not receive traffic yet: the
+  message filter of Domibus still routes to the connector plugin.
+* The empty 7.1.0 database (see <<database-configuration>>; the tool creates the tables) and the S3 bucket are reachable from the machine
+  that runs the tool.
+
+=== Switch the gateway and flush 6.x
+
+The order matters. New inbound traffic is first diverted to the JMS plugin, where it waits durably in ActiveMQ for 7.1.0. Only then is the
+old path drained.
+
+. *Stop new submissions.* Stop or pause the backends. Messages they already submitted are still processed by 6.x.
+. *Divert the gateway.* In the Domibus administration console, open *Message Filter* and route all criteria to the JMS plugin instead of
+  the connector plugin. From now on, messages and evidences from other parties, including evidences for messages 6.x sent, wait in the
+  JMS plugin's out queue until 7.1.0 starts.
+. *Drain the connector plugin.* 6.x keeps running. In pull mode (`gwwspullplugin`), 6.x fetches pending messages every `pull-interval`:
+  wait until Domibus shows no message for the connector plugin that was not downloaded. In push mode (`gwwspushplugin`), check in Domibus
+  that no push to the connector plugin failed or waits for a retry.
+. *Let 6.x finish its own work*, then check:
++
+[source,bash]
+----
+java -jar connector-db-migration-all.jar flush-status \
+  --legacy-config /opt/connector6/config/connector.properties --list
+----
++
+Exit code `0`: no message waits for the gateway or a backend, no transport is pending and the 6.x queues are empty. Exit code `2`: the
+open categories and message ids are listed. Repeat until `0`, or decide consciously about what remains, typically inbound messages a pull
+backend never fetched, or outbound messages that failed for good. They are migrated in their current state.
+. *Stop 6.x.* It must not run during the migration. The tool compares the database before and after the run and reports
+  `SOURCE_CHANGED_DURING_MIGRATION`; `--resume` then completes the migration.
+. Back up the 6.x database and the filesystem storage. This is the rollback point.
+
+=== Migrate
+
 . Run an analysis. It reads and maps everything and writes only the report:
 +
 [source,bash]
@@ -87,7 +172,7 @@ java -jar connector-db-migration-all.jar analyze \
   --legacy-config /opt/connector6/config/connector.properties
 ----
 +
-Read `migration-report.md` and resolve what is reported as `ERROR`, for example a missing storage path.
+Read `migration-report.md` and compare it with the rehearsal.
 . Run the migration:
 +
 [source,bash]
@@ -103,20 +188,37 @@ java -jar connector-db-migration-all.jar migrate \
 +
 A password option without value is asked for interactively. Every option can also be given as environment variable `MIGRATION_<OPTION>`,
 for example `MIGRATION_TARGET_PASSWORD`. Without arguments in a terminal the tool asks for every setting step by step.
++
+If the run is interrupted (network failure, restart of a database, Ctrl-C), run the same command again with `--resume`. Each batch of
+messages is committed only after its files are stored, so nothing is half migrated.
 . Check the result independently:
 +
 [source,bash]
 ----
 java -jar connector-db-migration-all.jar verify --legacy-config ... --target-url ... --s3-bucket ... (same options as migrate)
 ----
-. Review `migration-report/application.properties` (draft configuration) and copy it into the configuration of 7.1.0. Before the first start,
-  apply the checklist below.
-. Start 7.1.0. Log in with a migrated user and the password from `migration-report/user-credentials.properties`, then delete that file.
+
+=== Start 7.1.0
+
+. Copy the reviewed `migration-report/application.properties` and the keystores into the configuration of 7.1.0, and apply the checklist
+  below.
+. Start 7.1.0. It consumes what waited in the JMS plugin's queues: new messages, and evidences for messages 6.x sent, which are matched to
+  the migrated messages by their ebMS id.
+. Log in with a migrated user and the password from `migration-report/user-credentials.properties`, hand the passwords over, then delete
+  that file.
+. Re-enable the backends. They now use the backend links of 7.x.
+
+=== Roll back
+
+* *Before 7.1.0 processed anything:* stop 7.1.0, route the Domibus message filter back to the connector plugin and start 6.x again. The 6.x
+  database was only read. Messages that arrived in the JMS plugin in the meantime must be moved back or sent again.
+* *After 7.1.0 processed messages:* a rollback loses what 7.1.0 did, because there is no migration from 7.x back to 6.x. Prefer fixing
+  forward; the functional test of the rehearsal is there to avoid this case.
 
 The 6.x database is read through the 6.x configuration: `spring.datasource.*`, `${...}` placeholders (also from an env file given with
 `--legacy-env-file`) and `SPRING_DATASOURCE_*` environment variables. A JNDI datasource cannot be read; give its JDBC URL with `--source-url`.
 
-=== Important options
+== Options
 
 [cols="2,4", options="header"]
 |===
@@ -125,6 +227,13 @@ The 6.x database is read through the 6.x configuration: `spring.datasource.*`, `
 | `--source-timezone`
 | Time zone of the 6.x server. 6.x stored timestamps without a time zone; a wrong value shifts every timestamp. Default: the zone of the
 machine running the tool.
+
+| `--source-schema`
+| Schema (Oracle: owner) of the 6.x tables, when it is not the default schema of the database user.
+
+| `--upload-threads`
+| Parallel uploads per batch (default 4). Each file is held in memory while it is uploaded; the tool checks the largest file against the
+heap before it starts.
 
 | `--legacy-artemis-dir`, `--legacy-fs-key-file`
 | Where to look for the keys of encrypted filesystem contents besides the transport steps. The Artemis directory defaults to
@@ -148,7 +257,11 @@ overwritten, never duplicated.
 | Use only tables created beforehand with the initial script.
 |===
 
-Exit codes: `0` completed (possibly with warnings), `2` completed with errors (see the report), `1` failed, `3` cancelled, `64` usage error.
+Exit codes: `0` completed (possibly with warnings), `2` completed with errors (see the report), `1` failed, `3` cancelled, `64` usage
+error. A run stopped by a signal reports `INTERRUPTED`; run it again with `--resume`.
+
+Other commands: `flush-status` (has 6.x finished its work), `verify`, `convert-config` (only the draft configuration), `extract-keys`,
+`schema <ENGINE>` (the 7.1.0 DDL as the tool creates it) and `storage-providers`.
 
 === Docker
 
@@ -181,7 +294,8 @@ before the first start, and lower it deliberately afterwards. The report counts 
 ====
 
 * Resolve every `# REVIEW` marker of the draft configuration: keystores (copy them to `config/keystores`), backend links, broker, JWT
-  secret, administrator.
+  secret, administrator. Backend links that 7.1.0 would refuse at startup (no endpoint keystore, a partner without `push-address`, for
+  example link partners created in the 6.x UI) are written commented out; complete them before the backends are switched over.
 * If a migrated user is named like `connector.admin.username` (usually `admin`), 7.1.0 keeps that user and does not set
   `connector.admin.password`. Log in with the password from `user-credentials.properties`.
 * Domains whose P-Mode was not migrated (`PMODE_REJECTED_BY_7X`, `PMODE_WITHOUT_TRUSTSTORE` in the report) need a P-Mode or a truststore
@@ -200,6 +314,9 @@ explained in the tool (`docs/ISSUES.md`).
 
 | `truncated-values.jsonl`
 | Original value of every shortened field.
+
+| `changed-values.jsonl`
+| Original value of every changed field, for example a duplicate backend message id.
 
 | `user-credentials.properties`
 | New passwords of the migrated users (readable by the owner only).
