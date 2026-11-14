@@ -2,7 +2,7 @@
 [[migrate-6-defects]]
 == Defects of connector 6.x and 7.1.0 found during the migration work
 
-Each section can be filed as an issue as it stands. The tool works around all of them; the workaround is noted. For the five connector-ng defects that can be fixed in code (PostgreSQL script, single-result lookups, page size, service type, push-address) patches with a regression test were prepared against `+develop+` (7.1.0) and handed over separately.
+Each section can be filed as an issue as it stands. The tool works around all of them; the workaround is noted. For the six connector-ng defects that can be fixed in code (PostgreSQL script, single-result lookups, page size, service type, push-address, late evidences) patches with a regression test were prepared against `+develop+` (7.1.0) and handed over separately.
 
 [[connector-ng-710-dbscriptsinitialpostgressql-fails-on-postgresql]]
 === connector-ng 7.1.0: `+dbscripts/initial/postgres.sql+` fails on PostgreSQL
@@ -55,6 +55,14 @@ Each section can be filed as an issue as it stands. The tool works around all of
 *Workaround:* the tool writes a marked placeholder (`+https://pull-mode-backend.invalid/+`) for pull partners.
 
 [[connector-600610-encryption-key-of-filesystem-payloads-never-stored]]
+=== connector-ng 7.1.0: a late evidence ends in the broker's dead letter queue
+
+`+ConnectorMessageEvidenceVerifierService+` is `+@Transactional+` and throws `+ConnectorEvidenceNotRelevantException+` for an evidence that cannot change the message any more (for example DELIVERY after the NON_DELIVERY of an evidence timeout). The inbound evidence processor catches it and logs "Evidence ... ignored", but the transaction of the JMS listener is already marked rollback-only: the commit fails, the evidence trigger is redelivered 7 times and ends in `+ActiveMQ.DLQ+`. Seen in the black-box cut-over for messages 6.x had rejected by its evidence timeout.
+
+*Fix:* `+@Transactional(noRollbackFor = ConnectorEvidenceNotRelevantException.class)+` on the verifier.
+
+*Workaround:* none in the tool; such dead letters can be deleted from `+ActiveMQ.DLQ+` (their evidence would have been ignored).
+
 === connector 6.0.0–6.1.0: encryption key of filesystem payloads never stored
 
 `+MsgContentPersistenceService#storeObjectIntoMsgCont+` contains `+if (!StringUtils.hasText(ref.getText())) { msgCont.setContent(...) }+`. The condition is inverted, so the key text of an encrypted file (`+FileBasedLargeFileReference#getText()+`) is never written to `+DOMIBUS_CONNECTOR_MSG_CONT.CONTENT+`. After a message is reloaded from the database, 6.x itself cannot decrypt its payloads (for example on a manual retry). The key survives only in the JSON of the message (queues, `+DC_TRANSPORT_STEP.TRANSPORTED_MESSAGE+`).

@@ -206,7 +206,9 @@ java -jar connector-db-migration-all.jar verify --legacy-config ... --target-url
 . Copy the reviewed `migration-report/application.properties` and the keystores into the configuration of 7.1.0, and apply the checklist
   below.
 . Start 7.1.0. It consumes what waited in the JMS plugin's queues: new messages, and evidences for messages 6.x sent, which are matched to
-  the migrated messages by their ebMS id.
+  the migrated messages by their ebMS id. An evidence for a message that 6.x had already rejected (typically by its evidence timeout)
+  is ignored by 7.1.0, but a 7.1.0 defect moves its trigger to `ActiveMQ.DLQ` after 7 attempts (see <<migrate-6-defects>>); such dead
+  letters can be deleted.
 . Log in with a migrated user and the password from `migration-report/user-credentials.properties`, hand the passwords over, then delete
   that file.
 . Re-enable the backends. They now use the backend links of 7.x.
