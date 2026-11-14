@@ -11,6 +11,8 @@ include::{basepath}/installation/prerequisites.adoc[leveloffset=+1]
 
 include::{basepath}/installation/database.adoc[leveloffset=+1]
 
+include::{basepath}/installation/migrate-database-from-6.adoc[leveloffset=+1]
+
 include::{basepath}/installation/certificates.adoc[leveloffset=+1]
 
 include::{basepath}/installation/standalone-containerized.adoc[leveloffset=+1]

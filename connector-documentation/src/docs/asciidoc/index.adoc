@@ -72,7 +72,7 @@ It brings together the five guides, which are also published separately:
 | <<security-checklist>>, <<public-endpoints>> and <<https-transport-security>>.
 
 | Upgrade from connector 6.x
-| <<migrate-from-6-to-7>>, in particular <<migration-behaviour>> and <<migration-removed>>.
+| <<migrate-database-from-6>> for the data, then <<migrate-from-6-to-7>> for the configuration, in particular <<migration-behaviour>> and <<migration-removed>>.
 
 | Upgrade from an earlier 7.x release
 | The upgrade notes in the <<changelog-guide>>, and the database chapter (<<database-configuration>>).

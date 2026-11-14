@@ -22,7 +22,7 @@ IMPORTANT: As in 6.x, the shipped configuration file is a template with test val
 WARNING: Connector 6.x failed at startup on invalid properties (`connector.common.fail-on-invalid-property=true`). Connector 7.x does not recognize the 6.x property names: rename them as described in the tables below.
 Review the startup log and the configuration exposed by the administration portal after migrating.
 
-NOTE: This chapter covers the configuration file only. Migration of the 6.x database content is not covered.
+NOTE: This chapter covers the configuration file. The 6.x database content is migrated with the migration tool (installation guide, chapter "Migrate the Database From 6.x"), which also converts `connector.properties` into a draft `application.properties` following the tables below.
 
 == Step-by-step Migration
 
@@ -1195,6 +1195,7 @@ The following 6.x settings have no equivalent in 7.x. Remove them, and check whe
 * *Evidence issuer and container truststore*: in 6.x, the AS4 party of the evidence issuer and the container validation truststore were taken from the P-Mode upload. In 7.x, the issuer must be configured in `+connector.evidences.issuer.as4-party.*+`; the container truststore is still the P-Mode truststore.
 * *Backend identification*: as in 6.x, the backend is identified by the DN of its signing certificate, but the configured `certificate-dn` must now be written entirely in lower case (see the link partner chapter).
 * *Admin password*: no random password is generated anymore; the configured one is used.
+* *Migrated history and file deletion*: 7.1.0 deletes messages that are neither confirmed nor rejected after `connector.file-deletion.unresolved-messages.threshold` (template `7d`). On a database migrated from 6.x this includes the unconfirmed history; set a long threshold before the first start (see the installation guide, chapter "Migrate the Database From 6.x").
 
 [[migration-startup-validation]]
 == Startup Validation

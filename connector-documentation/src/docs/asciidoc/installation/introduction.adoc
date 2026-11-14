@@ -15,7 +15,7 @@ The chapters are ordered so that they can be followed from top to bottom: the pr
 As an installation guide, this document does not describe the features or the day-to-day usage of the **Connector**.
 Configuration properties are described in the configuration guide, and changes between versions in the changelog.
 
-NOTE: If you are upgrading from connector 6.x, first read the configuration migration guide.
+NOTE: If you are upgrading from connector 6.x, migrate the database with the migration tool (<<migrate-database-from-6>>) and read the configuration migration guide.
 Several configuration properties were renamed or removed, so check every property you carry over from an earlier version.
 
 == e-CODEX building blocks

@@ -16,6 +16,8 @@ The format is based on link:https://keepachangelog.com/en/1.1.0/[Keep a Changelo
 * *Breaking -- Authentication*: the REST API now requires a JWT bearer token (see *Security* below). The configuration must contain `+connector.auth.security.jwt.*+` and `+connector.admin.*+`.
 * *Configuration*: the message processing properties can now be overridden. The verification modes are bound as `connector.message-processing.outbound-verification-mode` and `connector.message-processing.inbound-verification-mode`.
 * *Database*: new tables (users, roles, refresh tokens), columns and indexes were added. Only initial scripts are provided (`dbscripts/initial`); compare them with your schema before upgrading.
+* *Upgrade from 6.x*: the database of a 6.x installation can be migrated to 7.1.0 with the migration tool `connector-db-migration` (see the installation guide, "Migrate the Database From 6.x").
+* *Known issue*: `dbscripts/initial/postgres.sql` fails on PostgreSQL because two check constraints of `connector_messages` have the same name; see the database chapter of the installation guide for the correction.
 * *Transactions*: Narayana was replaced by Atomikos; the transaction log (`tmlog*.log`) is written to the working directory unless `spring.jta.atomikos.properties.log-base-dir` is set; keep it on persistent storage.
 
 === Added

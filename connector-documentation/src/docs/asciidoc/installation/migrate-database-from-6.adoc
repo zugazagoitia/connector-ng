@@ -1,0 +1,200 @@
+ifndef::header[]
+include::{basepath}/header.adoc[]
+endif::header[]
+
+[[migrate-database-from-6]]
+= Migrate the Database From 6.x
+
+Connector 7.x uses a new database schema, stores files in an S3 bucket instead of the database or the filesystem, and has no
+upgrade path from the 6.x schema. Do not start 7.1.0 on a 6.x database.
+
+The data of a 6.x installation is copied into a new 7.1.0 database and bucket with the migration tool *connector-db-migration*
+(separate repository: https://github.com/zugazagoitia/connector-db-migration). The tool:
+
+* reads the 6.x database (schema `V6.0.2`, connector 6.0.x and 6.1.x) on PostgreSQL, MySQL, MariaDB, Oracle or H2, and never writes to it,
+* writes an empty 7.1.0 database on PostgreSQL, MySQL, MariaDB or Oracle 23. Source and target engines can differ, for example MariaDB to PostgreSQL,
+* uploads the message contents to the S3 bucket configured in `+connector.file.storage.s3.*+`,
+* writes a report, the new passwords of the migrated users and a draft 7.1.0 `application.properties` converted from the 6.x
+  `connector.properties`.
+
+It is available as an executable JAR (Java 21) and as a Docker image.
+
+NOTE: The configuration file is converted with the rules of the chapter "Migrate Configuration From 6.x to 7.x" of the configuration guide. The draft still has to be reviewed: every value
+without a certain 6.x equivalent keeps its template value and is marked `# REVIEW`.
+
+== What is migrated
+
+[cols="2,3", options="header"]
+|===
+| 6.x | 7.1.0
+
+| Message lanes
+| Business domains. The 6.x default lanes (`defaultBusinessDomain`, `defaultMessageLane`) become `default_business_domain`.
+
+| Active P-Mode set of each lane, with its truststore
+| The processing mode of the domain. Parties, services and actions are derived from the P-Mode file exactly as 7.1.0 derives them when the
+file is uploaded. JCEKS truststores are rewritten as JKS.
+
+| Messages, message info, evidences, errors
+| Messages with their status, AS4 properties, evidences and errors.
+
+| Message contents: database (`jpa`) and unencrypted filesystem storage
+| Attachment rows and S3 objects: business XML, business document, detached signature, ASiC-S, tokens, attachments.
+
+| Transport steps and their states
+| One transport step per message, with the state history of all 6.x attempts.
+
+| Users
+| REST API users with new passwords (6.x password hashes cannot be used by 7.x), roles `ROLE_ADMIN` and `ROLE_USER`.
+
+| `connector.properties` and the link partners stored in the database
+| Draft `application.properties`.
+|===
+
+Every rule, column by column, is documented in the tool (`docs/MAPPING.md`).
+
+== What cannot be migrated
+
+* *Contents of the 6.x filesystem storage with `connector.persistence.filesystem.encryption-active=true`* (the 6.x default). 6.x encrypted
+  each file with a key it kept only in memory and never stored; the files cannot be decrypted by anyone after 6.x stopped. Their
+  attachment rows are migrated and marked deleted, and the report lists them (`PAYLOAD_UNRECOVERABLE`).
+* *Passwords* of 6.x users. Each user gets a random password (or is disabled, `--users=disable`) and must change it at the first login.
+* *Messages still in the embedded Artemis queues of 6.x*. Let 6.x finish processing before you stop it.
+* *Values longer than the 7.1.0 columns*, for example error stack traces (255 characters in 7.1.0). They are shortened, and the complete
+  value is written to `truncated-values.jsonl` in the report.
+* *Elements of former P-Modes*: 7.1.0 keeps one processing mode per domain. Historical messages that reference services, actions or
+  parties of an older P-Mode point to the disabled domain `legacy_6x_archive`. The live domain accepts only what its current P-Mode
+  declares.
+* *A P-Mode that 7.1.0 rejects* (for example processes with different roles, or a service without `type`) is not migrated. Upload a corrected
+  P-Mode after the migration.
+
+== Procedure
+
+. Let 6.x finish the messages in progress, then stop it. The database must not change during the migration.
+. Back up the 6.x database and, if used, the filesystem storage directory.
+. Create an empty 7.1.0 database and user as described in <<database-configuration>>. The tool creates the tables if they do not exist.
+. Make the S3 bucket reachable (see the file storage chapter of the configuration guide).
+. Run an analysis. It reads and maps everything and writes only the report:
++
+[source,bash]
+----
+java -jar connector-db-migration-all.jar analyze \
+  --legacy-config /opt/connector6/config/connector.properties
+----
++
+Read `migration-report.md` and resolve what is reported as `ERROR`, for example a missing storage path.
+. Run the migration:
++
+[source,bash]
+----
+java -jar connector-db-migration-all.jar migrate \
+  --legacy-config /opt/connector6/config/connector.properties \
+  --source-timezone Europe/Vienna \
+  --target-url jdbc:postgresql://db-host:5432/connector --target-user connector --target-password \
+  --s3-endpoint http://minio:9000 --s3-region us-east-1 --s3-bucket attachments \
+  --s3-access-key connector --s3-secret-key \
+  --report-dir ./migration-report
+----
++
+A password option without value is asked for interactively. Every option can also be given as environment variable `MIGRATION_<OPTION>`,
+for example `MIGRATION_TARGET_PASSWORD`. Without arguments in a terminal the tool asks for every setting step by step.
+. Check the result independently:
++
+[source,bash]
+----
+java -jar connector-db-migration-all.jar verify --legacy-config ... --target-url ... --s3-bucket ... (same options as migrate)
+----
+. Review `migration-report/application.properties` (draft configuration) and copy it into the configuration of 7.1.0. Before the first start,
+  apply the checklist below.
+. Start 7.1.0. Log in with a migrated user and the password from `migration-report/user-credentials.properties`, then delete that file.
+
+The 6.x database is read through the 6.x configuration: `spring.datasource.*`, `${...}` placeholders (also from an env file given with
+`--legacy-env-file`) and `SPRING_DATASOURCE_*` environment variables. A JNDI datasource cannot be read; give its JDBC URL with `--source-url`.
+
+=== Important options
+
+[cols="2,4", options="header"]
+|===
+| Option | Meaning
+
+| `--source-timezone`
+| Time zone of the 6.x server. 6.x stored timestamps without a time zone; a wrong value shifts every timestamp. Default: the zone of the
+machine running the tool.
+
+| `--legacy-fs-storage-path`, `--legacy-fs-encrypted`
+| Overrides `connector.persistence.filesystem.storage-path` and `encryption-active` when the 6.x configuration is not given or is
+outdated.
+
+| `--users=reset\|disable\|skip`
+| New random passwords (default), disabled users, or no users. With `skip` only the administrator of `+connector.admin.*+` exists.
+
+| `--lane-mapping LANE=DOMAIN`, `--default-lane`
+| Which 6.x lanes become which business domains.
+
+| `--resume`
+| Continue a migration that was interrupted (for example by a network failure). Already migrated messages are skipped; files are
+overwritten, never duplicated.
+
+| `--no-create-schema`
+| Use only tables created beforehand with the initial script.
+|===
+
+Exit codes: `0` completed (possibly with warnings), `2` completed with errors (see the report), `1` failed, `3` cancelled, `64` usage error.
+
+=== Docker
+
+[source,bash]
+----
+docker run --rm -it \
+  -v /opt/connector6:/connector6:ro \
+  -v "$PWD/migration-report:/work/report" \
+  -e MIGRATION_SOURCE_TIMEZONE=Europe/Vienna \
+  -e MIGRATION_TARGET_PASSWORD -e MIGRATION_S3_SECRET_KEY \
+  connector-db-migration migrate --yes \
+    --legacy-config /connector6/config/connector.properties --legacy-home /connector6 \
+    --target-url jdbc:postgresql://db-host:5432/connector --target-user connector \
+    --s3-endpoint http://minio:9000 --s3-bucket attachments --s3-access-key connector
+----
+
+Mount the 6.x installation when 6.x used the filesystem storage or an H2 database.
+
+== Checklist before the first start of 7.1.0
+
+[WARNING]
+====
+Connector 7.1.0 deletes every message that is neither confirmed nor rejected once it is older than
+`connector.file-deletion.unresolved-messages.threshold`, together with its files (see the file deletion chapter of the configuration
+guide). The template value is `7d`. A migrated database contains the 6.x history, and many of those messages were never confirmed, for
+example when no DELIVERY evidence arrived. With `7d`, they are deleted at the first cleanup run.
+
+The draft configuration sets `connector.file-deletion.unresolved-messages.threshold=36500d`. Keep a value longer than the history you need
+before the first start, and lower it deliberately afterwards. The report counts the messages concerned (`UNRESOLVED_HISTORY_AT_RISK`).
+====
+
+* Resolve every `# REVIEW` marker of the draft configuration: keystores (copy them to `config/keystores`), backend links, broker, JWT
+  secret, administrator.
+* If a migrated user is named like `connector.admin.username` (usually `admin`), 7.1.0 keeps that user and does not set
+  `connector.admin.password`. Log in with the password from `user-credentials.properties`.
+* Domains whose P-Mode was not migrated (`PMODE_REJECTED_BY_7X`, `PMODE_WITHOUT_TRUSTSTORE` in the report) need a P-Mode or a truststore
+  uploaded through the administration API.
+* Re-test the message exchange: the P-Mode verification modes changed meaning (see "Behaviour changes to check" in the configuration migration chapter of the configuration guide).
+
+== Report
+
+[cols="1,3", options="header"]
+|===
+| File | Content
+
+| `migration-report.md`, `migration-report.json`
+| Outcome, row counts of source and target, message statuses, uploaded objects and bytes, and every finding with a code. The codes are
+explained in the tool (`docs/ISSUES.md`).
+
+| `truncated-values.jsonl`
+| Original value of every shortened field.
+
+| `user-credentials.properties`
+| New passwords of the migrated users (readable by the owner only).
+
+| `application.properties`
+| Draft 7.1.0 configuration.
+|===

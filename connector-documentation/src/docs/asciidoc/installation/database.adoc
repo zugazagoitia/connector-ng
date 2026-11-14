@@ -126,6 +126,22 @@ spring.jpa.hibernate.ddl-auto=none
 With `spring.jpa.hibernate.ddl-auto=validate` the application checks at startup that the tables match its entities and refuses to start otherwise.
 This setting is a useful check after running a script.
 
+[WARNING]
+====
+The PostgreSQL script of 7.1.0 (`dbscripts/initial/postgres.sql`) stops with `ERROR: check constraint "connector_messages_direction_check"
+already exists` after creating three tables: the check of the `status` column of `connector_messages` reuses the name of the `direction`
+check. Before running the script, rename the second constraint, for example:
+
+[source,bash]
+----
+awk '/constraint connector_messages_direction_check/ && ++n == 2 { sub(/direction_check/, "status_check") } { print }' \
+  dbscripts/initial/postgres.sql > postgres-fixed.sql
+----
+
+The other three scripts are not affected. The migration tool applies the same correction when it creates the schema
+(see <<migrate-database-from-6>>).
+====
+
 === Let the application initialize the database
 
 Set the following property and launch the application:
@@ -182,7 +198,7 @@ This is only a hint and can be ignored.
 === Upgrading from 6.x
 
 The 7.x release changes the database schema. Do not start the 7.x connector against a 6.x database.
-Data migration from a 6.x connector database is not covered by this guide.
+Migrate the data into a new 7.1.0 database with the migration tool, as described in <<migrate-database-from-6>>.
 
 === Upgrading from an earlier 7.x release
 
