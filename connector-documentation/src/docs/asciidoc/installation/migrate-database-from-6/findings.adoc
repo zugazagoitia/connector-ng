@@ -1,0 +1,80 @@
+// Generated from the documentation of the migration tool (connector-db-migration, docs/ISSUES.md); keep both in sync.
+[[migrate-6-findings]]
+== Finding codes of the report
+
+Every finding in `+migration-report.md+` and `+migration-report.json+` has a severity and a code.
+
+* *INFO:* data was transformed in a documented way; nothing was lost.
+* *WARNING:* review needed (placeholder, truncation, assumption).
+* *ERROR:* a record or a payload could not be migrated as it was. The run continues, and its outcome is `+COMPLETED_WITH_ERRORS+` (exit code 2).
+
+[cols=",,",options="header",]
+|===
+|Code |Severity |Meaning and what to do
+|`+MIGRATION_ABORTED+` |ERROR |The run stopped: connection failure or lost connection, target not empty or incomplete, storage unusable, heap too small. The detail names the cause. Fix it and run again (with `+--resume+` if rows were written).
+|`+MIGRATION_INTERRUPTED+` |ERROR |The process was stopped (Ctrl-C, SIGTERM). Outcome `+INTERRUPTED+`; run again with `+--resume+`.
+|`+SOURCE_CHANGED_DURING_MIGRATION+` |ERROR |The 6.x database changed during the run: 6.x was still running. Stop it and run again with `+--resume+`.
+|`+SOURCE_TIMEZONE_DEFAULTED+` |WARNING |`+--source-timezone+` was not given; the zone of this machine was used.
+|`+SOURCE_TIMEZONE_SUSPECT+` |WARNING |Evidence `+EventTime+` values differ from the stored times by whole hours; the detail suggests the offset 6.x ran with. Check `+--source-timezone+`.
+|`+LEGACY_IN_FLIGHT+` |WARNING |6.x had unfinished messages or transports (counts in the detail, ids in `+in-flight-messages.csv+`). They are migrated in their current state.
+|`+LEGACY_QUEUES_NOT_EMPTY+` |WARNING |The 6.x Artemis queues still hold messages 6.x would still process; they are not migrated. Let 6.x run until they are empty.
+|`+LEGACY_DEAD_LETTERS+` |WARNING |Messages are in the 6.x dead letter queues (`+DLQ.*+`): 6.x failed to process them (for example a P-Mode or certificate problem) and did not store them. They are not migrated. Move them back to their queue in the 6.x administration UI once the cause is fixed, or accept their loss.
+|`+TARGET_INITIALIZED_BY_CONNECTOR+` |INFO |The target held 7.1.0 reference data but no messages; it was reused.
+|`+TARGET_XA_NOT_READY+` |WARNING |The 7.1.0 database is not ready for the XA transactions 7.1.0 uses with the broker: PostgreSQL with `+max_prepared_transactions=0+` (the default; every gateway message then fails and lands in the broker's dead letter queue), MySQL without `+XA_RECOVER_ADMIN+`, Oracle without the recovery grants. Fix it as the database chapter of the connector-ng installation guide describes before starting 7.1.0.
+|`+PMODE_ALREADY_IN_TARGET+` |INFO |A processing mode of the target is used for a domain.
+|`+PMODE_NOT_MIGRATED_TARGET_HAS_ONE+` |WARNING |The 6.x P-Mode of a domain was not migrated because the target already has one; check that it covers the 6.x traffic.
+|`+PMODE_AMBIGUOUS_FOR_7X+` |WARNING |Two services of the same value, or two parties with the same id and role type: 7.1.0 lookups fail for such messages.
+|`+USER_EXISTS_IN_TARGET+` |INFO |A user of that name exists in the target; it is kept with its password.
+|`+DUPLICATE_BACKEND_MESSAGE_ID+` |WARNING |Several 6.x messages share a backend message id; older ones got a suffix (`+changed-values.jsonl+`).
+|`+DUPLICATE_EBMS_ID+` |WARNING |Several 6.x messages share an ebMS id in one direction; older ones got a suffix (`+changed-values.jsonl+`).
+|`+SOURCE_VERSION_UNKNOWN+` |WARNING |`+DC_DB_VERSION+` is empty; the schema is assumed to be 6.x.
+|`+SOURCE_VERSION_NOT_6X+` |WARNING |`+DC_DB_VERSION+` is not `+V6...+`. Apply the 6.x upgrade scripts first.
+|`+SOURCE_SCHEMA_DIFFERS+` |WARNING |A table or column of the 6.1.0 model is missing. Messages may be unreadable (`+MESSAGE_UNREADABLE+`).
+|`+SOURCE_SCHEMA_TYPES_DIFFER+` |INFO |Column types differ from the entities, as in the official 6.x scripts. Harmless.
+|`+TARGET_SCHEMA_PATCHED+` |WARNING |A defect of the published 7.1.0 initial script was corrected while creating the schema (see LIMITATIONS).
+|`+LANE_MAPPED+` |INFO |Which business domain a 6.x lane became.
+|`+LANE_PROPERTY_DROPPED+` |WARNING |A message lane property has no 7.1.0 equivalent.
+|`+PMODE_MIGRATED+` |INFO |The P-Mode set that became the processing mode of a domain, with its element counts.
+|`+MULTIPLE_ACTIVE_PMODES+` |WARNING |Several active P-Mode sets in one domain. The newest was migrated.
+|`+NO_ACTIVE_PMODE+` |WARNING |No active P-Mode set. The newest inactive one was migrated.
+|`+PMODE_WITHOUT_XML+` |ERROR |A P-Mode set without XML. Upload a P-Mode in 7.1.0.
+|`+PMODE_REJECTED_BY_7X+` |ERROR |7.1.0 would reject this P-Mode (message included). The domain has no processing mode. Upload a corrected P-Mode.
+|`+PMODE_SERVICE_WITHOUT_TYPE+` |ERROR |7.1.0 requires a service type. Same handling as above.
+|`+PMODE_WITHOUT_TRUSTSTORE+` |WARNING |No truststore was stored with the P-Mode. 7.1.0 validates inbound containers with it; upload one.
+|`+TRUSTSTORE_TYPE_MAPPED+` |INFO |A JCEKS store was rewritten as JKS, or PKCS12S2 stored as PKCS12.
+|`+TRUSTSTORE_WITHOUT_PASSWORD+` |ERROR |7.1.0 needs a password. The truststore was not migrated.
+|`+TRUSTSTORE_UNREADABLE+` |ERROR |The store could not be opened for conversion.
+|`+AS4_REFERENCE_ARCHIVED+` |INFO |A message references a service, action or party that is not in the current P-Mode of its domain. It points to the `+legacy_6x_archive+` domain.
+|`+ARCHIVE_DOMAIN_CREATED+` |INFO |The disabled `+legacy_6x_archive+` domain was created.
+|`+MESSAGE_WITHOUT_AS4_INFO+` |WARNING |No message info in 6.x. Placeholders named `+unknown+` are referenced.
+|`+DIRECTION_UNKNOWN+` |WARNING |No direction in 6.x. `+BACKEND_TO_GATEWAY+` was assumed.
+|`+MESSAGE_UNREADABLE+` |ERROR |The row cannot be read with the 6.1.0 model (for example an unknown enum value). The message is not migrated.
+|`+MESSAGE_MAPPING_FAILED+` |ERROR |Unexpected data. The message is not migrated. Please report it with the detail.
+|`+MESSAGE_WRITE_FAILED+` |ERROR |The target refused the rows of this message (detail from the database). The others were written.
+|`+BUSINESS_CONTENT_MISSING+` |WARNING |No business XML row in 6.x. An empty, deleted placeholder was stored because 7.1.0 requires one.
+|`+DUPLICATE_BUSINESS_CONTENT+` |INFO |An extra XML or document row was kept as a plain attachment.
+|`+LEGACY_STORE_TYPE+` |WARNING |Content written by connector 4.x. The raw bytes were migrated as an attachment.
+|`+PAYLOAD_MISSING+` |ERROR |The bytes of a message that is not finished should exist but were not found (big data row or file missing, storage path not given). The attachment is stored as deleted.
+|`+PAYLOAD_UNRECOVERABLE+` |ERROR |Encrypted 6.x filesystem payload whose key was found nowhere (column, key file, transport steps, Artemis journal), or whose key does not decrypt it. The attachment is stored as deleted.
+|`+PAYLOAD_UNRECOVERABLE_DELIVERED+` |WARNING |Like `+PAYLOAD_UNRECOVERABLE+`, but 6.x had already delivered the content to its recipient (gateway or backend), or the message was finished. Typical for inbound messages on 6.1.0: the files received from the gateway are encrypted with keys that exist only while 6.x processes them. The attachment is stored as deleted; the exchange itself was complete.
+|`+PAYLOAD_REMOVED_BY_6X+` |INFO |The file of a confirmed or rejected message is gone. 6.x removes the files of finished messages (sometimes without marking the row deleted). The attachment is stored as deleted.
+|`+STORAGE_NOT_SUPPORTED_BY_71+` |WARNING |`+--allow-unsupported-storage+`: the attachments use a storage value the 7.1.0 schema does not declare (see <<migrate-6-storage>>).
+|`+EVIDENCE_WITHOUT_CONTENT+` |WARNING |Evidence without XML. Not migrated; it still counts for the status.
+|`+EVIDENCE_WITHOUT_TYPE+` |ERROR |Evidence without type. Not migrated.
+|`+EVIDENCE_TYPE_UNKNOWN+` |WARNING |An evidence type in transported JSON with no 7.1.0 equivalent.
+|`+STEPS_COLLAPSED+` |INFO |Several 6.x transport attempts became one 7.1.0 step with the complete state history.
+|`+STEP_IDENTIFIER_DEDUPLICATED+` |INFO |A duplicate 6.x transport id was suffixed with the 6.x step id.
+|`+TRANSPORT_STEP_WITHOUT_STATE+` |WARNING |The latest attempt has no state history. A state was assumed (named in the detail).
+|`+TRANSPORT_STEP_SKIPPED+` |WARNING |A step of no business message whose JSON is unreadable or carries no evidence.
+|`+TRANSPORT_STEP_FAILED+` |ERROR |Steps of 6.x evidence messages could not be written.
+|`+LINK_PARTNERS_UNREADABLE+` |WARNING |`+DC_LINK_PARTNER+` could not be read. Steps were classified by message direction.
+|`+VALUE_TRUNCATED+` |WARNING |A value was shortened to fit 7.1.0. The full value is in `+truncated-values.jsonl+`.
+|`+NOT_NULL_PLACEHOLDER+` |WARNING |An empty 6.x value of a column 7.1.0 requires was stored as `+unknown+`.
+|`+USER_PASSWORDS_RESET+` |WARNING |Users got new passwords (`+user-credentials.properties+`) or were disabled.
+|`+USER_ROLE_MAPPED+` |WARNING |6.x role `+ACTUATOR+` became `+ROLE_USER+`.
+|`+USER_LOCKED+` |INFO |A user locked in 6.x was migrated disabled.
+|`+USER_DUPLICATE+` |ERROR |A second 6.x user with the same name was skipped.
+|`+USERS_SKIPPED+` |INFO |`+--users=skip+`.
+|`+ADMIN_USER_EXISTS+` |WARNING |A migrated user is named `+admin+`. 7.1.0 keeps its password; use the one from `+user-credentials.properties+`.
+|`+UNRESOLVED_HISTORY_AT_RISK+` |WARNING |Migrated messages that the 7.1.0 template (`+unresolved-messages.threshold=7d+`) would purge. Raise the threshold before starting 7.1.0.
+|===

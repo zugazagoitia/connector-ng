@@ -52,7 +52,7 @@ file is uploaded. JCEKS truststores are rewritten as JKS.
 | Draft `application.properties`.
 |===
 
-Every rule, column by column, is documented in the tool (`docs/MAPPING.md`).
+Every rule, column by column, is described in <<migrate-6-mapping>>.
 
 == What cannot be migrated
 
@@ -92,7 +92,7 @@ Some values are changed so that 7.1.0 can work with them:
 * *Several transport attempts of one message* become one transport step with the history of all attempts.
 * *Empty values of required columns* become `unknown`, because Oracle cannot store an empty string.
 
-The complete list, with the reasons, is in the tool (`docs/LIMITATIONS.md`).
+The complete list, with the reasons, is in <<migrate-6-limitations>>.
 
 [[migrate-6-cutover]]
 == Procedure
@@ -133,7 +133,10 @@ Rehearse days or weeks before the cut-over, on copies, never against production:
 * The ActiveMQ broker of 7.x runs, and the Domibus default JMS plugin is installed on the gateway. It does not receive traffic yet: the
   message filter of Domibus still routes to the connector plugin.
 * The empty 7.1.0 database (see <<database-configuration>>; the tool creates the tables) and the S3 bucket are reachable from the machine
-  that runs the tool.
+  that runs the tool. The database must be set up for XA transactions as described there (PostgreSQL: `max_prepared_transactions`
+  greater than `0`). The tool checks it (`TARGET_XA_NOT_READY`): with PostgreSQL's default, 7.1.0 starts but every message from the
+  gateway fails and is moved to the broker's dead letter queue `ActiveMQ.DLQ`. After fixing the database, move those messages back
+  to `domibus.backend.jms.outQueue` (ActiveMQ console: *Retry*).
 
 === Switch the gateway and flush 6.x
 
@@ -267,7 +270,7 @@ Other commands: `flush-status` (has 6.x finished its work), `verify`, `convert-c
 
 [source,bash]
 ----
-docker run --rm -it \
+docker run --rm -it --user "$(id -u):$(id -g)" \
   -v /opt/connector6:/connector6:ro \
   -v "$PWD/migration-report:/work/report" \
   -e MIGRATION_SOURCE_TIMEZONE=Europe/Vienna \
@@ -278,7 +281,8 @@ docker run --rm -it \
     --s3-endpoint http://minio:9000 --s3-bucket attachments --s3-access-key connector
 ----
 
-Mount the 6.x installation when 6.x used the filesystem storage or an H2 database.
+Mount the 6.x installation when 6.x used the filesystem storage or an H2 database. Run the container with your user id
+(`--user`), so that the report directory belongs to you: `user-credentials.properties` can only be read by its owner.
 
 == Checklist before the first start of 7.1.0
 
@@ -294,7 +298,7 @@ before the first start, and lower it deliberately afterwards. The report counts 
 ====
 
 * Resolve every `# REVIEW` marker of the draft configuration: keystores (copy them to `config/keystores`), backend links, broker, JWT
-  secret, administrator. Backend links that 7.1.0 would refuse at startup (no endpoint keystore, a partner without `push-address`, for
+  secret, administrator. Backend links that 7.1.0 would refuse at startup (an endpoint without keystore, private key, truststore or `encrypt-alias`; a partner without `encryption-alias`, `certificate-dn` or `push-address`, which 7.1.0 requires also for pull partners, for
   example link partners created in the 6.x UI) are written commented out; complete them before the backends are switched over.
 * If a migrated user is named like `connector.admin.username` (usually `admin`), 7.1.0 keeps that user and does not set
   `connector.admin.password`. Log in with the password from `user-credentials.properties`.
@@ -310,7 +314,7 @@ before the first start, and lower it deliberately afterwards. The report counts 
 
 | `migration-report.md`, `migration-report.json`
 | Outcome, row counts of source and target, message statuses, uploaded objects and bytes, and every finding with a code. The codes are
-explained in the tool (`docs/ISSUES.md`).
+explained in <<migrate-6-findings>>.
 
 | `truncated-values.jsonl`
 | Original value of every shortened field.
@@ -324,3 +328,27 @@ explained in the tool (`docs/ISSUES.md`).
 | `application.properties`
 | Draft 7.1.0 configuration.
 |===
+
+== How the tool was tested
+
+* Every 6.x database engine version in use (PostgreSQL 13/15/17, MySQL 8.0/8.4, MariaDB 10.6/10.11/11.4, Oracle 23, H2) is migrated
+  into every 7.1.0 engine (PostgreSQL 17, MySQL 8.4, MariaDB 12.3, Oracle 23): 40 combinations, each with a catalogue of
+  hand-written and randomised 6.x databases. Every row is compared, and every migrated file is compared byte by byte.
+* Failures that happen in practice are simulated: 6.x still running, lost database connections on both sides, Ctrl-C and SIGTERM
+  followed by `--resume`, a wrong time zone, a latin1 source, schemas other than the default, payloads larger than the heap, wrong
+  credentials, a locked H2 file, 10 000-message installations.
+* The published 7.1.0 image is started on the migrated data of every target engine, also when 7.1.0 initialised the database
+  first, and reads messages, files and evidences through its REST API.
+* The cut-over of this chapter was carried out end to end with two connector 6.1.0 installations exchanging messages through two
+  Domibus gateways: rehearsal, gateway switch, flush, migration, start of 7.1.0, then traffic between the migrated connectors and the
+  unchanged 6.x backends.
+
+include::{basepath}/installation/migrate-database-from-6/limitations.adoc[]
+
+include::{basepath}/installation/migrate-database-from-6/mapping.adoc[]
+
+include::{basepath}/installation/migrate-database-from-6/findings.adoc[]
+
+include::{basepath}/installation/migrate-database-from-6/storage.adoc[]
+
+include::{basepath}/installation/migrate-database-from-6/defects.adoc[]

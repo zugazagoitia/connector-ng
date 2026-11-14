@@ -1,0 +1,64 @@
+// Generated from the documentation of the migration tool (connector-db-migration, docs/LIMITATIONS.md); keep both in sync.
+[[migrate-6-limitations]]
+== Limitations in detail
+
+What the tool cannot do, why, and what it does instead. Everything in this list is reported in the migration report when it occurs.
+
+=== What is not migrated
+
+[cols=",,",options="header",]
+|===
+|What |Why |What happens
+|*Messages still in the queues of the 6.x Artemis broker* |They are in the middle of 6.x processing, which 7.1.0 cannot continue. |`+LEGACY_QUEUES_NOT_EMPTY+` with their number. Let 6.x empty its queues first (<<migrate-6-cutover>>).
+|*Messages in the 6.x dead letter queues* (`+DLQ.*+`) |6.x failed to process them and never stored them in its database. They never drain by themselves. |`+LEGACY_DEAD_LETTERS+`; `+flush-status+` counts them separately. Resend them from the 6.x administration UI after fixing the cause, or accept their loss (`+flush-status --accept-dead-letters+`).
+|*Messages the gateway handed to the 6.x connector plugin that 6.x never received* |They are outside the 6.x database. |Not visible to the tool. The cut-over diverts the gateway to the JMS plugin first, then drains the connector plugin (<<migrate-6-cutover>>).
+|*Encrypted filesystem payloads whose key exists nowhere* |6.x encrypted each file with its own key and kept the key only in the JSON of the message while processing it. A 6.x defect keeps it out of `+MSG_CONT.CONTENT+`, and the 6.1.0 queues carry message ids only (the Artemis journal held no key in a real installation). The keys survive in the transport steps, so files referenced there are recovered. The files 6.x stored when receiving a message from the gateway (ASiC-S container, tokens) are not referenced there: on 6.1.0 they cannot be decrypted after processing. |Attachment row migrated and marked deleted: `+PAYLOAD_UNRECOVERABLE_DELIVERED+` (WARNING) when the content was already delivered, `+PAYLOAD_UNRECOVERABLE+` (ERROR) otherwise. Run `+extract-keys+` before cleaning up 6.x.
+|*Payloads whose bytes are gone* |6.x removes the files of confirmed and rejected messages by design; files can also be deleted outside 6.x. |Attachment row marked deleted: `+PAYLOAD_REMOVED_BY_6X+` (INFO) for finished messages, `+PAYLOAD_MISSING+` (ERROR) otherwise.
+|*User passwords* |6.x used salted SHA-512 hashes; 7.1.0 accepts only BCrypt. A hash cannot be converted. |New random passwords (`+user-credentials.properties+`), or disabled users; users must change the password at the first login.
+|*The 6.x processing state of unfinished messages* |7.1.0 has its own processing; it does not continue a 6.x step. |Migrated with their status (`+CREATED+`, `+FAILED+`, `+READY_FOR_PULL+`, ...); `+LEGACY_IN_FLIGHT+` lists them. Flush 6.x first.
+|*Evidences without XML* |7.1.0 requires the content. |Not migrated; their type still decides the status (`+EVIDENCE_WITHOUT_CONTENT+`).
+|*More than one P-Mode per lane* |7.1.0 allows one processing mode per domain. |The active one is migrated. Elements of older ones that messages reference are kept in the disabled `+legacy_6x_archive+` domain.
+|*A P-Mode 7.1.0 rejects* |7.1.0 would not register it. |No processing mode for that domain (`+PMODE_REJECTED_BY_7X+`); upload a corrected one.
+|*The 6.x P-Mode, when the target already has one* (7.1.0 was started with a P-Mode) |One per domain. |The target's P-Mode is kept and messages resolve against it (`+PMODE_NOT_MIGRATED_TARGET_HAS_ONE+`).
+|*Lane properties, `+HASH_VALUE+`, grace login counters, gateway link configuration, 4.x-era columns* |No 7.1.0 equivalent. |Dropped, and reported where they have content.
+|===
+
+=== What is changed
+
+[cols=",,",options="header",]
+|===
+|What |Why |How
+|Values longer than the 7.1.0 columns (stack traces, original sender, payload names) |7.1.0 column sizes (255 for many). |Shortened; the full value is in `+truncated-values.jsonl+`.
+|Backend message ids and ebMS ids shared by several 6.x messages |7.1.0 looks messages up by these ids expecting one result; duplicates break evidence correlation. |The newest message keeps the id; older ones get `+<id>#6x-<connector message id>+`; originals in `+changed-values.jsonl+`.
+|Several transport attempts of one message |7.1.0 expects one step per message. |One step with the latest state and the full history of all attempts.
+|Empty values of required columns |Oracle cannot store `+''+`. |`+unknown+` (`+NOT_NULL_PLACEHOLDER+`).
+|Message status |7.1.0 stores a status; 6.x derived it from timestamps. |Derived by the rules in <<migrate-6-mapping>>.
+|JCEKS / PKCS12S2 truststores |7.1.0 accepts JKS and PKCS12. |Rewritten as JKS / stored as PKCS12.
+|Backend links 7.1.0 would refuse at startup (an endpoint without keystore, private key, truststore or `+encrypt-alias+`; a partner without `+encryption-alias+`, `+certificate-dn+` or `+push-address+`, which 7.1.0 requires also for pull partners; typically link partners created in the 6.x UI) |7.1.0 does not start with an incomplete backend link. |Written commented out in the draft `+application.properties+`, with a REVIEW note naming what is missing.
+|A user of the same name already in the target |Created by 7.1.0 (usually `+admin+`). |Kept with its password; the 6.x user is not migrated (`+USER_EXISTS_IN_TARGET+`).
+|===
+
+=== Conditions the tool requires
+
+* *6.x is stopped* during the migration. The tool compares the source before and after the run and reports `+SOURCE_CHANGED_DURING_MIGRATION+`; `+--resume+` then completes the migration.
+* *`+--source-timezone+` is the zone of the 6.x server.* 6.x stored local times. Without the option the zone of the machine running the tool is used (`+SOURCE_TIMEZONE_DEFAULTED+`). A wrong zone shifts every timestamp; the tool compares evidence `+EventTime+` values with the stored times and reports a mismatch (`+SOURCE_TIMEZONE_SUSPECT+`). Only evidences with an `+EventTime+` can be checked.
+* *The 7.1.0 database is empty*, or holds only what 7.1.0 creates at startup (no messages), or is the target of an interrupted run (`+--resume+`). Migrating into a 7.1.0 that already processes traffic is possible with `+--resume+`, but not recommended.
+* *Oracle as target needs Oracle 23*: the 7.1.0 schema uses `+BOOLEAN+`.
+* *H2 is a source only*, read with H2 2.2.224 (the version of 6.x). The H2 file must not be open in a running 6.x.
+* *Memory:* each payload is held in memory while it is uploaded, at most twice the number of upload threads at a time. The tool checks the largest recorded payload against the heap before it starts and stops with the `+-Xmx+` to use.
+* *One 6.x installation per run.* Merging two 6.x databases into one 7.1.0 database is not supported.
+* *Messages are migrated by 6.x id order in batches.* Each batch is one transaction, committed only after its files are stored. An interruption loses at most the batch in flight, which `+--resume+` redoes.
+
+=== Target storages other than S3
+
+Connector 7.1.0 reads attachments only from S3, and its schema accepts no other storage value. The `+filesystem+` and `+mongodb+` providers (<<migrate-6-storage>>) prepare migrations to later 7.x releases. Their storage values (`+FILESYSTEM+`, `+MONGODB_GRIDFS+`) are *assumptions* until such a release exists; `+storage-value+` overrides them. Against a 7.1.0 schema they are refused unless `+--allow-unsupported-storage+` is given and the target schema accepts the value: the tool tries one row (rolled back) and stops before writing anything if the schema rejects it, also when it would create the 7.1.0 schema itself. No released connector reads these files yet.
+
+=== What the tool cannot check
+
+* Messages waiting in the Domibus connector plugin of the gateway, and submissions a backend has not sent yet.
+* That the generated `+application.properties+` matches the environment: keystores, broker, backends, certificates. It is a draft with `+REVIEW+` markers.
+* That the remote parties and backends work with 7.1.0. The P-Mode verification modes changed meaning; re-test the exchange.
+
+=== Defects of the connectors found while building the tool
+
+See <<migrate-6-defects>>: the 7.1.0 PostgreSQL script that fails, 7.1.0 lookups that need unique ids, the 6.x encryption key that is never stored, and others.

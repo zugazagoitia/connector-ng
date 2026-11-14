@@ -1,0 +1,189 @@
+// Generated from the documentation of the migration tool (connector-db-migration, docs/MAPPING.md); keep both in sync.
+[[migrate-6-mapping]]
+== How the 6.x data is mapped
+
+[[how-6x-data-becomes-710-data]]
+== How 6.x data becomes 7.1.0 data
+
+This document describes every rule the tool applies. The code lives in `+migration-core/src/main/java/eu/ecodex/connector/migration/mapping+`. Keep both in sync.
+
+General rules:
+
+* *Identifiers.* 7.1.0 ids are identity columns (on Oracle `+GENERATED ALWAYS+`), so rows are inserted without id. New `+uuid+` and `+identifier+` values are name-based UUIDs derived from the 6.x primary key. The same 6.x row always gives the same 7.1.0 key, which makes `+--resume+` safe and S3 uploads idempotent.
+* *Time.* 6.x stored local date-times in the zone of its JVM. They are read in `+--source-timezone+` and written as UTC instants (`+timestamp with time zone+` on PostgreSQL and Oracle, UTC wall time on MySQL/MariaDB, as 7.1.0 reads them with `+hibernate.jdbc.time_zone=UTC+`).
+* *Lengths.* A value longer than its 7.1.0 column is shortened. The full value is written to `+truncated-values.jsonl+` and reported as `+VALUE_TRUNCATED+`.
+* *NOT NULL.* A NOT NULL 7.1.0 column whose 6.x value is empty gets the placeholder `+unknown+` (`+NOT_NULL_PLACEHOLDER+`). Oracle stores the empty string as NULL, so an empty string cannot be used.
+
+[[business-domains-dc_message_lane--connector_business_domains]]
+=== Business domains (`+DC_MESSAGE_LANE+` → `+connector_business_domains+`)
+
+[cols=",",options="header",]
+|===
+|6.x |7.1.0
+|lane `+defaultBusinessDomain+` or `+defaultMessageLane+` (or `+--default-lane+`) |`+default_business_domain+`, the domain 7.1.0 assigns all gateway and SOAP traffic to
+|any other lane |domain with the lane name as identifier (or the `+--lane-mapping+` target)
+|`+DESCRIPTION+` |`+description+`
+|`+DC_MESSAGE_LANE_PROPERTY+` |dropped. 7.1.0 has no domain properties (`+LANE_PROPERTY_DROPPED+`).
+|===
+
+`+default_business_domain+` is always created. Domains are `+enabled+`, with source `+DATABASE+`.
+
+A disabled domain *`+legacy_6x_archive+`* is created only when needed (see AS4 properties).
+
+[[processing-modes-dc_pmode_set-dc_keystore--connector_processing_modes-_truststores-_parties-_services-_actions]]
+=== Processing modes (`+DC_PMODE_SET+`, `+DC_KEYSTORE+` → `+connector_processing_modes+`, `+..._truststores+`, `+..._parties+`, `+..._services+`, `+..._actions+`)
+
+7.1.0 allows exactly one processing mode per domain. Its runtime looks up services and actions by name, and parties by party id and role type, in the rows of that processing mode.
+
+* The *active* P-Mode set of the lane is migrated: the newest one when several are active (`+MULTIPLE_ACTIVE_PMODES+`), the newest inactive one when none is active (`+NO_ACTIVE_PMODE+`).
+* The XML (`+PMODES+`) is stored unchanged as `+content+`. The `+filename+` is `+migrated-pmode-<domain>.xml+`.
+* Parties, services and actions are *not* copied from the 6.x rows. They are produced by parsing the XML with a port of the 7.1.0 parser (`+ConnectorDomProcessingModeParser+`), so the rows are exactly those 7.1.0 creates when the file is uploaded: one party row per party and role type, with roles taken from the processes, and `+is_home+` for the party named on the root element.
+* When 7.1.0 would reject the XML, the domain gets no processing mode (`+PMODE_REJECTED_BY_7X+`, `+PMODE_SERVICE_WITHOUT_TYPE+`), and an operator must upload a corrected P-Mode. Messages of that domain then reference archive rows (see below). Reasons for rejection include differing roles between processes, an undeclared `+partyIdType+` or home party, and a service without `+type+`.
+* *Truststore* (`+DC_KEYSTORE+` referenced by `+FK_CONNECTORSTORE+`):
+** JKS and PKCS12 are copied as they are.
+** PKCS12S2 is stored as PKCS12.
+** JCEKS is rewritten as JKS, because 7.1.0 only knows JKS and PKCS12.
+** A store without password cannot be used by 7.1.0 (`+TRUSTSTORE_WITHOUT_PASSWORD+`).
+
+[[messages-domibus_connector_message--connector_messages]]
+=== Messages (`+DOMIBUS_CONNECTOR_MESSAGE+` → `+connector_messages+`)
+
+[cols=",",options="header",]
+|===
+|6.x |7.1.0
+|`+CONNECTOR_MESSAGE_ID+` |`+identifier+`
+|`+DIRECTION_SOURCE+` / `+DIRECTION_TARGET+` |`+direction+`: target `+GATEWAY+` → `+BACKEND_TO_GATEWAY+`, target `+BACKEND+` → `+GATEWAY_TO_BACKEND+`; only a source → its opposite; nothing → `+BACKEND_TO_GATEWAY+` (`+DIRECTION_UNKNOWN+`)
+|`+BACKEND_MESSAGE_ID+`, `+BACKEND_NAME+`, `+GATEWAY_NAME+` |same
+|`+CREATED+`, `+UPDATED+`, `+CONFIRMED+`, `+REJECTED+` |`+created_at+`, `+updated_at+`, `+confirmed_at+`, `+rejected_at+`
+|`+DELIVERED_GW+` (outbound) / `+DELIVERED_BACKEND+` (inbound) |`+delivered_to_link_partner_at+`
+|`+EBMS_MESSAGE_ID+`, `+CONVERSATION_ID+` |AS4 properties (below)
+|`+HASH_VALUE+` |dropped. 7.1.0 has no column for it (see LIMITATIONS).
+|lane of the P-Mode set the message info references |`+business_domain_id+` (default domain when there is no message info)
+|===
+
+*Status.* 7.1.0 stores a status, 6.x derived it from timestamps. Rules, first match wins:
+
+[cols=",",options="header",]
+|===
+|Condition |Status
+|`+REJECTED+` set |`+REJECTED+`
+|`+CONFIRMED+` set |`+CONFIRMED+`
+|outbound, a `+RELAY_REMMD_ACCEPTANCE+`, `+DELIVERY+` or `+RETRIEVAL+` evidence exists |`+RECEIVED_BY_OPPOSITE_CONNECTOR+`
+|outbound, delivered to the gateway |`+SUBMITTED+`
+|inbound, delivered to the backend |`+DELIVERED+`
+|inbound, last transport state `+pending+` |`+READY_FOR_PULL+`
+|inbound, last transport state `+pend_down+` |`+PULLED+`
+|errors exist or the last transport state is `+failed+` |`+FAILED+`
+|otherwise |`+CREATED+`
+|===
+
+[[as4-properties-domibus_connector_message_info--connector_message_as4_properties]]
+=== AS4 properties (`+DOMIBUS_CONNECTOR_MESSAGE_INFO+` → `+connector_message_as4_properties+`)
+
+`+ORIGINAL_SENDER+`, `+FINAL_RECIPIENT+` (2048 characters in 6.x, 255 in 7.1.0), the conversation id and the ebMS id are copied. `+reference_to_identifier+` stays empty, because 6.x did not store it for business messages.
+
+The service, action and parties are resolved the way 7.1.0 resolves them: service and action by name, parties by party id and role type, in the processing mode of the message's domain. When an element is not declared there (because it came from an older P-Mode set, or the domain has no processing mode), the message references a row of the disabled *`+legacy_6x_archive+`* domain created from the 6.x values (`+AS4_REFERENCE_ARCHIVED+`). This keeps historical messages complete without making the live domain accept services, actions or parties that its current P-Mode no longer declares. A message without message info references archive placeholders named `+unknown+` (`+MESSAGE_WITHOUT_AS4_INFO+`).
+
+[[contents-domibus_connector_msg_cont-domibus_connector_bigdata-dc_msgcnt_detsig-filesystem--connector_message_attachments--s3]]
+=== Contents (`+DOMIBUS_CONNECTOR_MSG_CONT+`, `+DOMIBUS_CONNECTOR_BIGDATA+`, `+DC_MSGCNT_DETSIG+`, filesystem → `+connector_message_attachments+` + S3)
+
+All contents become attachment rows with `+storage = S3_BUCKET+`. The bytes are uploaded to the bucket under the attachment `+identifier+`, which is the key 7.1.0 reads. With another target storage (see <<migrate-6-storage>>) the rows carry that storage's value instead.
+
+[cols=",",options="header",]
+|===
+|6.x `+CONTENT_TYPE+` (store type) |7.1.0 `+type+`
+|`+dcm_business_xml+` |`+BUSINESS_CONTENT+`, the XML of `+connector_message_business_contents+`
+|`+dcm_business_document+` |`+BUSINESS_DOCUMENT+`, the document of `+connector_message_business_documents+`
+|its `+DC_MSGCNT_DETSIG+` |`+DETACHED_SIGNATURE+`, the signature of that document
+|`+dcm_attachment+` with identifier `+ASIC-S+` / `+tokenXML+` / `+tokenPDF+` |`+ASICS+` / `+XML_TOKEN+` / `+PDF_TOKEN+`
+|other `+dcm_attachment+` |`+ATTACHMENT+`
+|`+dcm_confirmation_xml+`, `+domibus_message_confirmation+` |`+EVIDENCE_XML+`
+|4.x store types (`+domibus_message_content+`, `+domibus_message_attachment+`) |`+ATTACHMENT+`, raw bytes (`+LEGACY_STORE_TYPE+`)
+|===
+
+Where the bytes come from:
+
+[cols=",",options="header",]
+|===
+|6.x storage |Source of the bytes
+|no storage provider |`+MSG_CONT.CONTENT+` (always the case for the business XML)
+|`+jpa+` |the `+DOMIBUS_CONNECTOR_BIGDATA+` row whose id is `+STORAGE_REFERENCE_ID+`
+|`+filesystem+` |`+<storage-path>/<STORAGE_REFERENCE_ID>+`, decrypted when a key is found (below)
+|===
+
+* *Encrypted filesystem payloads.* 6.x encrypted every file (`+AES/CBC/PKCS5Padding+`, random key and IV per file) and serialised the key into the `+text+` of the large file reference: `+base64("AES#@#" + base64(key))__base64(base64(iv))__base64(cipher suite)+`. The key is searched in this order:
+[arabic]
+. `+MSG_CONT.CONTENT+` of the row (the column 6.x meant for it),
+. the key file of `+--legacy-fs-key-file+`,
+. the JSON of every `+DC_TRANSPORT_STEP.TRANSPORTED_MESSAGE+` (each large file reference with provider `+filesystem+`),
+. the files of the 6.x Artemis data directory (`+spring.artemis.embedded.data-directory+`, `+--legacy-artemis-dir+`), read as UTF-8 and UTF-16.
++
+A file with a key is decrypted, whatever `+encryption-active+` says. A wrong key fails the padding check and is reported. A file without key is read as it is when `+encryption-active=false+`, and reported `+PAYLOAD_UNRECOVERABLE+` otherwise. The counters `+keys.<source>+` and `+payloads.decrypted.<source>+` of the report say where the keys came from.
+* Contents 6.x had already deleted (`+DELETED+` set) become rows with `+deleted_at+` set and no object. 7.1.0 treats them as deleted files.
+* Contents that should exist but cannot be found (`+PAYLOAD_MISSING+`), or that are encrypted (`+PAYLOAD_UNRECOVERABLE+`), are stored the same way and reported as errors.
+* Name, description and MIME type fall back to the payload identifier and `+application/octet-stream+`. Size is the actual byte count.
+* A message without business XML gets an empty placeholder XML attachment, marked deleted (`+BUSINESS_CONTENT_MISSING+`), because 7.1.0 needs one per message.
+* When 6.x kept several XML or document rows (a failed replace), the newest non-deleted one is used. The others are kept as plain attachments (`+DUPLICATE_BUSINESS_CONTENT+`).
+* `+aes_type+` of the business document stays empty. 6.x did not store it.
+
+[[evidences-domibus_connector_evidence--connector_message_evidences]]
+=== Evidences (`+DOMIBUS_CONNECTOR_EVIDENCE+` → `+connector_message_evidences+`)
+
+Type and XML are copied, with a new `+uuid+`. `+delivered_to_link_partner_at+` takes the backend delivery time for outbound messages and the gateway delivery time for inbound messages, falling back to the other one. 7.1.0 requires the XML, so an evidence without XML is not migrated; its type still counts for the status (`+EVIDENCE_WITHOUT_CONTENT+`).
+
+[[errors-domibus_connector_msg_error--connector_message_errors]]
+=== Errors (`+DOMIBUS_CONNECTOR_MSG_ERROR+` → `+connector_message_errors+`)
+
+`+ERROR_MESSAGE+` → `+label+`, `+DETAILED_TEXT+` → `+details+`, `+ERROR_SOURCE+` → `+source+`. All three columns are 255 characters in 7.1.0, so long stack traces are shortened. The full text is in `+truncated-values.jsonl+`.
+
+[[transport-steps-dc_transport_step-dc_transport_step_status--connector_message_transport_steps-_statuses]]
+=== Transport steps (`+DC_TRANSPORT_STEP+`, `+DC_TRANSPORT_STEP_STATUS+` → `+connector_message_transport_steps+`, `+..._statuses+`)
+
+7.1.0 keeps *one* transport step per transported message: its lookups (`+findByStepOrMessageOrRemoteSystemIdentifier+`) expect a unique result. 6.x created one step per attempt. The attempts of a message are therefore collapsed into one step (`+STEPS_COLLAPSED+`):
+
+* identifier, link partner and state of the *latest* attempt; the number of attempts,
+* the remote id (`+REMOTE_MESSAGE_ID+`, else `+TRANSPORT_SYSTEM_MESSAGE_ID+`) of the latest attempt that has one,
+* the *state history of all attempts* as status rows. No history is lost.
+
+[cols=",,",options="header",]
+|===
+|6.x state |7.1.0 state, link to the gateway |7.1.0 state, link to a backend
+|`+accepted+` |`+SUBMITTED+` |`+DELIVERED+`
+|`+pending+` |`+SUBMITTED+` |`+READY_FOR_PULL+`
+|`+pend_down+` |`+SUBMITTED+` |`+PULLED+`
+|`+failed+` |`+FAILED+` |`+FAILED+`
+|===
+
+The side of the link comes from the message (gateway or backend name), then from `+DC_LINK_PARTNER.LINK_TYPE+`, then from the direction.
+
+`+transported_message+` holds what 7.1.0 stores there: the 7.1.0 domain message serialised with the 7.1.0 JSON settings. It is built from the migrated rows with the published `+connector-domain:7.1.0+` records. Business messages carry the status that matches the step. Transport steps of 6.x *evidence messages* (no business message row) are rebuilt as `+ConnectorEvidenceMessage+` from the 6.x JSON (identifiers, AS4 details, transported evidences). Steps whose JSON is unreadable or carries no evidence are skipped (`+TRANSPORT_STEP_SKIPPED+`). 6.x did not enforce unique transport ids, so duplicates get the 6.x step id appended (`+STEP_IDENTIFIER_DEDUPLICATED+`).
+
+[[users-domibus_connector_user-_user_pwd--connector_users-connector_roles-connector_users_roles]]
+=== Users (`+DOMIBUS_CONNECTOR_USER+`, `+..._USER_PWD+` → `+connector_users+`, `+connector_roles+`, `+connector_users_roles+`)
+
+The 7.1.0 default roles `+ROLE_ADMIN+`, `+ROLE_USER+` and `+ROLE_LOAD_TESTER+` are created.
+
+[cols=",",options="header",]
+|===
+|6.x role |7.1.0 role
+|`+ADMIN+` |`+ROLE_ADMIN+`
+|`+USER+` |`+ROLE_USER+`
+|`+ACTUATOR+` |`+ROLE_USER+` (`+USER_ROLE_MAPPED+`)
+|===
+
+6.x kept salted SHA-512 hashes; 7.1.0 verifies BCrypt. With `+--users=reset+`, each user gets a random 20 character password (BCrypt strength 12, as 7.1.0) and `+must_change_password=true+`. A user locked in 6.x is migrated disabled. A duplicate username is skipped (`+USER_DUPLICATE+`). Grace login counters have no 7.1.0 equivalent.
+
+[[configuration-connectorproperties--draft-applicationproperties]]
+=== Configuration (`+connector.properties+` → draft `+application.properties+`)
+
+The draft is the 7.1.0 template from `+connector-distribution-7.1.0.zip+`. Values are filled with the renames documented in the 7.1.0 chapter "Migrate Configuration From 6.x to 7.x":
+
+* *Datasource and S3:* from the migration target. The driver class and dialect follow the database chapter of the 7.1.0 documentation, with `+pinGlobalTxToPhysicalConnection=true+` for MySQL and MariaDB.
+* *Business domains:* one `+connector.business-domains.defaults[n]+` entry per migrated domain, without `+pmode.*+`, because the processing modes are already in the database.
+* *Backend links:*
+** `+config-name+` becomes `+name+`, `+soap.*+` becomes `+endpoint.*+`, `+key-store+` becomes `+keystore+`, `+cxf-logging-enabled+` becomes `+logging-enabled+`, and `+send-link-mode+` becomes `+sender-mode+`.
+** `+certificate-dn+` is lowercased.
+** Backend partners that 6.x kept in `+DC_LINK_PARTNER+` are added.
+* *Routing:* `+connector.routing.enabled=true+` when rules exist. Rules of the same backend are merged into one `+|(...)+` clause, because 7.1.0 keeps only one rule per backend.
+* *Retention:* `+connector.file-deletion.unresolved-messages.threshold=36500d+`, to protect the migrated history.
+* Every value without a certain 6.x equivalent keeps the template value under a `+# REVIEW+` marker. Every 6.x property that was not carried over is listed, commented out, with the reason, and with secrets masked.

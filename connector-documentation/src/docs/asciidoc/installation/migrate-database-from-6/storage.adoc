@@ -1,0 +1,66 @@
+// Generated from the documentation of the migration tool (connector-db-migration, docs/STORAGE.md); keep both in sync.
+[[migrate-6-storage]]
+== Target file storages
+
+Connector 7.1.0 keeps attachment files in an S3 compatible bucket and records `+S3_BUCKET+` in `+connector_message_attachments.storage+`. The 7.1.0 documentation announces local filesystem storage for a later release. The tool writes files through a pluggable provider, so a migration to a 7.x release with another storage needs only a new provider, not a new tool.
+
+[cols=",,,",options="header",]
+|===
+|Provider (`+--storage+`) |Storage value |Module |Readable by 7.1.0
+|`+s3+` (default) |`+S3_BUCKET+` |`+migration-core+` |yes
+|`+filesystem+` |`+FILESYSTEM+` |`+migration-core+` |no, prepared
+|`+mongodb+` (GridFS) |`+MONGODB_GRIDFS+` |`+migration-storage-mongodb+` |no, prepared
+|===
+
+`+connector-db-migration storage-providers+` lists the providers on the class path with their options.
+
+=== Using a provider other than S3
+
+[source,bash]
+----
+connector-db-migration migrate ... \
+  --storage filesystem --storage-option path=/srv/connector/files,layout=sharded \
+  --allow-unsupported-storage
+
+connector-db-migration migrate ... \
+  --storage mongodb --storage-option uri=mongodb://user:pw@mongo:27017,database=connector,bucket=attachments \
+  --allow-unsupported-storage
+----
+
+Before writing anything, the tool reads which storage values the target schema accepts: the check constraint on PostgreSQL and Oracle, the enum on MySQL and MariaDB. For the 7.1.0 schema that is `+S3_BUCKET+` only, so other providers are refused. With `+--allow-unsupported-storage+` the run continues; the target schema must then accept the value, as a later 7.x schema would or as an operator adapted one (the tests drop the constraint, see `+TargetSchemas+`). `+--storage-option storage-value=<VALUE>+` changes the recorded value when a 7.x release names its storage differently.
+
+The `+storage+` property of the attachments inside the transport step JSON gets the same value.
+
+==== filesystem
+
+[cols=",",options="header",]
+|===
+|Option |Meaning
+|`+path+` |Root directory (required).
+|`+layout+` |`+flat+`: `+<path>/<identifier>+`, the same key as in S3 (default). `+sharded+`: `+<path>/<first two characters>/<identifier>+`.
+|`+create-directory+` |Create the root when missing (default `+true+`).
+|===
+
+Files are written under a temporary name and moved into place, so an interrupted run never leaves a partial file under its final name. Re-runs (`+--resume+`) overwrite.
+
+==== mongodb
+
+[cols=",",options="header",]
+|===
+|Option |Meaning
+|`+uri+` |MongoDB connection string (required).
+|`+database+` |Database (default `+connector+`).
+|`+bucket+` |GridFS bucket (default `+attachments+`).
+|===
+
+One GridFS file per attachment, named after its identifier, with the content type in the metadata. Older files of the same name are deleted only after the new upload completes.
+
+=== Writing a provider
+
+[arabic]
+. Implement `+eu.ecodex.connector.migration.storage.ObjectStoreProvider+`: `+id()+`, `+description()+`, `+options()+`, `+storageValue()+` (the value 7.x records for that storage), and `+create(StorageSettings)+`, which returns an `+ObjectStore+` (`+prepare+`, `+put+`, `+get+`, `+size+`, `+describe+`, `+close+`).
+. Register it in `+META-INF/services/eu.ecodex.connector.migration.storage.ObjectStoreProvider+`.
+. Put the module on the class path of the CLI. `+migration-cli+` depends on `+migration-storage-mongodb+` with `+runtimeOnly+`; the fat jar merges the service files.
+. Test it like `+GridFsMigrationIT+`: seed a scenario, call `+TargetSchemas.createWithAnyStorage+`, migrate, and check with `+MigrationHarness.verify+`. The check compares every stored object byte by byte through your `+ObjectStore+`.
+
+`+put+` must be idempotent: identifiers are derived from 6.x ids, and `+--resume+` uploads the same keys again.
