@@ -49,6 +49,37 @@ What the tool cannot do, why, and what it does instead. Everything in this list 
 * *One 6.x installation per run.* Merging two 6.x databases into one 7.1.0 database is not supported.
 * *Messages are migrated by 6.x id order in batches.* Each batch is one transaction, committed only after its files are stored. An interruption loses at most the batch in flight, which `+--resume+` redoes.
 
+=== Duration and network latency
+
+The migration is a downtime: 6.x is stopped while it runs. Its duration depends less on the CPU than on the round trips to the three systems, in batches of 200 messages (`+--batch-size+`):
+
+[cols="1,2,2",options="header"]
+|===
+|System |Round trips |Effect
+|6.x database |about 5 queries per batch, plus about 3 per payload stored in the database (`+jpa+` storage: one short read-only transaction per payload) |With database storage this term dominates as soon as the tool is not next to the database: 3 000 payloads × 3 round trips × 2 ms = 18 s per 1 000 messages.
+|7.1.0 database |about 30 per batch (one batch insert per table, id lookups, commit) |Small: about 60 ms per batch at 2 ms.
+|S3 |one PUT per file, `+--upload-threads+` (default 16) in parallel |Latency is hidden by the threads; bandwidth matters for large files. With a remote S3 try `+--upload-threads 32+`.
+|6.x filesystem storage |one file read per payload |Local disk or a fast network share; a slow NFS mount adds its latency per file.
+|===
+
+* Run the tool on a machine *next to the 6.x database* (same network or region), not across a WAN or VPN. Measured with all systems on one host (MinIO as S3) the tool migrates about 180–220 messages per second; at 2 ms of round trip to the 6.x database with database storage, expect a few tens per second.
+* Measure in the rehearsal on the same network as the cut-over will use: the duration of the rehearsal is the downtime.
+* A lost connection costs at most the batch in flight: the tool stops and `+--resume+` continues.
+
+=== The converted configuration
+
+`+application.properties+` is a *draft*. Its conversion is the part of the migration with the most room for error, because 6.x and 7.x differ in concepts, not only in names:
+
+* *Renamed properties* are carried over only where the meaning is the same; every value without a certain 6.x equivalent keeps the 7.1.0 template value and is marked `+# REVIEW+`. Template values are test values (passwords, keystores, the JWT secret).
+* *Dropped properties* are listed at the end of the draft with the reason (gateway link, embedded Artemis, 6.x UI settings, ...).
+* *Keystores and truststores* keep their paths; the files must be copied to the 7.1.0 installation. JCEKS/PKCS12S2 stores must be converted (the data migration converts the P-Mode truststores, not these files).
+* *Backend links* follow the exact 7.1.0 validation; a link 7.1.0 would refuse is written commented out with what is missing. Pull partners get a marked placeholder `+push-address+`. Certificate DNs are lower-cased (7.1.0 compares them in lower case).
+* *Routing rules* of the same backend are merged into one rule (7.1.0 keeps one rule per backend), losing their 6.x priorities.
+* *Properties stored in the 6.x database* (`+DOMIBUS_CONNECTOR_PROPERTY+`, set in the 6.x UI) override the file values, as in 6.x.
+* *Behaviour changes* (P-Mode verification modes, automatic DELIVERY evidences, evidence timeouts, file deletion thresholds) are not visible in a property name: they are listed in the configuration migration chapter of the configuration guide.
+
+What is checked automatically: the real 6.x configuration files of the 6.1.0 repository are converted in the unit tests of the tool, and its end-to-end tests and both black-box cut-overs started 7.1.0 with an unchanged draft. What is not checked: whether the values are right for the environment. Treat every `+# REVIEW+` marker as a decision, and test the exchange with the partners and backends in the rehearsal.
+
 === Target storages other than S3
 
 Connector 7.1.0 reads attachments only from S3, and its schema accepts no other storage value. The `+filesystem+` and `+mongodb+` providers (<<migrate-6-storage>>) prepare migrations to later 7.x releases. Their storage values (`+FILESYSTEM+`, `+MONGODB_GRIDFS+`) are *assumptions* until such a release exists; `+storage-value+` overrides them. Against a 7.1.0 schema they are refused unless `+--allow-unsupported-storage+` is given and the target schema accepts the value: the tool tries one row (rolled back) and stops before writing anything if the schema rejects it, also when it would create the 7.1.0 schema itself. No released connector reads these files yet.

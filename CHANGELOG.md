@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 The same content is published in the documentation (`connector-documentation/src/docs/asciidoc/changelog`); keep both in sync.
 
+## [7.1.1] - unreleased
+
+### Added
+
+- **Documentation — Upgrade from 6.x**: the installation guide explains how to migrate the database of a 6.x installation to 7.1.0 with the migration tool `connector-db-migration` ("Migrate the Database From 6.x"): rehearsal, switch of the gateway to the JMS plugin, flush of 6.x, migration, start of 7.1.0 and rollback, with the limitations, the data mapping, the finding codes of the report and the connector defects found during the migration work.
+
 ## [7.1.0] - 2026-11-12
 
 ### Upgrade notes

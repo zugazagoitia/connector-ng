@@ -9,7 +9,7 @@ Connector 7.x uses a new database schema, stores files in an S3 bucket instead o
 upgrade path from the 6.x schema. Do not start 7.1.0 on a 6.x database.
 
 The data of a 6.x installation is copied into a new 7.1.0 database and bucket with the migration tool *connector-db-migration*
-(separate repository: https://github.com/zugazagoitia/connector-db-migration). The tool:
+(separate repository; TODO: link the final repository of the migration tool once it is moved to its organisation). The tool:
 
 * reads the 6.x database (schema `V6.0.2`, connector 6.0.x and 6.1.x) on PostgreSQL, MySQL, MariaDB, Oracle or H2, and never writes to it,
 * writes a new 7.1.0 database (empty, or initialised by a first start of 7.1.0 without messages) on PostgreSQL, MySQL, MariaDB or Oracle 23. Source and target engines can differ, for example MariaDB to PostgreSQL,
@@ -117,7 +117,7 @@ Rehearse days or weeks before the cut-over, on copies, never against production:
 . Run `analyze` against the copy and read `migration-report.md`. Resolve every `ERROR` and decide on every `WARNING`. The usual decisions
   are about P-Modes 7.1.0 rejects, contents without key, duplicate ids, users and the time zone.
 . Run `migrate` into a staging 7.1.0 database and bucket, then `verify`. Note the duration: it is the downtime of the real cut-over,
-  because 6.x is stopped while the tool runs. With a remote S3 also measure with `--upload-threads` 32 (default 16).
+  because 6.x is stopped while the tool runs. Run the tool next to the 6.x database: every round trip to it counts (see <<migrate-6-limitations>>). With a remote S3 also measure with `--upload-threads` 32 (default 16).
 . Start a staging 7.1.0 with the generated `application.properties`, after its `# REVIEW` markers are resolved. Check in the
   administration portal that messages, attachments, evidences and P-Modes are there. With a staging gateway and backend, also exchange test
   messages, including an evidence for a message that 6.x sent before the migration.

@@ -2,7 +2,7 @@
 [[migrate-6-defects]]
 == Defects of connector 6.x and 7.1.0 found during the migration work
 
-Each section can be filed as an issue as it stands. The tool works around all of them; the workaround is noted. For the six connector-ng defects that can be fixed in code (PostgreSQL script, single-result lookups, page size, service type, push-address, late evidences) patches with a regression test were prepared against `+develop+` (7.1.0) and handed over separately.
+Each section can be filed as an issue as it stands. The tool works around all of them; the workaround is noted. For the six connector-ng defects that can be fixed in code (PostgreSQL script, single-result lookups, page size, service type, push-address, late evidences) patches with a regression test and a changelog line for 7.1.1 were prepared against `+develop+` (7.1.0) and handed over separately; 7.1.0 is released, so the fixes are proposed for 7.1.1.
 
 [[connector-ng-710-dbscriptsinitialpostgressql-fails-on-postgresql]]
 === connector-ng 7.1.0: `+dbscripts/initial/postgres.sql+` fails on PostgreSQL

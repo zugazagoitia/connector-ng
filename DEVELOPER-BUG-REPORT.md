@@ -2,7 +2,7 @@
 
 Date: 2026-11-13
 
-**Tested:** connector built from branch `zugazagoitia/docs-resolve-pending-points` (upstream `develop` at `4ea94b21`, version 7.1.0), run as the Docker image and as the JAR distribution. Backing services: MySQL 8.4, MariaDB 12.3, PostgreSQL 17, Oracle 23 free, ActiveMQ Classic 6.2.0, MinIO.
+**Tested:** connector built from branch `docs-resolve-pending-points` (TODO: final repository location) (upstream `develop` at `4ea94b21`, version 7.1.0), run as the Docker image and as the JAR distribution. Backing services: MySQL 8.4, MariaDB 12.3, PostgreSQL 17, Oracle 23 free, ActiveMQ Classic 6.2.0, MinIO.
 
 These are software issues found while testing the documentation. They are deliberately kept out of the user docs.
 
