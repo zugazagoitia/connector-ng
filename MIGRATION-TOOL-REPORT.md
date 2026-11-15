@@ -1,6 +1,7 @@
 # ⚠️ DELETE BEFORE MERGE — Report for the connector-ng developers: 6.x → 7.1.0 database migration
 
-This file is a hand-over report, not documentation. **Delete it before this branch is merged.**
+This file is a hand-over report, not documentation. **Delete it, and the folder `DELETE-BEFORE-MERGE/` with the patches, before this
+branch is merged.** Everything needed is in this file, the zip in `DELETE-BEFORE-MERGE/`, this branch and the tool repository.
 
 It covers the database migration tool for connector 6.x → 7.1.0, the documentation added to connector-ng, the defects found in 7.1.0
 (with patches for 7.1.1), the limitations of the tool and the open to-dos.
@@ -30,7 +31,7 @@ It covers the database migration tool for connector 6.x → 7.1.0, the documenta
 |---|---|
 | Migration tool (code, tests, CI, Docker image, tool docs) | Repository `connector-db-migration`, branch `main`. **TODO: final organisation and URL** (it is still a private repository of the author and will move). |
 | connector-ng documentation changes and this report | Branch `docs/db-migration-tool` of the connector-ng fork, based on the branch `db-migration`. **TODO: final location** of the branch or pull request. |
-| Patches for 7.1.1 | Six files `0001-…patch` to `0006-…patch`, plus `README.md` and `connector-ng-7.1.1-patches-backup.tgz`, in the folder `connector-ng-7.1-patches/` on the author's machine. They are not part of any repository and are handed over separately. |
+| Patches for 7.1.1 | `DELETE-BEFORE-MERGE/connector-ng-7.1.1-patches.zip` in this branch: six files `0001-…patch` to `0006-…patch` and their `README.md`, in the folder `connector-ng-7.1.1-patches/`. **Delete the folder `DELETE-BEFORE-MERGE/` before merging**; the patches are meant for a separate fix branch from `develop`. |
 | Tool documentation (Markdown) | `connector-db-migration/README.md` and `connector-db-migration/docs/`: `CUTOVER.md`, `LIMITATIONS.md`, `MAPPING.md`, `ISSUES.md`, `STORAGE.md`, `UPSTREAM-ISSUES.md`, `TESTING.md`, `TEST-PLAN.md`. |
 | Same documentation in the connector-ng guide (AsciiDoc) | `connector-documentation/src/docs/asciidoc/installation/migrate-database-from-6.adoc` and `installation/migrate-database-from-6/{limitations,mapping,findings,storage,defects}.adoc`. |
 | CI of the tool | `.github/workflows/ci.yml` and `release.yml` in the tool repository (GitHub Actions). |
@@ -160,12 +161,14 @@ distribution's `application.properties`, which only the real docs build provides
 Each patch also adds its line to `CHANGELOG.md` (`## [7.1.1] - unreleased` → `### Fixed`) and to `changelog-7.x.x.adoc`
 (`== 7.1.1 (unreleased)` → `==== Fixes`). The first patch creates these sections.
 
-**Apply** (from a clone of connector-ng):
+**Apply** (from a clone of connector-ng; take the zip from this branch first):
 
 ```bash
+git show origin/docs/db-migration-tool:DELETE-BEFORE-MERGE/connector-ng-7.1.1-patches.zip > /tmp/patches.zip   # or copy it
+unzip -o /tmp/patches.zip -d /tmp
 git fetch origin
 git switch -c fix/7.1.1 origin/develop
-git am /path/to/connector-ng-7.1-patches/0*.patch
+git am /tmp/connector-ng-7.1.1-patches/0*.patch
 # develop moved on and a patch does not apply:
 #   git am --3way ... ; resolve ; git add ... ; git am --continue
 ```
