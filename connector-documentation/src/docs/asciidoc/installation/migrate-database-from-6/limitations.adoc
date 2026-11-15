@@ -45,7 +45,7 @@ What the tool cannot do, why, and what it does instead. Everything in this list 
 * *The 7.1.0 database is empty*, or holds only what 7.1.0 creates at startup (no messages), or is the target of an interrupted run (`+--resume+`). Migrating into a 7.1.0 that already processes traffic is possible with `+--resume+`, but not recommended.
 * *Oracle as target needs Oracle 23*: the 7.1.0 schema uses `+BOOLEAN+`.
 * *H2 is a source only*, read with H2 2.2.224 (the version of 6.x). The H2 file must not be open in a running 6.x.
-* *Memory:* each payload is held in memory while it is uploaded, at most twice the number of upload threads at a time. The tool checks the largest recorded payload against the heap before it starts and stops with the `+-Xmx+` to use.
+* *Memory:* payloads are held in memory while they are uploaded, at most a quarter of the heap at a time (plus one payload larger than that). The tool checks the largest recorded payload against the heap before it starts and stops with the `+-Xmx+` to use.
 * *One 6.x installation per run.* Merging two 6.x databases into one 7.1.0 database is not supported.
 * *Messages are migrated by 6.x id order in batches.* Each batch is one transaction, committed only after its files are stored. An interruption loses at most the batch in flight, which `+--resume+` redoes.
 

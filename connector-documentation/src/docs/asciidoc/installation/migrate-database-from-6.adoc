@@ -117,7 +117,7 @@ Rehearse days or weeks before the cut-over, on copies, never against production:
 . Run `analyze` against the copy and read `migration-report.md`. Resolve every `ERROR` and decide on every `WARNING`. The usual decisions
   are about P-Modes 7.1.0 rejects, contents without key, duplicate ids, users and the time zone.
 . Run `migrate` into a staging 7.1.0 database and bucket, then `verify`. Note the duration: it is the downtime of the real cut-over,
-  because 6.x is stopped while the tool runs. For large installations measure with `--upload-threads` 4, 8 and 16.
+  because 6.x is stopped while the tool runs. With a remote S3 also measure with `--upload-threads` 32 (default 16).
 . Start a staging 7.1.0 with the generated `application.properties`, after its `# REVIEW` markers are resolved. Check in the
   administration portal that messages, attachments, evidences and P-Modes are there. With a staging gateway and backend, also exchange test
   messages, including an evidence for a message that 6.x sent before the migration.
@@ -237,7 +237,7 @@ machine running the tool.
 | Schema (Oracle: owner) of the 6.x tables, when it is not the default schema of the database user.
 
 | `--upload-threads`
-| Parallel uploads per batch (default 4). Each file is held in memory while it is uploaded; the tool checks the largest file against the
+| Parallel uploads per batch (default 16). The files in flight never take more than a quarter of the heap; the tool checks the largest file against the
 heap before it starts.
 
 | `--legacy-artemis-dir`, `--legacy-fs-key-file`
