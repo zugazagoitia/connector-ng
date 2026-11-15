@@ -79,7 +79,7 @@ The AsciiDoc sub-pages were generated from the tool's Markdown files and must be
 
 * **Unit and integration tests:** a scenario catalogue of genuine 6.x databases, built with the 6.1.0 initial scripts and the real 6.x
   classes, plus randomised installations. Every row and every S3 object is compared byte for byte.
-* **Hardening and volume:** `HardeningIT` covers 16 failure situations. `VolumeIT` migrated 20 000 messages at about 180 messages per
+* **Hardening and volume:** `HardeningIT` (13 tests) covers failure situations that happen in practice. `VolumeIT` migrated 20 000 messages at about 180 messages per
   second, with all systems on one host.
 * **End to end:** the published `connector-ng:7.1.0` image is started on the migrated data of PostgreSQL, MySQL, MariaDB and Oracle,
   also when 7.1.0 initialised the database first, and reads data through its REST API. The CLI is tested as a process (exit codes,
