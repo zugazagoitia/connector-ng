@@ -160,9 +160,9 @@ java -jar connector-db-migration-all.jar flush-status \
 Exit code `0`: no message waits for the gateway or a backend, no transport is pending and the 6.x queues are empty. Exit code `2`: the
 open categories and message ids are listed. Repeat until `0`.
 +
-Backends in pull mode must fetch and acknowledge everything that is ready for them before 6.x is stopped: messages and evidences that
-still wait for a pull backend are migrated, but 7.1.0 does not deliver them to the backend in full. Only outbound messages that failed
-for good may remain; they are migrated in their current state.
+Backends in pull mode must fetch and acknowledge everything that is ready for them before 6.x is stopped. Messages and evidences that
+still wait for a pull backend are migrated and 7.1.0 offers them to the backend, but 7.1.0 does not resume any other 6.x processing.
+Only outbound messages that failed for good may remain; they are migrated in their current state.
 . *Stop 6.x.* It must not run during the migration. The tool compares the database before and after the run and reports
   `SOURCE_CHANGED_DURING_MIGRATION`; `--resume` then completes the migration.
 . Back up the 6.x database and the filesystem storage. This is the rollback point.

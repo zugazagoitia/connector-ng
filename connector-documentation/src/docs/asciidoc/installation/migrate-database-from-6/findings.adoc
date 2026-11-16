@@ -66,6 +66,8 @@ Every finding in `+migration-report.md+` and `+migration-report.json+` has a sev
 |`+STEP_IDENTIFIER_DEDUPLICATED+` |INFO |A duplicate 6.x transport id was suffixed with the 6.x step id.
 |`+TRANSPORT_STEP_WITHOUT_STATE+` |WARNING |The latest attempt has no state history. A state was assumed (named in the detail).
 |`+TRANSPORT_STEP_SKIPPED+` |WARNING |A step of no business message whose JSON is unreadable or carries no evidence.
+|`+EVIDENCE_STEP_UNMATCHED+` |INFO |An evidence carried by a 6.x evidence message has no evidence row of the referenced message in 6.x; the step gets its own evidence id. Acknowledging such a step in 7.1.0 can fail if it still waits for a pull backend.
+|`+CONTENT_FROM_TRANSPORT_STEP+` |INFO |A received message had no business document row in 6.x; its document (and PDF token) were migrated from the 6.x message JSON of its transport step, where 6.x kept them.
 |`+TRANSPORT_STEP_FAILED+` |ERROR |Steps of 6.x evidence messages could not be written.
 |`+LINK_PARTNERS_UNREADABLE+` |WARNING |`+DC_LINK_PARTNER+` could not be read. Steps were classified by message direction.
 |`+VALUE_TRUNCATED+` |WARNING |A value was shortened to fit 7.1.0. The full value is in `+truncated-values.jsonl+`.
