@@ -217,6 +217,18 @@ in the template) would delete most of a migrated history; the migration tool set
    seed in a streaming way for larger runs.
 5. Run a large migration against a real remote S3 and a remote database to tune `--upload-threads` and `--batch-size` on real
    latencies.
+6. **Found by the self-send lab (`lab/selfsend-6x-upgrade`, see its `REPORT.md`):**
+   * Evidence transport steps rebuilt from 6.x (`EvidenceStepMapper`) give their evidences new ids
+     (`DeterministicIds.uuid("step-evidence", …)`) instead of the ids of the migrated evidence rows (`uuid("evidence", <6.x id>)`).
+     For a step still `READY_FOR_PULL`, 7.1.0 then fails on `acknowledgeMessage` (`ConnectorDBMessageEvidenceRepository
+     #setDeliveredToLinkPartnerAt`: `NullPointerException`, "evidence" is null) and offers the step again forever. Fix: map the
+     step's evidence to the migrated evidence row (same business message and type). connector-ng should also check for null there.
+   * Inbound messages still waiting for a pull backend lose their business document: 6.x stored the document extracted from the
+     ASiC-S container in a `DOMIBUS_CONNECTOR_BIGDATA` row referenced only by the pending transport step
+     (`messageContent.document.document.reference`), not by `DOMIBUS_CONNECTOR_MSG_CONT`. Fix: migrate it as `BUSINESS_DOCUMENT`
+     (and `Token.pdf` as `PDF_TOKEN`) when the message has no business document row.
+   * The draft `application.properties` gets the target JDBC URL and the S3 endpoint as the tool saw them (for example
+     `localhost`), without a `# REVIEW` marker. Keep the `${DB_URL}`/`${S3_ENDPOINT}` placeholders or mark the lines.
 
 ## 7. Defects of connector 6.x relevant to the migration
 
