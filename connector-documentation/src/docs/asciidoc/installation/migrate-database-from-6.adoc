@@ -13,8 +13,7 @@ The data of a 6.x installation is copied into a new 7.1.0 database and bucket wi
 
 * reads the 6.x database (schema `V6.0.2`, connector 6.0.x and 6.1.x) on PostgreSQL, MySQL, MariaDB, Oracle or H2, and never writes to it,
 * writes a new 7.1.0 database (empty, or initialised by a first start of 7.1.0 without messages) on PostgreSQL, MySQL, MariaDB or Oracle 23. Source and target engines can differ, for example MariaDB to PostgreSQL,
-* uploads the message contents to the S3 bucket configured in `+connector.file.storage.s3.*+` (other storages, such as a local
-  directory or MongoDB GridFS, are prepared for later 7.x releases and refused for 7.1.0),
+* uploads the message contents to the S3 bucket configured in `+connector.file.storage.s3.*+`, the only file storage of 7.1.0,
 * writes a report, the new passwords of the migrated users and a draft 7.1.0 `application.properties` converted from the 6.x
   `connector.properties`.
 
@@ -57,8 +56,8 @@ Every rule, column by column, is described in <<migrate-6-mapping>>.
 == What cannot be migrated
 
 * *Encrypted filesystem contents whose key is lost*. With `connector.persistence.filesystem.encryption-active=true` (the 6.x
-  default) 6.x encrypted each file with its own AES key. The key travelled with the JSON of the message (queues, transport steps); 6.x
-  intended to store it in the database too, but a defect of 6.0.0 to 6.1.0 prevents that. The tool finds the keys in the transport
+  default) 6.x encrypted each file with its own AES key. The key travelled with the JSON of the message (queues, transport steps) and is not
+  stored in the database. The tool finds the keys in the transport
   steps, the Artemis data directory of 6.x, the database or a key file, and migrates the files decrypted. Only files of messages that
   never reached a transport step and are no longer in the Artemis journal cannot be decrypted. Their attachment rows are migrated and
   marked deleted, and the report lists them (`PAYLOAD_UNRECOVERABLE`). Run `extract-keys` before you clean up the 6.x installation;
@@ -159,8 +158,11 @@ java -jar connector-db-migration-all.jar flush-status \
 ----
 +
 Exit code `0`: no message waits for the gateway or a backend, no transport is pending and the 6.x queues are empty. Exit code `2`: the
-open categories and message ids are listed. Repeat until `0`, or decide consciously about what remains, typically inbound messages a pull
-backend never fetched, or outbound messages that failed for good. They are migrated in their current state.
+open categories and message ids are listed. Repeat until `0`.
++
+Backends in pull mode must fetch and acknowledge everything that is ready for them before 6.x is stopped: messages and evidences that
+still wait for a pull backend are migrated, but 7.1.0 does not deliver them to the backend in full. Only outbound messages that failed
+for good may remain; they are migrated in their current state.
 . *Stop 6.x.* It must not run during the migration. The tool compares the database before and after the run and reports
   `SOURCE_CHANGED_DURING_MIGRATION`; `--resume` then completes the migration.
 . Back up the 6.x database and the filesystem storage. This is the rollback point.
@@ -207,8 +209,7 @@ java -jar connector-db-migration-all.jar verify --legacy-config ... --target-url
   below.
 . Start 7.1.0. It consumes what waited in the JMS plugin's queues: new messages, and evidences for messages 6.x sent, which are matched to
   the migrated messages by their ebMS id. An evidence for a message that 6.x had already rejected (typically by its evidence timeout)
-  is ignored by 7.1.0, but a 7.1.0 defect moves its trigger to `ActiveMQ.DLQ` after 7 attempts (see <<migrate-6-defects>>); such dead
-  letters can be deleted.
+  does not change that message any more.
 . Log in with a migrated user and the password from `migration-report/user-credentials.properties`, hand the passwords over, then delete
   that file.
 . Re-enable the backends. They now use the backend links of 7.x.
@@ -266,7 +267,7 @@ Exit codes: `0` completed (possibly with warnings), `2` completed with errors (s
 error. A run stopped by a signal reports `INTERRUPTED`; run it again with `--resume`.
 
 Other commands: `flush-status` (has 6.x finished its work), `verify`, `convert-config` (only the draft configuration), `extract-keys`,
-`schema <ENGINE>` (the 7.1.0 DDL as the tool creates it) and `storage-providers`.
+and `schema <ENGINE>` (the 7.1.0 DDL as the tool creates it).
 
 === Docker
 
@@ -350,7 +351,3 @@ include::{basepath}/installation/migrate-database-from-6/limitations.adoc[]
 include::{basepath}/installation/migrate-database-from-6/mapping.adoc[]
 
 include::{basepath}/installation/migrate-database-from-6/findings.adoc[]
-
-include::{basepath}/installation/migrate-database-from-6/storage.adoc[]
-
-include::{basepath}/installation/migrate-database-from-6/defects.adoc[]

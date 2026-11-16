@@ -2,10 +2,7 @@
 [[migrate-6-mapping]]
 == How the 6.x data is mapped
 
-[[how-6x-data-becomes-710-data]]
-== How 6.x data becomes 7.1.0 data
-
-This document describes every rule the tool applies. The code lives in `+migration-core/src/main/java/eu/ecodex/connector/migration/mapping+`. Keep both in sync.
+This section describes every rule the tool applies when it turns 6.x data into 7.1.0 data.
 
 General rules:
 
@@ -87,7 +84,7 @@ The service, action and parties are resolved the way 7.1.0 resolves them: servic
 [[contents-domibus_connector_msg_cont-domibus_connector_bigdata-dc_msgcnt_detsig-filesystem--connector_message_attachments--s3]]
 === Contents (`+DOMIBUS_CONNECTOR_MSG_CONT+`, `+DOMIBUS_CONNECTOR_BIGDATA+`, `+DC_MSGCNT_DETSIG+`, filesystem → `+connector_message_attachments+` + S3)
 
-All contents become attachment rows with `+storage = S3_BUCKET+`. The bytes are uploaded to the bucket under the attachment `+identifier+`, which is the key 7.1.0 reads. With another target storage (see <<migrate-6-storage>>) the rows carry that storage's value instead.
+All contents become attachment rows with `+storage = S3_BUCKET+`. The bytes are uploaded to the bucket under the attachment `+identifier+`, which is the key 7.1.0 reads.
 
 [cols=",",options="header",]
 |===

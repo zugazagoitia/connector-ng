@@ -12,7 +12,7 @@ What the tool cannot do, why, and what it does instead. Everything in this list 
 |*Messages still in the queues of the 6.x Artemis broker* |They are in the middle of 6.x processing, which 7.1.0 cannot continue. |`+LEGACY_QUEUES_NOT_EMPTY+` with their number. Let 6.x empty its queues first (<<migrate-6-cutover>>).
 |*Messages in the 6.x dead letter queues* (`+DLQ.*+`) |6.x failed to process them and never stored them in its database. They never drain by themselves. |`+LEGACY_DEAD_LETTERS+`; `+flush-status+` counts them separately. Resend them from the 6.x administration UI after fixing the cause, or accept their loss (`+flush-status --accept-dead-letters+`).
 |*Messages the gateway handed to the 6.x connector plugin that 6.x never received* |They are outside the 6.x database. |Not visible to the tool. The cut-over diverts the gateway to the JMS plugin first, then drains the connector plugin (<<migrate-6-cutover>>).
-|*Encrypted filesystem payloads whose key exists nowhere* |6.x encrypted each file with its own key and kept the key only in the JSON of the message while processing it. A 6.x defect keeps it out of `+MSG_CONT.CONTENT+`, and the 6.1.0 queues carry message ids only (the Artemis journal held no key in a real installation). The keys survive in the transport steps, so files referenced there are recovered. The files 6.x stored when receiving a message from the gateway (ASiC-S container, tokens) are not referenced there: on 6.1.0 they cannot be decrypted after processing. |Attachment row migrated and marked deleted: `+PAYLOAD_UNRECOVERABLE_DELIVERED+` (WARNING) when the content was already delivered, `+PAYLOAD_UNRECOVERABLE+` (ERROR) otherwise. Run `+extract-keys+` before cleaning up 6.x.
+|*Encrypted filesystem payloads whose key exists nowhere* |6.x encrypted each file with its own key and kept the key only in the JSON of the message while processing it, not in `+MSG_CONT.CONTENT+`. The 6.1.0 queues carry message ids only (the Artemis journal held no key in a real installation). The keys survive in the transport steps, so files referenced there are recovered. The files 6.x stored when receiving a message from the gateway (ASiC-S container, tokens) are not referenced there: on 6.1.0 they cannot be decrypted after processing. |Attachment row migrated and marked deleted: `+PAYLOAD_UNRECOVERABLE_DELIVERED+` (WARNING) when the content was already delivered, `+PAYLOAD_UNRECOVERABLE+` (ERROR) otherwise. Run `+extract-keys+` before cleaning up 6.x.
 |*Payloads whose bytes are gone* |6.x removes the files of confirmed and rejected messages by design; files can also be deleted outside 6.x. |Attachment row marked deleted: `+PAYLOAD_REMOVED_BY_6X+` (INFO) for finished messages, `+PAYLOAD_MISSING+` (ERROR) otherwise.
 |*User passwords* |6.x used salted SHA-512 hashes; 7.1.0 accepts only BCrypt. A hash cannot be converted. |New random passwords (`+user-credentials.properties+`), or disabled users; users must change the password at the first login.
 |*The 6.x processing state of unfinished messages* |7.1.0 has its own processing; it does not continue a 6.x step. |Migrated with their status (`+CREATED+`, `+FAILED+`, `+READY_FOR_PULL+`, ...); `+LEGACY_IN_FLIGHT+` lists them. Flush 6.x first.
@@ -46,6 +46,7 @@ What the tool cannot do, why, and what it does instead. Everything in this list 
 * *Oracle as target needs Oracle 23*: the 7.1.0 schema uses `+BOOLEAN+`.
 * *H2 is a source only*, read with H2 2.2.224 (the version of 6.x). The H2 file must not be open in a running 6.x.
 * *Memory:* payloads are held in memory while they are uploaded, at most a quarter of the heap at a time (plus one payload larger than that). The tool checks the largest recorded payload against the heap before it starts and stops with the `+-Xmx+` to use.
+* *The target storage is S3*, the only file storage connector 7.1.0 reads. Other storage options of the tool are not ready for use and are refused against a 7.1.0 database.
 * *One 6.x installation per run.* Merging two 6.x databases into one 7.1.0 database is not supported.
 * *Messages are migrated by 6.x id order in batches.* Each batch is one transaction, committed only after its files are stored. An interruption loses at most the batch in flight, which `+--resume+` redoes.
 
@@ -80,16 +81,8 @@ The migration is a downtime: 6.x is stopped while it runs. Its duration depends 
 
 What is checked automatically: the real 6.x configuration files of the 6.1.0 repository are converted in the unit tests of the tool, and its end-to-end tests and both black-box cut-overs started 7.1.0 with an unchanged draft. What is not checked: whether the values are right for the environment. Treat every `+# REVIEW+` marker as a decision, and test the exchange with the partners and backends in the rehearsal.
 
-=== Target storages other than S3
-
-Connector 7.1.0 reads attachments only from S3, and its schema accepts no other storage value. The `+filesystem+` and `+mongodb+` providers (<<migrate-6-storage>>) prepare migrations to later 7.x releases. Their storage values (`+FILESYSTEM+`, `+MONGODB_GRIDFS+`) are *assumptions* until such a release exists; `+storage-value+` overrides them. Against a 7.1.0 schema they are refused unless `+--allow-unsupported-storage+` is given and the target schema accepts the value: the tool tries one row (rolled back) and stops before writing anything if the schema rejects it, also when it would create the 7.1.0 schema itself. No released connector reads these files yet.
-
 === What the tool cannot check
 
 * Messages waiting in the Domibus connector plugin of the gateway, and submissions a backend has not sent yet.
 * That the generated `+application.properties+` matches the environment: keystores, broker, backends, certificates. It is a draft with `+REVIEW+` markers.
 * That the remote parties and backends work with 7.1.0. The P-Mode verification modes changed meaning; re-test the exchange.
-
-=== Defects of the connectors found while building the tool
-
-See <<migrate-6-defects>>: the 7.1.0 PostgreSQL script that fails, 7.1.0 lookups that need unique ids, the 6.x encryption key that is never stored, and others.
