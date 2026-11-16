@@ -104,7 +104,7 @@ docker compose up -d minio connector7-db
 for _ in $(seq 1 60); do docker compose exec -T connector7-db mysqladmin ping -uroot -pconnector >/dev/null 2>&1 && break; sleep 3; done
 sleep 5
 mig analyze "${SOURCE_OPTS[@]}" --report-dir work/migration/analyze
-mig migrate "${SOURCE_OPTS[@]}" "${TARGET_OPTS[@]}" --report-dir work/migration/migrate
+mig migrate --yes "${SOURCE_OPTS[@]}" "${TARGET_OPTS[@]}" --report-dir work/migration/migrate
 mig verify "${SOURCE_OPTS[@]}" "${TARGET_OPTS[@]}" --report-dir work/migration/verify
 
 step "9. configure and start connector 7.1.0 with the generated application.properties"
