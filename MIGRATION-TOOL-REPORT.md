@@ -217,7 +217,7 @@ in the template) would delete most of a migrated history; the migration tool set
    seed in a streaming way for larger runs.
 5. Run a large migration against a real remote S3 and a remote database to tune `--upload-threads` and `--batch-size` on real
    latencies.
-6. **Found by the self-send lab (`lab/selfsend-6x-upgrade`, see its `REPORT.md`):**
+6. **Found by the self-send lab (`lab/selfsend-6x-upgrade`, see its `REPORT.md`); fixed in the tool on branch `claude/duplicate-ebms-ids-migration-swf0gi` (commit `c6db30c`), to review and merge:**
    * Evidence transport steps rebuilt from 6.x (`EvidenceStepMapper`) give their evidences new ids
      (`DeterministicIds.uuid("step-evidence", …)`) instead of the ids of the migrated evidence rows (`uuid("evidence", <6.x id>)`).
      For a step still `READY_FOR_PULL`, 7.1.0 then fails on `acknowledgeMessage` (`ConnectorDBMessageEvidenceRepository
