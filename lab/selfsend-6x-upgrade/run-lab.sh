@@ -48,6 +48,8 @@ TARGET_OPTS=(--target-url 'jdbc:mysql://localhost:33307/connector' --target-user
 
 [ -f "$MIGRATION_JAR" ] || { echo "migration tool not found: $MIGRATION_JAR (set MIGRATION_JAR)"; exit 1; }
 
+# FROM=9 ./run-lab.sh resumes after the migration (steps 9-14 on the existing containers and data)
+if [ "${FROM:-0}" -le 8 ]; then
 step "0. clean start: remove containers, volumes and ./work, prepare configuration, build the backend"
 docker compose down -v --remove-orphans >/dev/null 2>&1 || true
 ./scripts/prepare.sh
@@ -109,9 +111,17 @@ set +e
 mig verify "${SOURCE_OPTS[@]}" "${TARGET_OPTS[@]}" > work/migration/verify.log; rc=$?
 set -e
 echo "verify exit code $rc" | tee -a work/migration/verify.log "$LOG"
+fi
 
 step "9. configure and start connector 7.1.0 with the generated application.properties"
 cp work/migration/migrate/application.properties work/connector7/config/application.properties
+# Operator review of the draft: the tool writes the database URL and the S3 endpoint it used itself, as seen from
+# the machine that ran it (here the host: localhost:33307 and localhost:9000). 7.1.0 runs in a container and
+# reaches them by their service names. These two lines carry no REVIEW marker (finding for the tool developers).
+sed -i -e 's#jdbc:mysql://localhost:33307/#jdbc:mysql://connector7-db:3306/#' \
+       -e 's#^connector.file.storage.s3.endpoint=http://localhost:9000#connector.file.storage.s3.endpoint=http://minio:9000#' \
+       work/connector7/config/application.properties
+grep -E '^spring.datasource.url|^connector.file.storage.s3.endpoint' work/connector7/config/application.properties | tee -a "$LOG"
 cat > work/connector7/connector7.env <<EOF
 DB_URL=jdbc:mysql://connector7-db:3306/connector?pinGlobalTxToPhysicalConnection=true
 DB_DRIVER_CLASSNAME=com.mysql.cj.jdbc.MysqlXADataSource
@@ -130,6 +140,7 @@ BROKER_USER=admin
 BROKER_PASSWORD=admin
 EOF
 chown -R 1000:1000 work/connector7 2>/dev/null || true
+docker compose rm -sf connector7 >/dev/null 2>&1 || true
 docker compose up -d connector7
 wait_log connector7 "Started .* in [0-9.]+ seconds|APPLICATION FAILED TO START" 600
 docker compose logs connector7 2>&1 | grep -q "APPLICATION FAILED TO START" && { docker compose logs --tail 60 connector7; exit 1; }
@@ -139,19 +150,25 @@ echo "domibus.backend.jms.outQueue after the start of 7.1.0: $(queue_size domibu
 step "10. 7.1.0: t4 RETRIEVAL evidences (queued during the cut-over) must reach the backend"
 be7 await-evidence RETRIEVAL t4 "$WAIT" || true
 
-step "11. 7.1.0: the backend pulls the t2 messages 6.x never delivered, and the open evidences"
-be7 await-received t2 "$WAIT" || true
-
-step "12. 7.1.0: RETRIEVAL for t3 (received in 6.x) and t2 (received now)"
+# In pull mode a backend sends DELIVERY itself (7.1.0 generates it automatically only for push backends), then RETRIEVAL.
+step "11. 7.1.0: RETRIEVAL for t3 (copy received and DELIVERY sent in 6.x)"
 be7 trigger RETRIEVAL t3 || true
-be7 trigger RETRIEVAL t2 || true
-be7 await-evidence RETRIEVAL t3,t2 "$WAIT" || true
+be7 await-evidence RETRIEVAL t3 "$WAIT" || true
 
-step "13. 7.1.0: new self-sent messages t5"
+step "12. 7.1.0: new self-sent messages t5: send, receive, DELIVERY, RETRIEVAL"
 be7 submit t5 "$N" || true
 be7 await-received t5 "$WAIT" || true
+be7 trigger DELIVERY t5 || true
+be7 await-evidence DELIVERY t5 "$WAIT" || true
 be7 trigger RETRIEVAL t5 || true
 be7 await-evidence RETRIEVAL t5 "$WAIT" || true
+
+step "13. edge case t2 (not pulled before the cut-over, against the procedure): pull from 7.1.0, DELIVERY, RETRIEVAL"
+be7 await-received t2 "$WAIT" || true
+be7 trigger DELIVERY t2 || true
+be7 await-evidence DELIVERY t2 "$WAIT" || true
+be7 trigger RETRIEVAL t2 || true
+be7 await-evidence RETRIEVAL t2 "$WAIT" || true
 
 step "14. verification"
 ./scripts/verify.sh | tee -a "$LOG"

@@ -182,21 +182,34 @@ public final class SelfSendBackend {
         var ids = port().listPendingMessageIds(new EmptyRequestType()).getMessageTransportIds();
         int n = 0;
         for (var transportId : ids) {
-            var req = new GetMessageByIdRequest();
-            req.setMessageTransportId(transportId);
-            var msg = port().getMessageById(req);
-            if (msg == null) {
-                log("pending transport %s returned no message", transportId);
-                continue;
+            // A message whose acknowledgement failed is offered again: record it once, but try to acknowledge it again.
+            var handled = (ObjectNode) ledger.with("handledTransports");
+            try {
+                var req = new GetMessageByIdRequest();
+                req.setMessageTransportId(transportId);
+                var msg = port().getMessageById(req);
+                if (msg == null) {
+                    log("pending transport %s returned no message", transportId);
+                    continue;
+                }
+                String assigned = handled.has(transportId) ? handled.get(transportId).asText()
+                    : handleIncoming(transportId, msg);
+                handled.put(transportId, assigned);
+                var ack = new DomibusConnectorMessageResponseType();
+                ack.setResponseForMessageId(transportId);
+                ack.setResult(true);
+                ack.setResultMessage("processed by lab backend (" + phase + ")");
+                ack.setAssignedMessageId(assigned);
+                port().acknowledgeMessage(ack);
+                n++;
+            } catch (jakarta.xml.ws.WebServiceException e) {
+                // a real backend would retry later; the lab records the failure and continues with the next message
+                var failed = (ObjectNode) ledger.with("failedAcks");
+                if (!failed.has(transportId)) {
+                    log("FAILED to download/acknowledge transport %s: %s", transportId, e.getMessage());
+                }
+                failed.put(transportId, phase + ": " + e.getMessage());
             }
-            String assigned = handleIncoming(transportId, msg);
-            var ack = new DomibusConnectorMessageResponseType();
-            ack.setResponseForMessageId(transportId);
-            ack.setResult(true);
-            ack.setResultMessage("processed by lab backend (" + phase + ")");
-            ack.setAssignedMessageId(assigned);
-            port().acknowledgeMessage(ack);
-            n++;
         }
         if (n > 0) {
             save();
@@ -351,10 +364,11 @@ public final class SelfSendBackend {
             if (copies > 0) {
                 var c = ledger.get("received").get(token).get(0);
                 phaseIn = c.get("phase").asText();
-                boolean same = s.get("xmlFingerprint").asText().equals(c.get("xmlFingerprint").asText())
-                    && s.get("documentSha256").asText().equals(c.path("documentSha256").asText());
-                bytes = same ? "identical" : "DIFFERENT";
-                if (!same) {
+                boolean sameXml = s.get("xmlFingerprint").asText().equals(c.get("xmlFingerprint").asText());
+                boolean noDoc = c.path("documentSha256").isNull() || c.path("documentSha256").isMissingNode();
+                boolean sameDoc = s.get("documentSha256").asText().equals(c.path("documentSha256").asText());
+                bytes = sameXml && sameDoc ? "identical" : !sameXml ? "XML-DIFF" : noDoc ? "NO-DOC" : "DOC-DIFF";
+                if (!(sameXml && sameDoc)) {
                     problems++;
                 }
             }
