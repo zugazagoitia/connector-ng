@@ -105,7 +105,10 @@ for _ in $(seq 1 60); do docker compose exec -T connector7-db mysqladmin ping -u
 sleep 5
 mig analyze "${SOURCE_OPTS[@]}" --report-dir work/migration/analyze
 mig migrate --yes "${SOURCE_OPTS[@]}" "${TARGET_OPTS[@]}" --report-dir work/migration/migrate
-mig verify "${SOURCE_OPTS[@]}" "${TARGET_OPTS[@]}" --report-dir work/migration/verify
+set +e
+mig verify "${SOURCE_OPTS[@]}" "${TARGET_OPTS[@]}" > work/migration/verify.log; rc=$?
+set -e
+echo "verify exit code $rc" | tee -a work/migration/verify.log "$LOG"
 
 step "9. configure and start connector 7.1.0 with the generated application.properties"
 cp work/migration/migrate/application.properties work/connector7/config/application.properties

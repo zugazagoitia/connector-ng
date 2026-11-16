@@ -49,10 +49,10 @@ if bad or counters.get("messages.migrated") != counters.get("source.Message"):
     print("FAIL:", bad); sys.exit(1)
 PY
 fi
-for d in verify; do
-  [ -f "work/migration/$d/migration-report.json" ] && python3 -c "import json;r=json.load(open('work/migration/$d/migration-report.json'));print('$d outcome:', r.get('outcome'))"
-done
-
+if [ -f work/migration/verify.log ]; then
+  echo "migration tool verify:"; grep -E "INFO|WARN|ERROR|exit code" work/migration/verify.log | tail -8
+  grep -q "verify exit code 0" work/migration/verify.log || fail=1
+fi
 echo
 echo "## D. dead letters on the broker"
 curl -s -u admin:admin -H "Origin: http://localhost" \
