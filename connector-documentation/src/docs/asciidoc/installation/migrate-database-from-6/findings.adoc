@@ -31,7 +31,7 @@ Every finding in `+migration-report.md+` and `+migration-report.json+` has a sev
 |`+SOURCE_VERSION_NOT_6X+` |WARNING |`+DC_DB_VERSION+` is not `+V6...+`. Apply the 6.x upgrade scripts first.
 |`+SOURCE_SCHEMA_DIFFERS+` |WARNING |A table or column of the 6.1.0 model is missing. Messages may be unreadable (`+MESSAGE_UNREADABLE+`).
 |`+SOURCE_SCHEMA_TYPES_DIFFER+` |INFO |Column types differ from the entities, as in the official 6.x scripts. Harmless.
-|`+TARGET_SCHEMA_PATCHED+` |WARNING |A defect of the published 7.1.0 initial script was corrected while creating the schema (see LIMITATIONS).
+|`+TARGET_SCHEMA_PATCHED+` |WARNING |The tool created the schema with its own DDL (`+schema <ENGINE>+`), which differs from the published initial script in one constraint name. No action needed.
 |`+LANE_MAPPED+` |INFO |Which business domain a 6.x lane became.
 |`+LANE_PROPERTY_DROPPED+` |WARNING |A message lane property has no 7.1.0 equivalent.
 |`+PMODE_MIGRATED+` |INFO |The P-Mode set that became the processing mode of a domain, with its element counts.
@@ -58,7 +58,7 @@ Every finding in `+migration-report.md+` and `+migration-report.json+` has a sev
 |`+PAYLOAD_UNRECOVERABLE+` |ERROR |Encrypted 6.x filesystem payload whose key was found nowhere (column, key file, transport steps, Artemis journal), or whose key does not decrypt it. The attachment is stored as deleted.
 |`+PAYLOAD_UNRECOVERABLE_DELIVERED+` |WARNING |Like `+PAYLOAD_UNRECOVERABLE+`, but 6.x had already delivered the content to its recipient (gateway or backend), or the message was finished. Typical for inbound messages on 6.1.0: the files received from the gateway are encrypted with keys that exist only while 6.x processes them. The attachment is stored as deleted; the exchange itself was complete.
 |`+PAYLOAD_REMOVED_BY_6X+` |INFO |The file of a confirmed or rejected message is gone. 6.x removes the files of finished messages (sometimes without marking the row deleted). The attachment is stored as deleted.
-|`+STORAGE_NOT_SUPPORTED_BY_71+` |WARNING |`+--allow-unsupported-storage+`: the attachments use a storage value the 7.1.0 schema does not declare (see <<migrate-6-storage>>).
+|`+STORAGE_NOT_SUPPORTED_BY_71+` |WARNING |A storage other than S3 was forced. Connector 7.1.0 cannot read these attachments; migrate again to S3.
 |`+EVIDENCE_WITHOUT_CONTENT+` |WARNING |Evidence without XML. Not migrated; it still counts for the status.
 |`+EVIDENCE_WITHOUT_TYPE+` |ERROR |Evidence without type. Not migrated.
 |`+EVIDENCE_TYPE_UNKNOWN+` |WARNING |An evidence type in transported JSON with no 7.1.0 equivalent.
@@ -66,6 +66,8 @@ Every finding in `+migration-report.md+` and `+migration-report.json+` has a sev
 |`+STEP_IDENTIFIER_DEDUPLICATED+` |INFO |A duplicate 6.x transport id was suffixed with the 6.x step id.
 |`+TRANSPORT_STEP_WITHOUT_STATE+` |WARNING |The latest attempt has no state history. A state was assumed (named in the detail).
 |`+TRANSPORT_STEP_SKIPPED+` |WARNING |A step of no business message whose JSON is unreadable or carries no evidence.
+|`+EVIDENCE_STEP_UNMATCHED+` |INFO |An evidence carried by a 6.x evidence message has no evidence row of the referenced message in 6.x; the step gets its own evidence id. Acknowledging such a step in 7.1.0 can fail if it still waits for a pull backend.
+|`+CONTENT_FROM_TRANSPORT_STEP+` |INFO |A received message had no business document row in 6.x; its document (and PDF token) were migrated from the 6.x message JSON of its transport step, where 6.x kept them.
 |`+TRANSPORT_STEP_FAILED+` |ERROR |Steps of 6.x evidence messages could not be written.
 |`+LINK_PARTNERS_UNREADABLE+` |WARNING |`+DC_LINK_PARTNER+` could not be read. Steps were classified by message direction.
 |`+VALUE_TRUNCATED+` |WARNING |A value was shortened to fit 7.1.0. The full value is in `+truncated-values.jsonl+`.

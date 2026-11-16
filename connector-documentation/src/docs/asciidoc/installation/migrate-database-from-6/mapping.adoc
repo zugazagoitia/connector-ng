@@ -2,10 +2,7 @@
 [[migrate-6-mapping]]
 == How the 6.x data is mapped
 
-[[how-6x-data-becomes-710-data]]
-== How 6.x data becomes 7.1.0 data
-
-This document describes every rule the tool applies. The code lives in `+migration-core/src/main/java/eu/ecodex/connector/migration/mapping+`. Keep both in sync.
+This section describes every rule the tool applies when it turns 6.x data into 7.1.0 data.
 
 General rules:
 
@@ -87,7 +84,7 @@ The service, action and parties are resolved the way 7.1.0 resolves them: servic
 [[contents-domibus_connector_msg_cont-domibus_connector_bigdata-dc_msgcnt_detsig-filesystem--connector_message_attachments--s3]]
 === Contents (`+DOMIBUS_CONNECTOR_MSG_CONT+`, `+DOMIBUS_CONNECTOR_BIGDATA+`, `+DC_MSGCNT_DETSIG+`, filesystem → `+connector_message_attachments+` + S3)
 
-All contents become attachment rows with `+storage = S3_BUCKET+`. The bytes are uploaded to the bucket under the attachment `+identifier+`, which is the key 7.1.0 reads. With another target storage (see <<migrate-6-storage>>) the rows carry that storage's value instead.
+All contents become attachment rows with `+storage = S3_BUCKET+`. The bytes are uploaded to the bucket under the attachment `+identifier+`, which is the key 7.1.0 reads.
 
 [cols=",",options="header",]
 |===
@@ -124,6 +121,7 @@ A file with a key is decrypted, whatever `+encryption-active+` says. A wrong key
 * Name, description and MIME type fall back to the payload identifier and `+application/octet-stream+`. Size is the actual byte count.
 * A message without business XML gets an empty placeholder XML attachment, marked deleted (`+BUSINESS_CONTENT_MISSING+`), because 7.1.0 needs one per message.
 * When 6.x kept several XML or document rows (a failed replace), the newest non-deleted one is used. The others are kept as plain attachments (`+DUPLICATE_BUSINESS_CONTENT+`).
+* A *received message without business document row* (6.x kept the document it extracted from the ASiC-S container, and the PDF token it generated, only in the message JSON of its transport steps to the backend, as `+DOMIBUS_CONNECTOR_BIGDATA+` or filesystem references): the document and the PDF token are taken from the newest such step and become `+BUSINESS_DOCUMENT+` and `+PDF_TOKEN+` attachments (`+CONTENT_FROM_TRANSPORT_STEP+`). A message that still waits for a pull backend is then delivered by 7.1.0 with its document.
 * `+aes_type+` of the business document stays empty. 6.x did not store it.
 
 [[evidences-domibus_connector_evidence--connector_message_evidences]]
@@ -156,7 +154,7 @@ Type and XML are copied, with a new `+uuid+`. `+delivered_to_link_partner_at+` t
 
 The side of the link comes from the message (gateway or backend name), then from `+DC_LINK_PARTNER.LINK_TYPE+`, then from the direction.
 
-`+transported_message+` holds what 7.1.0 stores there: the 7.1.0 domain message serialised with the 7.1.0 JSON settings. It is built from the migrated rows with the published `+connector-domain:7.1.0+` records. Business messages carry the status that matches the step. Transport steps of 6.x *evidence messages* (no business message row) are rebuilt as `+ConnectorEvidenceMessage+` from the 6.x JSON (identifiers, AS4 details, transported evidences). Steps whose JSON is unreadable or carries no evidence are skipped (`+TRANSPORT_STEP_SKIPPED+`). 6.x did not enforce unique transport ids, so duplicates get the 6.x step id appended (`+STEP_IDENTIFIER_DEDUPLICATED+`).
+`+transported_message+` holds what 7.1.0 stores there: the 7.1.0 domain message serialised with the 7.1.0 JSON settings. It is built from the migrated rows with the published `+connector-domain:7.1.0+` records. Business messages carry the status that matches the step. Transport steps of 6.x *evidence messages* (no business message row) are rebuilt as `+ConnectorEvidenceMessage+` from the 6.x JSON (identifiers, AS4 details, transported evidences). Each transported evidence keeps the id of the migrated evidence row it is a copy of (the evidence of the same type of the referenced business message, found by `+refToBackendMessageId+`, then by ebMS id, preferably with the same XML): 7.1.0 marks that row as delivered when a pull backend acknowledges the step. Without such a row the step gets its own evidence id (`+EVIDENCE_STEP_UNMATCHED+`). Steps whose JSON is unreadable or carries no evidence are skipped (`+TRANSPORT_STEP_SKIPPED+`). 6.x did not enforce unique transport ids, so duplicates get the 6.x step id appended (`+STEP_IDENTIFIER_DEDUPLICATED+`).
 
 [[users-domibus_connector_user-_user_pwd--connector_users-connector_roles-connector_users_roles]]
 === Users (`+DOMIBUS_CONNECTOR_USER+`, `+..._USER_PWD+` → `+connector_users+`, `+connector_roles+`, `+connector_users_roles+`)

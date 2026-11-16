@@ -135,11 +135,9 @@ The AsciiDoc sub-pages were generated from the tool's Markdown files and must be
 | `installation/migrate-database-from-6/limitations.adoc` (new) | Full limitations, including "Duration and network latency" and "The converted configuration". |
 | `installation/migrate-database-from-6/mapping.adoc` (new) | How every 6.x table becomes 7.1.0 rows. |
 | `installation/migrate-database-from-6/findings.adoc` (new) | Every finding code of the report and what to do. |
-| `installation/migrate-database-from-6/storage.adoc` (new) | Target storages (S3; filesystem and MongoDB GridFS prepared for later releases) and how to add a provider. |
-| `installation/migrate-database-from-6/defects.adoc` (new) | The defects of 6.x and 7.1.0 found during the work. |
 | `installation/index.adoc` | Includes the new chapter. |
 | `installation/introduction.adoc`, `index.adoc` | Point upgraders to the data migration before the configuration migration. |
-| `installation/database.adoc` | Warning with the workaround for the 7.1.0 PostgreSQL script; the data migration is now covered. |
+| `installation/database.adoc` | The data migration is now covered. |
 | `configuration/migrate-from-6-to-7.adoc` | Refers to the data migration; a note on the file deletion threshold and migrated history. |
 | `changelog/changelog-7.x.x.adoc`, `CHANGELOG.md` | A `7.1.1 - unreleased` section, "Added": the migration documentation. The 7.1.0 defects are not mentioned here; their lines are in the patches. |
 | `DEVELOPER-BUG-REPORT.md` | Only the personal repository reference was replaced by a TODO. |
@@ -219,6 +217,18 @@ in the template) would delete most of a migrated history; the migration tool set
    seed in a streaming way for larger runs.
 5. Run a large migration against a real remote S3 and a remote database to tune `--upload-threads` and `--batch-size` on real
    latencies.
+6. **Found by the self-send lab (`lab/selfsend-6x-upgrade` on branch `claude/duplicate-ebms-ids-migration-swf0gi`, see its `REPORT.md`); fixed in the tool on branch `claude/duplicate-ebms-ids-migration-swf0gi` (commit `c6db30c`), to review and merge:**
+   * Evidence transport steps rebuilt from 6.x (`EvidenceStepMapper`) give their evidences new ids
+     (`DeterministicIds.uuid("step-evidence", …)`) instead of the ids of the migrated evidence rows (`uuid("evidence", <6.x id>)`).
+     For a step still `READY_FOR_PULL`, 7.1.0 then fails on `acknowledgeMessage` (`ConnectorDBMessageEvidenceRepository
+     #setDeliveredToLinkPartnerAt`: `NullPointerException`, "evidence" is null) and offers the step again forever. Fix: map the
+     step's evidence to the migrated evidence row (same business message and type). connector-ng should also check for null there.
+   * Inbound messages still waiting for a pull backend lose their business document: 6.x stored the document extracted from the
+     ASiC-S container in a `DOMIBUS_CONNECTOR_BIGDATA` row referenced only by the pending transport step
+     (`messageContent.document.document.reference`), not by `DOMIBUS_CONNECTOR_MSG_CONT`. Fix: migrate it as `BUSINESS_DOCUMENT`
+     (and `Token.pdf` as `PDF_TOKEN`) when the message has no business document row.
+   * The draft `application.properties` gets the target JDBC URL and the S3 endpoint as the tool saw them (for example
+     `localhost`), without a `# REVIEW` marker. Keep the `${DB_URL}`/`${S3_ENDPOINT}` placeholders or mark the lines.
 
 ## 7. Defects of connector 6.x relevant to the migration
 
@@ -229,3 +239,135 @@ in the template) would delete most of a migrated history; the migration tool set
 * 6.x removes the files of finished messages without always marking the content rows deleted (the tool reports it as INFO).
 * A real 6.1.0 has two default lanes (`defaultMessageLane` and `defaultBusinessDomain`); P-Modes uploaded in 6.1.0 belong to
   `defaultBusinessDomain`. Both become `default_business_domain`.
+
+**Kept out of the user guide.** The guide describes no connector defects and only mentions S3 as target storage. The defect
+write-ups and the description of the unfinished storage providers that were first drafted as guide pages are in the appendix
+below; the 7.1.0 PostgreSQL script workaround (`awk` command) was removed from `installation/database.adoc`, since patch 0001 fixes
+the script.
+
+## Appendix A. Material moved out of the user guide
+
+### A.1 Defect write-ups
+
+Each section can be filed as an issue as it stands. The tool works around all of them; the workaround is noted. For the six connector-ng defects that can be fixed in code (PostgreSQL script, single-result lookups, page size, service type, push-address, late evidences) patches with a regression test and a changelog line for 7.1.1 were prepared against `develop` (7.1.0) and handed over separately; 7.1.0 is released, so the fixes are proposed for 7.1.1.
+
+#### connector-ng 7.1.0: `dbscripts/initial/postgres.sql` fails on PostgreSQL
+
+**Steps:** create an empty PostgreSQL 17 database and run `psql -v ON_ERROR_STOP=1 -f dbscripts/initial/postgres.sql`.
+
+**Result:** `ERROR: check constraint "connector_messages_direction_check" already exists` at line 140. Only 3 of 19 tables exist.
+
+**Cause:** in `create table connector_messages`, the check on `status` is declared as `constraint connector_messages_direction_check`, the name already used by the check on `direction`.
+
+**Fix:** rename the second constraint to `connector_messages_status_check`.
+
+**Workaround:** the migration tool renames it when it creates the schema. The installation guide gives an `awk` command.
+
+#### connector-ng 7.1.0: single-result lookups on ids that are not unique
+
+`ConnectorMessageJpaRepository#findByBackendMessageIdentifier` and `#findByAs4PropertiesEbmsMessageIdentifierAndDirection` return one entity, but neither column is unique. Two messages with the same backend message id make evidence correlation fail with `IncorrectResultSizeDataAccessException`. This happens when a backend resends with the same id, which 6.x accepted. `findByStepOrMessageOrRemoteSystemIdentifier` (transport steps) behaves the same.
+
+**Suggestion:** add unique constraints, or return the newest match.
+
+**Workaround:** the tool keeps the id on the newest message and suffixes the older ones (`#6x-<connector message id>`, reported as `DUPLICATE_BACKEND_MESSAGE_ID` / `DUPLICATE_EBMS_ID`). It also collapses the 6.x transport attempts into one step per message.
+
+#### connector-ng 7.1.0: services and parties looked up by part of their key
+
+`ConnectorProcessingModeServiceJpaRepository#findByNameAndProcessingModeBusinessDomainIdentifier` ignores the service type. A P-Mode with two services of the same value and different types is accepted at upload, but messages for those services fail.
+
+**Workaround:** the tool reports such P-Modes (`PMODE_AMBIGUOUS_FOR_7X`).
+
+#### connector-ng 7.1.0: page size above 100 answers HTTP 500
+
+`GET /api/v1/admin/messages?size=500` returns 500 (`IllegalArgumentException: size must be between 1 and 100` from `ConnectorPageRequest`) instead of 400.
+
+#### connector-ng 7.1.0: purge of unresolved messages and migrated history (documentation)
+
+`connector.file-deletion.unresolved-messages.threshold=7d` (template) deletes every message without `confirmed_at` or `rejected_at` that is older than 7 days, rows and files. On a database migrated from 6.x this is most of the history.
+
+**Suggestion:** a note in the upgrade documentation, or a way to disable the job.
+
+#### connector-ng 7.1.0: push-address required for pull backends
+
+`LinkPartnerDetailProperties.pushAddress` is `@NotNull`, so 7.1.0 does not start unless every backend partner has a `push-address`. A passive (pull) partner is never called: 7.1.0 makes its messages ready for pull (`ConnectorJmsBackendMessageDeliveryListener`). `LinkPartnerProperties` already requires the address for push partners.
+
+**Fix:** drop the `@NotNull`.
+
+**Workaround:** the tool writes a marked placeholder (`https://pull-mode-backend.invalid/`) for pull partners.
+
+#### connector-ng 7.1.0: a late evidence ends in the broker's dead letter queue
+
+`ConnectorMessageEvidenceVerifierService` is `@Transactional` and throws `ConnectorEvidenceNotRelevantException` for an evidence that cannot change the message any more (for example DELIVERY after the NON_DELIVERY of an evidence timeout). The inbound evidence processor catches it and logs "Evidence ... ignored", but the transaction of the JMS listener is already marked rollback-only: the commit fails, the evidence trigger is redelivered 7 times and ends in `ActiveMQ.DLQ`. Seen in the black-box cut-over for messages 6.x had rejected by its evidence timeout.
+
+**Fix:** `@Transactional(noRollbackFor = ConnectorEvidenceNotRelevantException.class)` on the verifier.
+
+**Workaround:** none in the tool; such dead letters can be deleted from `ActiveMQ.DLQ` (their evidence would have been ignored).
+
+#### connector 6.0.0–6.1.0: encryption key of filesystem payloads never stored
+
+`MsgContentPersistenceService#storeObjectIntoMsgCont` contains `if (!StringUtils.hasText(ref.getText())) { msgCont.setContent(...) }`. The condition is inverted, so the key text of an encrypted file (`FileBasedLargeFileReference#getText()`) is never written to `DOMIBUS_CONNECTOR_MSG_CONT.CONTENT`. After a message is reloaded from the database, 6.x itself cannot decrypt its payloads (for example on a manual retry). The key survives only in the JSON of the message (queues, `DC_TRANSPORT_STEP.TRANSPORTED_MESSAGE`).
+
+**Workaround:** the migration tool collects the keys from the transport steps, the Artemis journal and a key file.
+
+#### connector 6.1.0: persistence enum lacks the ACTUATOR role
+
+`eu.ecodex.connector.persistence.model.enums.UserRole` has `ADMIN` and `USER`, but the UI (`domibusConnectorUILib`) writes `ACTUATOR`. Reading a user with that role through the persistence module fails with `No enum constant ... ACTUATOR`.
+
+**Workaround:** the tool reads users with SQL.
+
+### A.2 Target storages other than S3 (not ready; refused against 7.1.0)
+
+Connector 7.1.0 keeps attachment files in an S3 compatible bucket and records `S3_BUCKET` in `connector_message_attachments.storage`. The 7.1.0 documentation announces local filesystem storage for a later release. The tool writes files through a pluggable provider, so a migration to a 7.x release with another storage needs only a new provider, not a new tool.
+
+| Provider (`--storage`) | Storage value | Module | Readable by 7.1.0 |
+|---|---|---|---|
+| `s3` (default) | `S3_BUCKET` | `migration-core` | yes |
+| `filesystem` | `FILESYSTEM` | `migration-core` | no, prepared |
+| `mongodb` (GridFS) | `MONGODB_GRIDFS` | `migration-storage-mongodb` | no, prepared |
+
+`connector-db-migration storage-providers` lists the providers on the class path with their options.
+
+#### Using a provider other than S3
+
+```bash
+connector-db-migration migrate ... \
+  --storage filesystem --storage-option path=/srv/connector/files,layout=sharded \
+  --allow-unsupported-storage
+
+connector-db-migration migrate ... \
+  --storage mongodb --storage-option uri=mongodb://user:pw@mongo:27017,database=connector,bucket=attachments \
+  --allow-unsupported-storage
+```
+
+Before writing anything, the tool reads which storage values the target schema accepts: the check constraint on PostgreSQL and Oracle, the enum on MySQL and MariaDB. For the 7.1.0 schema that is `S3_BUCKET` only, so other providers are refused. With `--allow-unsupported-storage` the run continues; the target schema must then accept the value, as a later 7.x schema would or as an operator adapted one (the tests drop the constraint, see `TargetSchemas`). `--storage-option storage-value=<VALUE>` changes the recorded value when a 7.x release names its storage differently.
+
+The `storage` property of the attachments inside the transport step JSON gets the same value.
+
+##### filesystem
+
+| Option | Meaning |
+|---|---|
+| `path` | Root directory (required). |
+| `layout` | `flat`: `<path>/<identifier>`, the same key as in S3 (default). `sharded`: `<path>/<first two characters>/<identifier>`. |
+| `create-directory` | Create the root when missing (default `true`). |
+
+Files are written under a temporary name and moved into place, so an interrupted run never leaves a partial file under its final name. Re-runs (`--resume`) overwrite.
+
+##### mongodb
+
+| Option | Meaning |
+|---|---|
+| `uri` | MongoDB connection string (required). |
+| `database` | Database (default `connector`). |
+| `bucket` | GridFS bucket (default `attachments`). |
+
+One GridFS file per attachment, named after its identifier, with the content type in the metadata. Older files of the same name are deleted only after the new upload completes.
+
+#### Writing a provider
+
+1. Implement `eu.ecodex.connector.migration.storage.ObjectStoreProvider`: `id()`, `description()`, `options()`, `storageValue()` (the value 7.x records for that storage), and `create(StorageSettings)`, which returns an `ObjectStore` (`prepare`, `put`, `get`, `size`, `describe`, `close`).
+1. Register it in `META-INF/services/eu.ecodex.connector.migration.storage.ObjectStoreProvider`.
+1. Put the module on the class path of the CLI. `migration-cli` depends on `migration-storage-mongodb` with `runtimeOnly`; the fat jar merges the service files.
+1. Test it like `GridFsMigrationIT`: seed a scenario, call `TargetSchemas.createWithAnyStorage`, migrate, and check with `MigrationHarness.verify`. The check compares every stored object byte by byte through your `ObjectStore`.
+
+`put` must be idempotent: identifiers are derived from 6.x ids, and `--resume` uploads the same keys again.
