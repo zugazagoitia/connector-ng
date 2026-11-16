@@ -10,12 +10,12 @@ the copy it sent (BACKEND → GATEWAY) and the copy it received (GATEWAY → BAC
 
 ## Answer
 
-**Yes, when the cut-over procedure of the installation guide is followed.** The duplicate ebMS ids migrate unchanged,
-7.1.0 matches evidences to the right copy, and no message was lost.
+**Yes.** The duplicate ebMS ids migrate unchanged, 7.1.0 matches every evidence to the right copy, and no message was lost,
+also for messages that were still waiting for the backend during the cut-over.
 
-**One exception:** messages and evidences that still wait for a backend in pull mode when 6.x is stopped. They are migrated,
-but 7.1.0 does not deliver them correctly (details below). The procedure already requires to let pull backends fetch
-everything first. The guide now says this explicitly.
+This needs the migration tool with the fixes of branch `claude/duplicate-ebms-ids-migration-swf0gi` of `connector-db-migration`.
+The first runs, with the tool before these fixes, lost the document of the messages still waiting for the backend and blocked
+their evidences (finding 1). Messages handled as the cut-over procedure says passed with both versions.
 
 ## Setup
 
@@ -31,37 +31,35 @@ everything first. The guide now says this explicitly.
 
 | Scenario | What happens | Result |
 |---|---|---|
-| t1 (3 messages) | Finished in 6.x, then migrated | ✅ all 3 confirmed in 7.1.0, history complete |
+| t1 (3 messages) | Finished in 6.x, then migrated | ✅ confirmed in 7.1.0, history complete |
 | t3 (3 messages) | Received in 6.x; RETRIEVAL sent to **7.1.0** after the upgrade | ✅ evidence matched to the migrated sent copy, backend got it |
 | t4 (3 messages) | RETRIEVAL sent during the cut-over; the evidence waited in ActiveMQ and was consumed by **7.1.0** | ✅ evidence matched to the migrated sent copy, backend got it |
-| t5 (3 messages) | Sent and finished on 7.1.0 after the upgrade (new duplicate ids created by 7.1.0) | ✅ all 3 confirmed |
-| t2 (3 messages) | Received by 6.x, **not downloaded by the backend before the cut-over** (against the procedure) | ⚠️ message and evidences arrive, but **without the business document**; see finding 1 |
+| t5 (3 messages) | Sent and finished on 7.1.0 after the upgrade (new duplicate ids created by 7.1.0) | ✅ confirmed |
+| t2 (3 messages) | Received by 6.x, **not downloaded by the backend before the cut-over** (against the procedure) | ✅ delivered by 7.1.0 with identical XML and document, DELIVERY and RETRIEVAL received |
 
 Checks (`scripts/verify.sh`):
 
-* Backend: 12 of 12 messages (t1, t3, t4, t5) came back exactly once with identical content and have their RETRIEVAL evidence.
+* Backend: 15 of 15 messages came back exactly once with identical content and have their RETRIEVAL evidence. Every
+  evidence could be acknowledged; nothing in the dead letter queue.
 * Migration: 24 of 24 messages migrated, 0 errors, no `DUPLICATE_EBMS_ID` finding. The tool's `verify`: 24/24 messages,
-  21/21 files in S3, 102/102 transport steps readable.
+  27/27 files in S3, 102/102 transport steps readable.
 * 7.1.0 database: 15 ebMS ids are shared by a sent and a received copy, **none was changed** by the migration. Every sent
-  message of t1, t3, t4 and t5 is confirmed.
-* No message in the dead letter queue.
+  message is confirmed.
 
 ## Findings
 
-1. **Migration tool: deliveries still waiting for a pull backend are not usable after the upgrade.** Seen only for messages and
-   evidences that 6.x had ready for the backend when it was stopped (t2, plus three RETRIEVAL notices about received t4 copies).
-   * The received message is delivered **without its business document**. 6.x kept the extracted document in a
-     `DOMIBUS_CONNECTOR_BIGDATA` row that only the pending transport step refers to, and the tool does not copy it. The
-     document is still inside the migrated ASiC-S container, so nothing is lost for good, but the backend does not get it.
-   * Evidences waiting for the backend **cannot be acknowledged**: 7.1.0 answers the backend's `acknowledgeMessage` with an
-     error (`NullPointerException: "evidence" is null`) and offers them again forever. The tool gives these evidences new ids
-     (`step-evidence|…`) instead of the ids of the migrated evidence rows (`evidence|…`).
-   * **What to do:** follow the procedure: let pull backends fetch everything before stopping 6.x. Fix in the tool: reuse the
-     evidence ids and migrate the referenced document. 7.1.0 should also not fail on a missing evidence (patch candidate).
-2. **Migration tool: the draft `application.properties` contains the database URL and S3 endpoint the tool used**
-   (here `localhost:33307`, `localhost:9000`), without a `# REVIEW` marker. When 7.1.0 runs on another machine or in a
-   container, it cannot start until they are corrected. The lab corrects them in step 9.
+1. **Migration tool: deliveries still waiting for a pull backend at the cut-over** (fixed on the tool branch).
+   * The received message was delivered **without its business document**: 6.x kept the extracted document (and the PDF
+     token) in `DOMIBUS_CONNECTOR_BIGDATA` rows that only the pending transport step refers to. The tool now migrates them for
+     messages 6.x had not delivered yet (`CONTENT_FROM_TRANSPORT_STEP`). Delivered messages are left as 6.x cleaned them.
+   * Evidences waiting for the backend **could not be acknowledged**: 7.1.0 answered `acknowledgeMessage` with an error
+     (`NullPointerException: "evidence" is null`) and offered them again forever, because the tool gave them new ids. The tool
+     now reuses the id of the migrated evidence row.
+   * 7.1.0 itself should not fail when such a row is missing (reported for connector-ng).
+2. **Migration tool: the draft `application.properties` contains the database URL and S3 endpoint the tool used** (here
+   `localhost:33307`, `localhost:9000`). They now carry a `# REVIEW` marker. When 7.1.0 runs elsewhere (here: in a container)
+   they must be changed; the lab does it in step 9.
 3. **Expected behaviour, not a defect:** in pull mode, 7.1.0 does not create the DELIVERY evidence by itself
-   (`auto-trigger-delivery-evidences` acts on push delivery only). The backend must send DELIVERY before RETRIEVAL, as in 6.x.
+   (`auto-trigger-delivery-evidences` acts on push delivery only). The backend sends DELIVERY before RETRIEVAL, as in 6.x.
 
-Findings 1 and 2 are also listed in the developer report (`MIGRATION-TOOL-REPORT.md`).
+The findings are also in the developer report (`MIGRATION-TOOL-REPORT.md`).

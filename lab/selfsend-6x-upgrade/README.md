@@ -25,8 +25,9 @@ Keystores come from the 7.1.0 image (`connector_blue`, `alice`) and the connecto
 
 ## Run
 
-Requirements: Docker with compose v2, JDK 21, Maven, and the migration tool jar
-(`./gradlew :migration-cli:shadowJar` in `connector-db-migration`).
+Requirements: Docker with compose v2, JDK 21, Maven, and the migration tool jar built from branch
+`claude/duplicate-ebms-ids-migration-swf0gi` of `connector-db-migration` (`./gradlew :migration-cli:shadowJar`).
+With an older tool, the t2 edge case fails (see REPORT.md, finding 1).
 
 ```bash
 MIGRATION_JAR=/path/to/connector-db-migration-<version>-all.jar ./run-lab.sh     # about 15 minutes, from scratch
@@ -46,7 +47,7 @@ MinIO 9000, 6.x database 33306, 7.1.0 database 33307.
 | t3 | sent, copy received, DELIVERY | | backend sends RETRIEVAL for the migrated copy; the evidence must reach the migrated sent message |
 | t4 | sent, copy received, DELIVERY | gateway switched to the JMS plugin, then RETRIEVAL sent by 6.x; the evidence waits in ActiveMQ | 7.1.0 consumes it and must match it to the migrated sent message |
 | t5 | | | sent, received, DELIVERY, RETRIEVAL on 7.1.0 |
-| t2 | sent, copy received by 6.x but **not pulled** by the backend (against the procedure) | | pulled from 7.1.0, DELIVERY, RETRIEVAL (edge case, reported separately) |
+| t2 | sent, copy received by 6.x but **not pulled** by the backend (against the procedure) | | pulled from 7.1.0 with its document, DELIVERY, RETRIEVAL (edge case, reported separately) |
 
 The cut-over follows `CUTOVER.md`: message filter of Domibus switched to the JMS plugin, `flush-status`, 6.x stopped,
 `analyze`, `migrate`, `verify`, 7.1.0 started with the generated `application.properties`.
