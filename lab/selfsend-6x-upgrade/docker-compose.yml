@@ -1,0 +1,150 @@
+# Lab: one gateway that sends to itself, one connector, upgraded from 6.1.0 to 7.1.0.
+# All e-CODEX images come from scm.ecodex.eu. ./work is assembled by scripts/prepare.sh.
+# Phase 6.x : activemq gateway-db gateway connector6-db connector6
+# Phase 7.x : activemq gateway-db gateway minio connector7-db connector7   (connector6 stopped)
+name: selfsend-lab
+
+services:
+  activemq:
+    image: apache/activemq-classic:6.2.0
+    environment:
+      ACTIVEMQ_CONNECTION_USER: admin
+      ACTIVEMQ_CONNECTION_PASSWORD: admin
+      JAVA_OPTS: >-
+        -Dcom.sun.jndi.rmiregistry.registryImpl=true
+        -Dcom.sun.management.jmxremote
+        -Dcom.sun.management.jmxremote.port=1099
+        -Dcom.sun.management.jmxremote.rmi.port=1199
+        -Dcom.sun.management.jmxremote.ssl=false
+        -Dcom.sun.management.jmxremote.authenticate=false
+        -Djava.rmi.server.hostname=activemq
+    ports:
+      - "8161:8161"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "-u", "admin:admin", "http://localhost:8161/admin/"]
+      interval: 5s
+      retries: 30
+    volumes:
+      - activemq-data:/var/lib/activemq/data
+
+  gateway-db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: gateway
+      MYSQL_USER: gateway
+      MYSQL_PASSWORD: gateway
+      MYSQL_ROOT_PASSWORD: gateway
+      MYSQL_TCP_PORT: 3307
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-P", "3307", "-u", "root", "-pgateway"]
+      interval: 3s
+      retries: 40
+    volumes:
+      - ../../docker/gateway/sql/:/docker-entrypoint-initdb.d/:ro
+      - gateway-db-data:/var/lib/mysql
+
+  gateway:
+    image: scm.ecodex.eu/docker/gateway:${GATEWAY_TAG:-edge}
+    environment:
+      DOMIBUS_DATABASE_SERVERNAME: gateway-db
+      DOMIBUS_DATABASE_PORT: 3307
+      DOMIBUS_DATABASE_SCHEMA: gateway
+      DOMIBUS_DATASOURCE_DRIVER_CLASS_NAME: com.mysql.cj.jdbc.Driver
+      DOMIBUS_DATASOURCE_USER: gateway
+      DOMIBUS_DATASOURCE_PASSWORD: gateway
+      JAVA_IO_TMPDIR: ./temp
+    depends_on:
+      gateway-db: {condition: service_healthy}
+      activemq: {condition: service_healthy}
+    ports:
+      - "30010:8080"
+    volumes:
+      - ./work/gateway/domibus:/app/conf/domibus
+      - ./work/gateway/attachments:/app/attachments
+
+  # ------------------------------------------------------------------ connector 6.1.0
+  connector6-db:
+    image: mariadb:10.11
+    environment:
+      MARIADB_DATABASE: connector6
+      MARIADB_USER: connector
+      MARIADB_PASSWORD: connector
+      MARIADB_ROOT_PASSWORD: connector
+      TZ: Europe/Vienna
+    ports:
+      - "33306:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 3s
+      retries: 40
+    volumes:
+      - ./connector6/sql/:/docker-entrypoint-initdb.d/:ro
+      - connector6-db-data:/var/lib/mysql
+
+  connector6:
+    image: scm.ecodex.eu/docker/connector:${CONNECTOR6_TAG:-6.1.0}
+    environment:
+      TZ: Europe/Vienna
+      # lab hosts are often > 90 % full; the embedded Artemis would then block all queues ("AMQ222212: Disk Full")
+      JAVA_TOOL_OPTIONS: -Dbrokerconfig.maxDiskUsage=-1
+    depends_on:
+      connector6-db: {condition: service_healthy}
+    ports:
+      - "9081:9081"
+    volumes:
+      - ./work/connector6/config:/app/config
+      - ./work/connector6/data:/app/data
+
+  # ------------------------------------------------------------------ connector 7.1.0
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: admin123
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+    volumes:
+      - minio-data:/data
+
+  connector7-db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: connector
+      MYSQL_USER: connector
+      MYSQL_PASSWORD: connector
+      MYSQL_ROOT_PASSWORD: connector
+    ports:
+      - "33307:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pconnector"]
+      interval: 3s
+      retries: 40
+    volumes:
+      - ./connector7/sql/:/docker-entrypoint-initdb.d/:ro
+      - connector7-db-data:/var/lib/mysql
+
+  connector7:
+    image: scm.ecodex.eu/docker/connector-ng:${CONNECTOR7_TAG:-7.1.0}
+    env_file:
+      - path: ./work/connector7/connector7.env   # written by run-lab.sh after the migration
+        required: false
+    environment:
+      TZ: Europe/Vienna
+      TEMP_DIR_LOCATION: /app/temp
+    depends_on:
+      connector7-db: {condition: service_healthy}
+    ports:
+      - "30000:30000"
+    volumes:
+      - ./work/connector7/config:/app/config
+      - ./work/connector7/data:/app/data
+      - ./work/connector7/temp:/app/temp
+      - ./work/connector7/transaction-logs:/app/transaction-logs
+
+volumes:
+  activemq-data:
+  gateway-db-data:
+  connector6-db-data:
+  minio-data:
+  connector7-db-data:

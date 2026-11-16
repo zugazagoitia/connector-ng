@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Self-sending P-Mode for the lab: one party (service_blue_ecodex) is both initiator and responder,
+  so every message the connector submits is received again by the same gateway and delivered back to
+  the same connector. The outbound and the inbound copy of a message therefore carry the SAME ebMS id.
+  The same file is uploaded to Domibus and to connector 6.x.
+-->
+<db:configuration xmlns:db="http://domibus.eu/configuration" party="service_blue_ecodex">
+    <mpcs>
+        <mpc name="defaultMpc" qualifiedName="http://docs.oasis-open.org/ebxml-msg/ebms/v3.0/ns/core/200704/defaultMPC"
+             enabled="true" default="true" retention_downloaded="0" retention_undownloaded="60"/>
+    </mpcs>
+    <businessProcesses>
+        <roles>
+            <role name="eCODEXRole" value="GW"/>
+        </roles>
+        <parties>
+            <partyIdTypes>
+                <partyIdType name="ecodex" value="urn:oasis:names:tc:ebcore:partyid-type:ecodex"/>
+            </partyIdTypes>
+            <party name="service_blue_ecodex" endpoint="http://gateway:8080/domibus/services/msh" allowChunking="false">
+                <identifier partyId="BL" partyIdType="ecodex"/>
+            </party>
+        </parties>
+        <meps>
+            <mep name="oneway" value="http://docs.oasis-open.org/ebxml-msg/ebms/v3.0/ns/core/200704/oneWay"/>
+            <binding name="push" value="http://docs.oasis-open.org/ebxml-msg/ebms/v3.0/ns/core/200704/push"/>
+        </meps>
+        <properties>
+            <property name="originalSenderProperty" key="originalSender" datatype="string" required="true"/>
+            <property name="finalRecipientProperty" key="finalRecipient" datatype="string" required="true"/>
+            <propertySet name="ecodexPropertySet">
+                <propertyRef property="finalRecipientProperty"/>
+                <propertyRef property="originalSenderProperty"/>
+            </propertySet>
+        </properties>
+        <payloadProfiles/>
+        <securities>
+            <security name="eDeliveryAS4Policy" policy="ecodex-security-policy.xml" signatureMethod="RSA_SHA256"/>
+        </securities>
+        <errorHandlings>
+            <errorHandling name="eCODEXErrorHandling" errorAsResponse="true" businessErrorNotifyProducer="false"
+                           businessErrorNotifyConsumer="false" deliveryFailureNotifyProducer="false"/>
+        </errorHandlings>
+        <agreements>
+            <agreement name="agreementEmpty" value="" type=""/>
+        </agreements>
+        <services>
+            <service name="EPOService" value="EPO" type="urn:e-codex:services:"/>
+        </services>
+        <actions>
+            <action name="eCODEXEvidenceSubmissionAcceptanceRejection" value="SubmissionAcceptanceRejection"/>
+            <action name="eCODEXEvidenceRelayREMMDAcceptanceRejection" value="RelayREMMDAcceptanceRejection"/>
+            <action name="eCODEXEvidenceDeliveryNonDeliveryToRecipient" value="DeliveryNonDeliveryToRecipient"/>
+            <action name="eCODEXEvidenceRetrievalNonRetrievalToRecipient" value="RetrievalNonRetrievalToRecipient"/>
+            <action name="ActionFormA" value="Form_A"/>
+        </actions>
+        <as4>
+            <receptionAwareness name="receptionAwareness" retry="5;4;CONSTANT" duplicateDetection="true"/>
+            <reliability name="AS4Reliability" nonRepudiation="true" replyPattern="response"/>
+        </as4>
+        <legConfigurations>
+            <legConfiguration name="EPOLegActionFormA" service="EPOService" action="ActionFormA" defaultMpc="defaultMpc"
+                              reliability="AS4Reliability" security="eDeliveryAS4Policy" receptionAwareness="receptionAwareness"
+                              propertySet="ecodexPropertySet" errorHandling="eCODEXErrorHandling" compressPayloads="false"/>
+            <legConfiguration name="EPOLegEvidenceSubmissionAcceptanceRejection" service="EPOService"
+                              action="eCODEXEvidenceSubmissionAcceptanceRejection" defaultMpc="defaultMpc"
+                              reliability="AS4Reliability" security="eDeliveryAS4Policy" receptionAwareness="receptionAwareness"
+                              errorHandling="eCODEXErrorHandling" compressPayloads="false"/>
+            <legConfiguration name="EPOLegEvidenceRelayREMMDAcceptanceRejection" service="EPOService"
+                              action="eCODEXEvidenceRelayREMMDAcceptanceRejection" defaultMpc="defaultMpc"
+                              reliability="AS4Reliability" security="eDeliveryAS4Policy" receptionAwareness="receptionAwareness"
+                              errorHandling="eCODEXErrorHandling" compressPayloads="false"/>
+            <legConfiguration name="EPOLegEvidenceDeliveryNonDeliveryToRecipient" service="EPOService"
+                              action="eCODEXEvidenceDeliveryNonDeliveryToRecipient" defaultMpc="defaultMpc"
+                              reliability="AS4Reliability" security="eDeliveryAS4Policy" receptionAwareness="receptionAwareness"
+                              errorHandling="eCODEXErrorHandling" compressPayloads="false"/>
+            <legConfiguration name="EPOLegEvidenceRetrievalNonRetrievalToRecipient" service="EPOService"
+                              action="eCODEXEvidenceRetrievalNonRetrievalToRecipient" defaultMpc="defaultMpc"
+                              reliability="AS4Reliability" security="eDeliveryAS4Policy" receptionAwareness="receptionAwareness"
+                              errorHandling="eCODEXErrorHandling" compressPayloads="false"/>
+        </legConfigurations>
+        <process name="EPOSelfSendProcess" agreement="agreementEmpty" mep="oneway" binding="push"
+                 initiatorRole="eCODEXRole" responderRole="eCODEXRole">
+            <initiatorParties>
+                <initiatorParty name="service_blue_ecodex"/>
+            </initiatorParties>
+            <responderParties>
+                <responderParty name="service_blue_ecodex"/>
+            </responderParties>
+            <legs>
+                <leg name="EPOLegActionFormA"/>
+                <leg name="EPOLegEvidenceSubmissionAcceptanceRejection"/>
+                <leg name="EPOLegEvidenceRelayREMMDAcceptanceRejection"/>
+                <leg name="EPOLegEvidenceDeliveryNonDeliveryToRecipient"/>
+                <leg name="EPOLegEvidenceRetrievalNonRetrievalToRecipient"/>
+            </legs>
+        </process>
+    </businessProcesses>
+</db:configuration>
