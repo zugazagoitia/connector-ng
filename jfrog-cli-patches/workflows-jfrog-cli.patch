@@ -1,55 +1,75 @@
-From 2c6cd7b0d9d3cb229bc99767257a87fb855fdc8e Mon Sep 17 00:00:00 2001
+From 9d53f85714b10b187b4fe3016d180a47b01784cf Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Thu, 19 Nov 2026 10:11:42 +0000
-Subject: [PATCH] feat(ci): publish with JFrog CLI, attest the distribution and
+Subject: [PATCH] feat(ci): publish with JFrog CLI, attest artifacts and
  refresh docker images
 
 - docker-build-push: record the image in a JFrog build-info
-  (jf rt build-docker-create), add max-mode provenance next to the BuildKit
-  SBOM, attest with an oci:// subject so setup-jfrog-cli records the
-  attestation as JFrog evidence on the image.
+  (jf rt build-docker-create) and add max-mode provenance next to the
+  BuildKit SBOM. Attest the image twice: pushed to the registry as an OCI
+  referrer, and with an oci:// subject that setup-jfrog-cli records as JFrog
+  evidence.
 - docker-build-push: add 'refresh' mode to rebuild a released tag with fresh
   base images and no cache and overwrite its image tag, optionally moving the
   floating and latest tags.
 - maven/gradle publish: deploy with 'jf mvn deploy' / 'jf gradle
-  artifactoryPublish' through OIDC, deploy the CycloneDX SBOM, attest the
+  artifactoryPublish' through OIDC and deploy the CycloneDX SBOM. Attest the
   distribution zip (provenance + SBOM); setup-jfrog-cli publishes the
   build-info and records the attestations as JFrog evidence.
+- document every step of the workflows and in the README.
 - setup-jfrog-cli v5.3.5 with pinned JFrog CLI 2.133.0, actions pinned by SHA.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_015o1T6BSTNddWikJrEPdP4m
 ---
- .github/workflows/docker-build-push.yaml      |  89 ++++++---
- .github/workflows/gradle-publish-release.yaml |  84 ++++++--
- .../workflows/gradle-publish-snapshot.yaml    | 183 +++++++++++-------
- .github/workflows/maven-publish-release.yaml  |  94 ++++++---
- .github/workflows/maven-publish-snapshot.yaml | 109 +++++++----
- README.md                                     | 101 +++++++---
- 6 files changed, 452 insertions(+), 208 deletions(-)
+ .github/workflows/docker-build-push.yaml      | 141 +++++++++---
+ .github/workflows/gradle-publish-release.yaml | 111 ++++++++--
+ .../workflows/gradle-publish-snapshot.yaml    | 201 ++++++++++++------
+ .github/workflows/maven-publish-release.yaml  | 119 ++++++++---
+ .github/workflows/maven-publish-snapshot.yaml | 130 ++++++++---
+ README.md                                     | 117 +++++++---
+ 6 files changed, 606 insertions(+), 213 deletions(-)
 
 diff --git a/.github/workflows/docker-build-push.yaml b/.github/workflows/docker-build-push.yaml
-index 46aa9b4..6a6ba31 100644
+index 46aa9b4..3c06884 100644
 --- a/.github/workflows/docker-build-push.yaml
 +++ b/.github/workflows/docker-build-push.yaml
-@@ -1,22 +1,27 @@
+@@ -1,22 +1,42 @@
  name: Create and publish Docker image
- # Create and publish a Docker image to the e-CODEX JFrog, following SemVer and GitFlow conventions
- # On pushes to develop, build and push a Docker image with the 'edge' label
+-# Create and publish a Docker image to the e-CODEX JFrog, following SemVer and GitFlow conventions
+-# On pushes to develop, build and push a Docker image with the 'edge' label
 -# On tag pushes to the main branch, build and push a Docker image with the 'latest' label, as well as the SemVer tags (e.g. '1.2.3', '1.2', '1')
-+# On releases, build and push a Docker image with the 'latest' label, as well as the SemVer tags (e.g. '1.2.3', '1.2', '1')
- # On all pushes, build and push a Docker image with the short SHA checksum label
+-# On all pushes, build and push a Docker image with the short SHA checksum label
++# Builds a Docker image and publishes it to the e-CODEX JFrog Artifactory (scm.ecodex.eu).
  #
 -# Authentication to the e-CODEX JFrog is done using the JFrog CLI, which is configured with an OIDC token, obtained from the GitHub Actions OIDC provider
 -# Attestation of the Docker image is created and pushed to the e-CODEX JFrog as well as to the GitHub Attestations API
-+# Refresh mode ('refresh: true') rebuilds an already released 'tag' with the newest base images and no cache and
-+# pushes it over the existing '1.2.3' tag, to fix image vulnerabilities without releasing new software.
-+# '1.2', '1' and 'latest' are only moved when 'floating-tags' / 'latest' are set.
++# Tags (SemVer / GitFlow):
++#   - pushes to develop          -> 'edge' and 'sha-<short sha>'
++#   - releases ('tag' is given)  -> '1.2.3', '1.2', '1', 'latest' and 'sha-<short sha>'
++#   - refresh ('refresh: true')  -> '1.2.3' only, plus '1.2'/'1' with 'floating-tags' and 'latest' with 'latest'
 +#
-+# Authentication to the e-CODEX JFrog is done using the JFrog CLI, configured with a GitHub OIDC token.
-+# The image is recorded in a JFrog build-info. BuildKit embeds an SBOM and the SLSA provenance in the image.
-+# The GitHub attestation is created with an 'oci://' subject so that setup-jfrog-cli attaches it to the image
-+# in Artifactory as evidence. setup-jfrog-cli publishes the build-info and the evidence at the end of the job.
++# Refresh mode exists to fix image vulnerabilities (base image / OS packages) without releasing new software:
++# the released git tag is checked out, so the application is built from exactly the released source, but the
++# base images are pulled again and no layer cache is used, so every layer picks up the latest fixes. The new
++# image is pushed over the existing '1.2.3' tag. Floating tags are opt-in so that refreshing an old release
++# line never takes '1.2', '1' or 'latest' away from a newer release.
++#
++# Supply chain:
++#   - Authentication: GitHub OIDC token exchanged by the JFrog CLI for a short-lived JFrog token (no secrets).
++#   - Build-info: the image is recorded in the JFrog build-info '<repository>-docker', so Artifactory knows which
++#     workflow run, commit and environment produced it.
++#   - SBOM + provenance: BuildKit generates an SPDX SBOM and a SLSA provenance (mode=max) and pushes them inside
++#     the image index, next to the image, so any OCI tool can read them.
++#   - GitHub attestation (signed with Sigstore, stored in GitHub) in two forms, because one attestation cannot
++#     serve both consumers (actions/attest can only push to a registry with a plain image name, and JFrog only
++#     recognises an image subject written as 'oci://<image>'):
++#       1. pushed into the registry as an OCI referrer of the image -> verifiable with registry-only tools
++#          (cosign, oras, 'gh attestation verify --bundle-from-oci');
++#       2. subject 'oci://<image>' -> setup-jfrog-cli turns it into JFrog evidence on the image in Artifactory.
++#   - At the end of the job the setup-jfrog-cli post step publishes the build-info and creates the evidence.
++#     It tries every attestation of the job, so it logs one expected warning for attestation 1 (its plain
++#     image name is not an Artifactory path).
  
 -on: 
 +on:
@@ -62,49 +82,59 @@ index 46aa9b4..6a6ba31 100644
          type: string
        tag:
 -        description: 'The tag to checkout (optional)'
-+        description: 'The tag to checkout (optional, required with refresh)'
++        description: 'The git tag to checkout and publish (optional for regular builds, required with refresh)'
          required: false
          type: string
        environment:
-@@ -25,10 +30,25 @@ on:
+@@ -25,10 +45,25 @@ on:
          type: string
          default: "development"
        registry:
 -        description: "Docker registry to push images to"
-+        description: "Docker registry to push images to (<host>/<artifactory-repository>)"
++        description: "Docker registry to push images to, as <host>/<artifactory-docker-repository>"
          required: false
          type: string
          default: "scm.ecodex.eu/docker"
 +      refresh:
-+        description: "Rebuild the released 'tag' with fresh base images and overwrite its image"
++        description: "Rebuild the released 'tag' with fresh base images and no cache, overwriting its image"
 +        required: false
 +        type: boolean
 +        default: false
 +      floating-tags:
-+        description: "Refresh only: also move the '<major>.<minor>' and '<major>' tags"
++        description: "Refresh only: also move the '<major>.<minor>' and '<major>' tags (newest patch of a line only)"
 +        required: false
 +        type: boolean
 +        default: false
 +      latest:
-+        description: "Refresh only: also move the 'latest' tag"
++        description: "Refresh only: also move the 'latest' tag (newest release only)"
 +        required: false
 +        type: boolean
 +        default: false
  
  permissions:
    contents: read
-@@ -41,33 +61,30 @@ jobs:
+@@ -37,69 +72,105 @@ jobs:
+   build-and-push-image:
+     name: Build and push Docker image
+     runs-on: ubuntu-latest
++    # The environment holds the protection rules (approvals) and is part of the OIDC claims JFrog can check
+     environment: ${{ inputs.environment }}
      permissions:
-       contents: read
-       attestations: write # Required for attestation
+-      contents: read
+-      attestations: write # Required for attestation
 -      id-token: write # Required for JFrog CLI setup
 -       
 -    steps:
-+      id-token: write # Required for JFrog CLI setup and attestation
++      contents: read      # checkout
++      id-token: write     # GitHub OIDC token, used for the JFrog login and for signing the attestations (Sigstore)
++      attestations: write # store the attestations in GitHub
 +    env:
++      # Build-info name in Artifactory. The '-docker' suffix keeps it apart from the Maven/Gradle build-info of the
++      # same workflow run (both would otherwise use the same name and run number and overwrite each other).
 +      JFROG_CLI_BUILD_NAME: ${{ github.event.repository.name }}-docker
  
 +    steps:
++      # Regular builds use the triggering commit, releases and refreshes the released git tag.
        - name: Checkout repository
 -        if: ${{ !inputs.tag }}
 -        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -116,11 +146,14 @@ index 46aa9b4..6a6ba31 100644
          with:
            ref: ${{ inputs.tag }}
  
++      # Buildx (BuildKit) is needed to generate the SBOM and provenance attestations in the image.
        - name: Set up Docker Buildx
 -        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 -              
 +        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 +
++      # Installs a pinned JFrog CLI and logs in with GitHub OIDC (OIDC integration 'setup-jfrog' in JFrog).
++      # Its post step (end of job) publishes the build-info and creates JFrog evidence from the attestations.
        - name: Setup JFrog CLI
 -        uses: jfrog/setup-jfrog-cli@f748a0599171a192a2668afee8d0497f7c1069df # v4.5.6
 +        uses: jfrog/setup-jfrog-cli@4c2f06da03095113100534a16d58d8a252680949 # v5.3.5
@@ -133,13 +166,21 @@ index 46aa9b4..6a6ba31 100644
 +          version: 2.133.0
 +          oidc-provider-name: setup-jfrog
  
++      # Docker uses the short-lived token obtained by the JFrog CLI, so no registry password is stored.
        - name: Authenticate Docker client
 -        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
 +        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
          with:
            registry: ${{ inputs.registry }}
            username: ${{ steps.setup-jfrog-cli.outputs.oidc-user }}
-@@ -79,27 +96,37 @@ jobs:
+           password: ${{ steps.setup-jfrog-cli.outputs.oidc-token }}
+ 
++      # Computes the tags and OCI labels (source, revision, version, created...).
++      # Refresh mode only republishes '1.2.3' unless floating-tags / latest are requested, and never moves
++      # 'edge' or 'sha-*', which belong to develop builds.
+       - name: Extract metadata (tags, labels) for Docker
+         id: meta
+         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
          with:
            context: git
            images: ${{ inputs.registry }}/${{ inputs.image-name }}
@@ -157,6 +198,9 @@ index 46aa9b4..6a6ba31 100644
 +            type=sha,enable=${{ !inputs.refresh }}
 +            type=edge,branch=develop,enable=${{ !inputs.refresh }}
 +
++      # pull: always use the newest base images (security fixes).
++      # no-cache: in refresh mode, rebuild every layer so OS package upgrades in the Dockerfile run again.
++      # sbom / provenance: BuildKit attestations stored in the image index.
        - name: Build and push Docker image
          id: push
          uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -170,6 +214,10 @@ index 46aa9b4..6a6ba31 100644
            tags: ${{ steps.meta.outputs.tags }}
            labels: ${{ steps.meta.outputs.labels }}
  
+-      - name: Generate artifact attestation
++      # Records the pushed image (all tags and its digest) in the JFrog build-info. The build-push-action
++      # metadata output has the buildx '--metadata-file' format that 'jf rt build-docker-create' reads.
++      # The argument is the Artifactory Docker repository key: the part of 'registry' after the host.
 +      - name: Add the image to the JFrog build-info
 +        env:
 +          METADATA: ${{ steps.push.outputs.metadata }}
@@ -178,27 +226,48 @@ index 46aa9b4..6a6ba31 100644
 +          echo "${METADATA}" > "${RUNNER_TEMP}/image-metadata.json"
 +          jf rt build-docker-create "${REGISTRY#*/}" --image-file "${RUNNER_TEMP}/image-metadata.json"
 +
-       - name: Generate artifact attestation
++      # Attestation 1: pushed to the registry next to the image, for registry-only verification.
++      # Storage records (GitHub artifact metadata) are not used, so that permission is not needed.
++      - name: Attest the image (stored in the registry)
          uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
          with:
--          subject-name: ${{ inputs.registry }}/${{ inputs.image-name }}
-+          subject-name: oci://${{ inputs.registry }}/${{ inputs.image-name }}
+           subject-name: ${{ inputs.registry }}/${{ inputs.image-name }}
            subject-digest: ${{ steps.push.outputs.digest }}
--          push-to-registry: true
+           push-to-registry: true
 -    
++          create-storage-record: false
++
++      # Attestation 2: 'oci://' subject so the setup-jfrog-cli post step attaches it to the image in
++      # Artifactory as JFrog evidence.
++      - name: Attest the image (JFrog evidence)
++        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
++        with:
++          subject-name: oci://${{ inputs.registry }}/${{ inputs.image-name }}
++          subject-digest: ${{ steps.push.outputs.digest }}
 diff --git a/.github/workflows/gradle-publish-release.yaml b/.github/workflows/gradle-publish-release.yaml
-index c7f0ed7..9769e02 100644
+index c7f0ed7..2ac6eae 100644
 --- a/.github/workflows/gradle-publish-release.yaml
 +++ b/.github/workflows/gradle-publish-release.yaml
-@@ -1,4 +1,7 @@
+@@ -1,4 +1,18 @@
  name: "Publish Release to Maven Repository"
-+# Deploys a Gradle release to Artifactory with the JFrog CLI (OIDC authentication).
-+# The CycloneDX SBOM is deployed next to the distribution, and the distribution gets a GitHub provenance and SBOM
-+# attestation. At the end of the job setup-jfrog-cli publishes the build-info and records the attestations as JFrog evidence.
++# Deploys a Gradle release to the e-CODEX JFrog Artifactory (scm.ecodex.eu) with the JFrog CLI.
++#
++# What is done and why:
++#   - Authentication: GitHub OIDC token exchanged by the JFrog CLI for a short-lived JFrog token (no secrets).
++#   - Deployment: 'jf gradle artifactoryPublish' deploys every Gradle publication (jars, POMs, distribution zip)
++#     and records them, with all resolved dependencies, in the JFrog build-info '<repository>'. The build-info is
++#     what Artifactory (and Xray) use to know where an artifact comes from and what it contains.
++#   - SBOM: the CycloneDX 'cyclonedxBom' task produces the aggregated SBOM of the project; it is deployed next to
++#     the distribution zip as '<zip name>-cyclonedx.json' so consumers find it beside the artifact they download.
++#   - Attestations: the distribution zip (the artifact users actually install) gets a SLSA build-provenance
++#     attestation and an SBOM attestation, signed with Sigstore and stored in GitHub. Their subject is the zip's
++#     path in Artifactory, so the setup-jfrog-cli post step can attach them to the zip as JFrog evidence.
++#   - End of job (setup-jfrog-cli post step): adds the git details, publishes the build-info and creates the
++#     JFrog evidence from the attestations.
  on:
      workflow_call:
          inputs:
-@@ -13,9 +16,24 @@ on:
+@@ -13,9 +27,24 @@ on:
                  type: string
                  default: ""
              maven-repo-id:
@@ -224,20 +293,24 @@ index c7f0ed7..9769e02 100644
              tag:
                  description: 'The tag to checkout (optional)'
                  required: false
-@@ -31,40 +49,37 @@ jobs:
+@@ -31,48 +60,90 @@ jobs:
      publish:
          name: Publish Release to Maven Repository
          permissions:
 -            contents: write
-+            contents: write # dependency submission
-+            id-token: write # JFrog OIDC and attestations
-             attestations: write
+-            attestations: write
 -            id-token: write
++            contents: write     # dependency submission to GitHub
++            id-token: write     # GitHub OIDC token, used for the JFrog login and for signing the attestations
++            attestations: write # store the attestations in GitHub
          runs-on: ubuntu-latest
++        # The environment holds the protection rules (approvals) and is part of the OIDC claims JFrog can check
          environment: ${{ inputs.environment }}
 +        env:
++            # Build-info name in Artifactory (the default would be the caller's workflow name, shared between repos)
 +            JFROG_CLI_BUILD_NAME: ${{ github.event.repository.name }}
          steps:
++            # Releases build the git tag created by the tag-release workflow
              -   name: Checkout repository
 -                if: ${{ !inputs.tag }}
 -                uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -245,6 +318,7 @@ index c7f0ed7..9769e02 100644
 +                with:
 +                    ref: ${{ inputs.tag }}
  
++            # Needed by the documentation module (diagrams)
              -   name: Install Graphviz
                  uses: e-CODEX/workflows/.github/actions/install-graphviz@main
  
@@ -265,6 +339,8 @@ index c7f0ed7..9769e02 100644
 -                uses: gradle/actions/setup-gradle@06832c7b30a0129d7fb559bcc6e43d26f6374244 # v4.3.1
 +                uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
  
++            # Installs a pinned JFrog CLI and logs in with GitHub OIDC (OIDC integration 'setup-jfrog' in JFrog).
++            # Its post step publishes the build-info and creates the JFrog evidence at the end of the job.
              -   name: Setup JFrog CLI
 -                uses: jfrog/setup-jfrog-cli@f748a0599171a192a2668afee8d0497f7c1069df # v4.5.6
 -                id: setup-jfrog-cli
@@ -275,9 +351,14 @@ index c7f0ed7..9769e02 100644
 +                    version: 2.133.0
                      oidc-provider-name: setup-jfrog
  
++            # Dependency graph for Dependabot alerts / GitHub Advanced Security
              -   name: Submit Dependency Release to GitHub Advanced Security
-@@ -72,7 +87,38 @@ jobs:
+                 uses: mikepenz/gradle-dependency-submission@v1
  
++            # gradle-config: deploy to 'deploy-repo' with the Gradle wrapper; POMs are deployed, Ivy descriptors
++            # are not (Maven repository). Dependencies keep being resolved from the repositories of the build.
++            # The JFrog Gradle extractor is injected with an init script, which does not support the
++            # configuration cache, hence --no-configuration-cache.
              -   name: Publish Release
                  env:
 -                    MAVEN_REPO_ID: ${{ inputs.maven-repo-id }}
@@ -288,9 +369,11 @@ index c7f0ed7..9769e02 100644
 +                    GRADLE_PARAMETERS: ${{ inputs.gradle-parameters }}
 +                run: |
 +                    jf gradle-config --repo-deploy="${DEPLOY_REPO}" --use-wrapper --deploy-ivy-desc=false
-+                    # The JFrog Gradle extractor does not support the configuration cache
 +                    jf gradle clean cyclonedxBom artifactoryPublish --no-configuration-cache ${GRADLE_PARAMETERS}
 +
++            # The attestation subject must be the zip's real path in Artifactory (a virtual 'deploy-repo' stores
++            # it in one of its local repositories), so the deployed zip is looked up by its sha256 (AQL).
++            # The SBOM is uploaded next to it; 'jf rt upload' also adds it to the build-info.
 +            -   name: Deploy the SBOM next to the distribution
 +                id: distribution
 +                env:
@@ -299,7 +382,6 @@ index c7f0ed7..9769e02 100644
 +                run: |
 +                    zip=$(ls ${DISTRIBUTION})
 +                    sha=$(sha256sum "${zip}" | cut -d' ' -f1)
-+                    # Path of the deployed distribution in Artifactory, found by checksum
 +                    target=$(jf rt curl -s -XPOST /api/search/aql -H "Content-Type: text/plain" \
 +                      -d "items.find({\"sha256\":\"${sha}\"}).include(\"repo\",\"path\",\"name\")" \
 +                      | jq -r '.results[0] // error("distribution not found in Artifactory") | "\(.repo)/\(.path)/\(.name)"')
@@ -307,12 +389,14 @@ index c7f0ed7..9769e02 100644
 +                    echo "subject-name=${target}" >> "${GITHUB_OUTPUT}"
 +                    echo "subject-digest=sha256:${sha}" >> "${GITHUB_OUTPUT}"
 +
++            # SLSA build provenance: which workflow, commit and runner produced the zip
 +            -   name: Attest the distribution provenance
 +                uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
 +                with:
 +                    subject-name: ${{ steps.distribution.outputs.subject-name }}
 +                    subject-digest: ${{ steps.distribution.outputs.subject-digest }}
 +
++            # Signed statement that the SBOM describes this zip
 +            -   name: Attest the distribution SBOM
 +                uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
 +                with:
@@ -320,14 +404,22 @@ index c7f0ed7..9769e02 100644
 +                    subject-digest: ${{ steps.distribution.outputs.subject-digest }}
 +                    sbom-path: ${{ inputs.sbom-path }}
 diff --git a/.github/workflows/gradle-publish-snapshot.yaml b/.github/workflows/gradle-publish-snapshot.yaml
-index 23ffd36..5902d3d 100644
+index 23ffd36..831f8a7 100644
 --- a/.github/workflows/gradle-publish-snapshot.yaml
 +++ b/.github/workflows/gradle-publish-snapshot.yaml
-@@ -1,77 +1,128 @@
+@@ -1,77 +1,146 @@
  name: "Publish Snapshot to Maven Repository"
-+# Deploys a Gradle -SNAPSHOT to Artifactory with the JFrog CLI (OIDC authentication).
-+# The CycloneDX SBOM is deployed next to the distribution, and the distribution gets a GitHub provenance and SBOM
-+# attestation. At the end of the job setup-jfrog-cli publishes the build-info and records the attestations as JFrog evidence.
++# Deploys a Gradle -SNAPSHOT to the e-CODEX JFrog Artifactory (scm.ecodex.eu) with the JFrog CLI.
++# Runs on every push to develop. Does nothing when the project version is not a -SNAPSHOT (e.g. while a release is
++# being prepared), so a release version is never overwritten by a develop build.
++#
++# Same supply chain as gradle-publish-release.yaml (see there for the details):
++#   - GitHub OIDC login, no secrets;
++#   - 'jf gradle artifactoryPublish' deploys the publications and records them in the build-info
++#     '<repository>-snapshot' (separate name so snapshots and releases have their own build history);
++#   - the CycloneDX SBOM is deployed next to the distribution zip;
++#   - the zip gets a provenance and an SBOM attestation (GitHub) that setup-jfrog-cli turns into JFrog evidence;
++#   - the setup-jfrog-cli post step publishes the build-info and the evidence at the end of the job.
  on:
 -  workflow_call:
 -    inputs:
@@ -395,11 +487,12 @@ index 23ffd36..5902d3d 100644
 +    publish:
 +        name: Publish Snapshot to Maven Repository
 +        permissions:
-+            contents: write # dependency submission
-+            id-token: write # JFrog OIDC and attestations
-+            attestations: write
++            contents: write     # dependency submission to GitHub
++            id-token: write     # GitHub OIDC token, used for the JFrog login and for signing the attestations
++            attestations: write # store the attestations in GitHub
 +        runs-on: ubuntu-latest
 +        env:
++            # Build-info name in Artifactory, separate from the release builds
 +            JFROG_CLI_BUILD_NAME: ${{ github.event.repository.name }}-snapshot
 +        steps:
 +            -   name: Checkout repository
@@ -407,6 +500,7 @@ index 23ffd36..5902d3d 100644
  
 -      - name: Install Graphviz
 -        uses: e-CODEX/workflows/.github/actions/install-graphviz@main
++            # Needed by the documentation module (diagrams)
 +            -   name: Install Graphviz
 +                uses: e-CODEX/workflows/.github/actions/install-graphviz@main
  
@@ -433,6 +527,7 @@ index 23ffd36..5902d3d 100644
 -          JF_URL: https://scm.ecodex.eu
 -        with:
 -          oidc-provider-name: setup-jfrog
++            # Only -SNAPSHOT versions are published from develop; all following JFrog steps depend on this
 +            -   name: Check if version is Snapshot
 +                id: check-version
 +                run: |
@@ -447,6 +542,8 @@ index 23ffd36..5902d3d 100644
 -      - name: Submit Dependency Snapshot to GitHub Advanced Security
 -        uses: mikepenz/gradle-dependency-submission@v1
 -        # Alternative: advanced-security/gradle-dependency-submission-action
++            # Installs a pinned JFrog CLI and logs in with GitHub OIDC (OIDC integration 'setup-jfrog' in JFrog).
++            # Its post step publishes the build-info and creates the JFrog evidence at the end of the job.
 +            -   name: Setup JFrog CLI
 +                if: ${{ steps.check-version.outputs.snapshot == 'true' }}
 +                uses: jfrog/setup-jfrog-cli@4c2f06da03095113100534a16d58d8a252680949 # v5.3.5
@@ -467,6 +564,7 @@ index 23ffd36..5902d3d 100644
 -            echo "Version $VERSION is a final version."
 -            echo "snapshot=false" >> "$GITHUB_OUTPUT"
 -          fi
++            # Dependency graph for Dependabot alerts / GitHub Advanced Security
 +            -   name: Submit Dependency Snapshot to GitHub Advanced Security
 +                uses: mikepenz/gradle-dependency-submission@v1
  
@@ -477,6 +575,8 @@ index 23ffd36..5902d3d 100644
 -          MAVEN_REPO_USERNAME: ${{ steps.setup-jfrog-cli.outputs.oidc-user }}
 -          MAVEN_REPO_PASSWORD: ${{ steps.setup-jfrog-cli.outputs.oidc-token }}
 -        run: ./gradlew publish ${{ inputs.gradle-parameters }}
++            # See gradle-publish-release.yaml: deploy to 'deploy-repo' with the wrapper, POMs but no Ivy
++            # descriptors, no configuration cache (not supported by the JFrog Gradle extractor init script).
 +            -   name: Publish Snapshot
 +                if: ${{ steps.check-version.outputs.snapshot == 'true' }}
 +                env:
@@ -484,9 +584,10 @@ index 23ffd36..5902d3d 100644
 +                    GRADLE_PARAMETERS: ${{ inputs.gradle-parameters }}
 +                run: |
 +                    jf gradle-config --repo-deploy="${DEPLOY_REPO}" --use-wrapper --deploy-ivy-desc=false
-+                    # The JFrog Gradle extractor does not support the configuration cache
 +                    jf gradle clean cyclonedxBom artifactoryPublish --no-configuration-cache ${GRADLE_PARAMETERS}
 +
++            # Find the deployed zip in Artifactory by sha256 (its real local-repository path is the attestation
++            # subject) and upload the SBOM next to it; 'jf rt upload' also adds the SBOM to the build-info.
 +            -   name: Deploy the SBOM next to the distribution
 +                if: ${{ steps.check-version.outputs.snapshot == 'true' }}
 +                id: distribution
@@ -496,7 +597,6 @@ index 23ffd36..5902d3d 100644
 +                run: |
 +                    zip=$(ls ${DISTRIBUTION})
 +                    sha=$(sha256sum "${zip}" | cut -d' ' -f1)
-+                    # Path of the deployed distribution in Artifactory, found by checksum
 +                    target=$(jf rt curl -s -XPOST /api/search/aql -H "Content-Type: text/plain" \
 +                      -d "items.find({\"sha256\":\"${sha}\"}).include(\"repo\",\"path\",\"name\")" \
 +                      | jq -r '.results[0] // error("distribution not found in Artifactory") | "\(.repo)/\(.path)/\(.name)"')
@@ -504,6 +604,7 @@ index 23ffd36..5902d3d 100644
 +                    echo "subject-name=${target}" >> "${GITHUB_OUTPUT}"
 +                    echo "subject-digest=sha256:${sha}" >> "${GITHUB_OUTPUT}"
 +
++            # SLSA build provenance: which workflow, commit and runner produced the zip
 +            -   name: Attest the distribution provenance
 +                if: ${{ steps.check-version.outputs.snapshot == 'true' }}
 +                uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -511,6 +612,7 @@ index 23ffd36..5902d3d 100644
 +                    subject-name: ${{ steps.distribution.outputs.subject-name }}
 +                    subject-digest: ${{ steps.distribution.outputs.subject-digest }}
 +
++            # Signed statement that the SBOM describes this zip
 +            -   name: Attest the distribution SBOM
 +                if: ${{ steps.check-version.outputs.snapshot == 'true' }}
 +                uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
@@ -519,19 +621,31 @@ index 23ffd36..5902d3d 100644
 +                    subject-digest: ${{ steps.distribution.outputs.subject-digest }}
 +                    sbom-path: ${{ inputs.sbom-path }}
 diff --git a/.github/workflows/maven-publish-release.yaml b/.github/workflows/maven-publish-release.yaml
-index 6388416..00a3e48 100644
+index 6388416..414a02b 100644
 --- a/.github/workflows/maven-publish-release.yaml
 +++ b/.github/workflows/maven-publish-release.yaml
-@@ -1,4 +1,8 @@
+@@ -1,4 +1,20 @@
  name: "Publish Release to Maven Repository"
-+# Deploys a Maven release to Artifactory with the JFrog CLI (OIDC authentication).
-+# The CycloneDX SBOM attached by the cyclonedx-maven-plugin is deployed with the artifacts, and the distribution gets a
-+# GitHub provenance and SBOM attestation. At the end of the job setup-jfrog-cli publishes the build-info and records the
-+# attestations as JFrog evidence.
++# Deploys a Maven release to the e-CODEX JFrog Artifactory (scm.ecodex.eu) with the JFrog CLI.
++#
++# What is done and why:
++#   - Authentication: GitHub OIDC token exchanged by the JFrog CLI for a short-lived JFrog token (no secrets,
++#     no credentials in settings.xml).
++#   - Deployment: 'jf mvn deploy' builds the project and deploys every module artifact to 'deploy-repo' through
++#     the JFrog Maven extractor (instead of maven-deploy-plugin), recording the artifacts and all resolved
++#     dependencies in the JFrog build-info '<repository>'. The build-info is what Artifactory (and Xray) use to
++#     know where an artifact comes from and what it contains.
++#   - SBOM: the cyclonedx-maven-plugin (bound to 'package' in the POM) generates the CycloneDX SBOMs and attaches
++#     them to the modules, so they are deployed with the artifacts (classifier 'cyclonedx').
++#   - Attestations: the distribution zip (the artifact users actually install) gets a SLSA build-provenance
++#     attestation and an SBOM attestation, signed with Sigstore and stored in GitHub. Their subject is the zip's
++#     path in Artifactory, so the setup-jfrog-cli post step can attach them to the zip as JFrog evidence.
++#   - End of job (setup-jfrog-cli post step): adds the git details, publishes the build-info and creates the
++#     JFrog evidence from the attestations.
  on:
    workflow_call:
      inputs:
-@@ -13,9 +17,24 @@ on:
+@@ -13,9 +29,24 @@ on:
          type: string
          default: ""
        maven-repo-id:
@@ -557,7 +671,7 @@ index 6388416..00a3e48 100644
        tag:
          description: 'The tag to checkout (optional)'
          required: false
-@@ -29,55 +48,72 @@ on:
+@@ -29,55 +60,85 @@ on:
  permissions:
    contents: read
  
@@ -569,15 +683,18 @@ index 6388416..00a3e48 100644
 -      contents: write
 -      attestations: write # Required for attestation
 -      id-token: write # Required for JFrog CLI setup
-+      contents: write # dependency submission
-+      id-token: write # JFrog OIDC and attestations
-+      attestations: write
++      contents: write     # dependency submission to GitHub
++      id-token: write     # GitHub OIDC token, used for the JFrog login and for signing the attestations
++      attestations: write # store the attestations in GitHub
      runs-on: ubuntu-latest
++    # The environment holds the protection rules (approvals) and is part of the OIDC claims JFrog can check
      environment: ${{ inputs.environment }}
 +    env:
++      # Build-info name in Artifactory (the default would be the caller's workflow name, shared between repos)
 +      JFROG_CLI_BUILD_NAME: ${{ github.event.repository.name }}
      steps:
 -
++      # Releases build the git tag created by the tag-release workflow
        - name: Checkout repository
 -        if: ${{ !inputs.tag }}
 -        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -585,6 +702,7 @@ index 6388416..00a3e48 100644
 +        with:
 +          ref: ${{ inputs.tag }}
  
++      # Needed by the documentation module (diagrams)
        - name: Install Graphviz
          uses: e-CODEX/workflows/.github/actions/install-graphviz@main
 -        
@@ -601,6 +719,8 @@ index 6388416..00a3e48 100644
            distribution: 'temurin'
            java-version: ${{ inputs.java-version }}
  
++      # Installs a pinned JFrog CLI and logs in with GitHub OIDC (OIDC integration 'setup-jfrog' in JFrog).
++      # Its post step publishes the build-info and creates the JFrog evidence at the end of the job.
        - name: Setup JFrog CLI
 -        uses: jfrog/setup-jfrog-cli@f748a0599171a192a2668afee8d0497f7c1069df # v4.5.6
 -        id: setup-jfrog-cli
@@ -622,9 +742,12 @@ index 6388416..00a3e48 100644
 +          version: 2.133.0
 +          oidc-provider-name: setup-jfrog
  
++      # Dependency graph for Dependabot alerts / GitHub Advanced Security
        - name: Submit Dependency Release to GitHub Advanced Security
          uses: advanced-security/maven-dependency-submission-action@b275d12641ac2d2108b2cbb7598b154ad2f2cee8 # v5.0.0
  
++      # mvn-config: deploy releases and snapshots to 'deploy-repo' (the JFrog CLI requires both to be set).
++      # Dependencies keep being resolved from the repositories declared in the POM.
        - name: Publish Release
 -        run: mvn -B -e deploy -DrepositoryId=${{ inputs.maven-repo-id }} ${{ inputs.maven-parameters }}
 +        env:
@@ -634,6 +757,8 @@ index 6388416..00a3e48 100644
 +          jf mvn-config --repo-deploy-releases="${DEPLOY_REPO}" --repo-deploy-snapshots="${DEPLOY_REPO}"
 +          jf mvn -B -e deploy ${MAVEN_PARAMETERS}
 +
++      # The attestation subject must be the zip's path in Artifactory; Maven renames it on deployment
++      # (e.g. domibusConnector.zip -> domibusConnectorDistribution-<version>.zip), so it is looked up by sha256.
 +      - name: Locate the distribution in Artifactory
 +        id: distribution
 +        env:
@@ -646,12 +771,14 @@ index 6388416..00a3e48 100644
 +          echo "subject-name=${subject}" >> "${GITHUB_OUTPUT}"
 +          echo "subject-digest=sha256:${sha}" >> "${GITHUB_OUTPUT}"
 +
++      # SLSA build provenance: which workflow, commit and runner produced the zip
 +      - name: Attest the distribution provenance
 +        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
 +        with:
 +          subject-name: ${{ steps.distribution.outputs.subject-name }}
 +          subject-digest: ${{ steps.distribution.outputs.subject-digest }}
 +
++      # Signed statement that the aggregated SBOM describes this zip
 +      - name: Attest the distribution SBOM
 +        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
 +        with:
@@ -659,17 +786,26 @@ index 6388416..00a3e48 100644
 +          subject-digest: ${{ steps.distribution.outputs.subject-digest }}
 +          sbom-path: ${{ inputs.sbom-path }}
 diff --git a/.github/workflows/maven-publish-snapshot.yaml b/.github/workflows/maven-publish-snapshot.yaml
-index 10566f5..7de5780 100644
+index 10566f5..88a5fde 100644
 --- a/.github/workflows/maven-publish-snapshot.yaml
 +++ b/.github/workflows/maven-publish-snapshot.yaml
-@@ -1,4 +1,6 @@
+@@ -1,4 +1,15 @@
  name: "Publish Snapshot to Maven Repository"
-+# Deploys a Maven -SNAPSHOT to Artifactory with the JFrog CLI (OIDC authentication).
-+# Same SBOM, attestations, build-info and JFrog evidence as maven-publish-release.yaml.
++# Deploys a Maven -SNAPSHOT to the e-CODEX JFrog Artifactory (scm.ecodex.eu) with the JFrog CLI.
++# Runs on every push to develop. Does nothing when the project version is not a -SNAPSHOT (e.g. while a release is
++# being prepared), so a release version is never overwritten by a develop build.
++#
++# Same supply chain as maven-publish-release.yaml (see there for the details):
++#   - GitHub OIDC login, no secrets;
++#   - 'jf mvn deploy' deploys the modules (with their CycloneDX SBOMs) and records them in the build-info
++#     '<repository>-snapshot' (separate name so snapshots and releases have their own build history);
++#   - the distribution zip gets a provenance and an SBOM attestation (GitHub) that setup-jfrog-cli turns into
++#     JFrog evidence;
++#   - the setup-jfrog-cli post step publishes the build-info and the evidence at the end of the job.
  on:
    workflow_call:
      inputs:
-@@ -10,71 +12,110 @@ on:
+@@ -10,71 +21,122 @@ on:
        maven-parameters:
          description: "Extra parameters to pass to Maven"
          required: false
@@ -708,11 +844,12 @@ index 10566f5..7de5780 100644
 -      contents: write
 -      attestations: write # Required for attestation
 -      id-token: write # Required for JFrog CLI setup
-+      contents: write # dependency submission
-+      id-token: write # JFrog OIDC and attestations
-+      attestations: write
++      contents: write     # dependency submission to GitHub
++      id-token: write     # GitHub OIDC token, used for the JFrog login and for signing the attestations
++      attestations: write # store the attestations in GitHub
      runs-on: ubuntu-latest
 +    env:
++      # Build-info name in Artifactory, separate from the release builds
 +      JFROG_CLI_BUILD_NAME: ${{ github.event.repository.name }}-snapshot
      steps:
        - name: Checkout code
@@ -720,6 +857,7 @@ index 10566f5..7de5780 100644
 -        
 +        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 +
++      # Needed by the documentation module (diagrams)
        - name: Install Graphviz
          uses: e-CODEX/workflows/.github/actions/install-graphviz@main
  
@@ -750,6 +888,7 @@ index 10566f5..7de5780 100644
 -      - name: Submit Dependency Snapshot to GitHub Advanced Security
 -        uses: advanced-security/maven-dependency-submission-action@b275d12641ac2d2108b2cbb7598b154ad2f2cee8 # v5.0.0
 -
++      # Only -SNAPSHOT versions are published from develop; all following JFrog steps depend on this
        - name: Check if version is Snapshot
          id: check-version
          run: |
@@ -765,6 +904,8 @@ index 10566f5..7de5780 100644
                echo "snapshot=false" >> "$GITHUB_OUTPUT"
            fi
  
++      # Installs a pinned JFrog CLI and logs in with GitHub OIDC (OIDC integration 'setup-jfrog' in JFrog).
++      # Its post step publishes the build-info and creates the JFrog evidence at the end of the job.
 +      - name: Setup JFrog CLI
 +        if: ${{ steps.check-version.outputs.snapshot == 'true' }}
 +        uses: jfrog/setup-jfrog-cli@4c2f06da03095113100534a16d58d8a252680949 # v5.3.5
@@ -774,9 +915,12 @@ index 10566f5..7de5780 100644
 +          version: 2.133.0
 +          oidc-provider-name: setup-jfrog
 +
++      # Dependency graph for Dependabot alerts / GitHub Advanced Security
 +      - name: Submit Dependency Snapshot to GitHub Advanced Security
 +        uses: advanced-security/maven-dependency-submission-action@b275d12641ac2d2108b2cbb7598b154ad2f2cee8 # v5.0.0
 +
++      # mvn-config: deploy to 'deploy-repo' (the JFrog CLI requires the release and snapshot repos to be set).
++      # Dependencies keep being resolved from the repositories declared in the POM.
        - name: Publish Snapshot
          if: ${{ steps.check-version.outputs.snapshot == 'true' }}
 -        run: mvn -B -e deploy -DrepositoryId=${{ inputs.maven-repo-id }} ${{ inputs.maven-parameters }}
@@ -787,6 +931,8 @@ index 10566f5..7de5780 100644
 +          jf mvn-config --repo-deploy-releases="${DEPLOY_REPO}" --repo-deploy-snapshots="${DEPLOY_REPO}"
 +          jf mvn -B -e deploy ${MAVEN_PARAMETERS}
 +
++      # The attestation subject must be the zip's path in Artifactory; Maven renames it on deployment and
++      # snapshots get a timestamped file name, so it is looked up by sha256.
 +      - name: Locate the distribution in Artifactory
 +        if: ${{ steps.check-version.outputs.snapshot == 'true' }}
 +        id: distribution
@@ -800,6 +946,7 @@ index 10566f5..7de5780 100644
 +          echo "subject-name=${subject}" >> "${GITHUB_OUTPUT}"
 +          echo "subject-digest=sha256:${sha}" >> "${GITHUB_OUTPUT}"
 +
++      # SLSA build provenance: which workflow, commit and runner produced the zip
 +      - name: Attest the distribution provenance
 +        if: ${{ steps.check-version.outputs.snapshot == 'true' }}
 +        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -807,6 +954,7 @@ index 10566f5..7de5780 100644
 +          subject-name: ${{ steps.distribution.outputs.subject-name }}
 +          subject-digest: ${{ steps.distribution.outputs.subject-digest }}
 +
++      # Signed statement that the aggregated SBOM describes this zip
 +      - name: Attest the distribution SBOM
 +        if: ${{ steps.check-version.outputs.snapshot == 'true' }}
 +        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
@@ -815,18 +963,30 @@ index 10566f5..7de5780 100644
 +          subject-digest: ${{ steps.distribution.outputs.subject-digest }}
 +          sbom-path: ${{ inputs.sbom-path }}
 diff --git a/README.md b/README.md
-index 58b1c80..fb6c8aa 100644
+index 58b1c80..e43bbf3 100644
 --- a/README.md
 +++ b/README.md
-@@ -189,20 +189,20 @@ It requires the following inputs:
+@@ -189,20 +189,32 @@ It requires the following inputs:
  
  ### Docker Build and Push
  
 -This workflow builds and publishes Docker images to the e-CODEX JFrog registry, following SemVer and GitFlow conventions. It supports multiple tagging strategies and includes security attestation.
 +This workflow builds and publishes Docker images to the e-CODEX JFrog registry, following SemVer and GitFlow conventions.
-+The image is recorded in a JFrog build-info (`<repository>-docker`, via `jf rt build-docker-create`), BuildKit embeds
-+an SBOM and max-mode SLSA provenance in the image, and the GitHub build-provenance attestation (subject
-+`oci://<registry>/<image>`) is attached to the image in Artifactory as JFrog evidence by `setup-jfrog-cli` at the end of the job.
++Every step is commented in the workflow file. In short:
++
++- **Login:** GitHub OIDC is exchanged by `setup-jfrog-cli` for a short-lived JFrog token. No secrets are stored.
++- **Build-info:** the image is recorded in the JFrog build-info `<repository>-docker` (`jf rt build-docker-create`).
++- **SBOM and provenance in the image:** BuildKit generates an SPDX SBOM and a SLSA provenance (`mode=max`) and stores
++  them in the image index.
++- **GitHub provenance attestation, in two forms:**
++  1. pushed to the registry as an OCI referrer of the image, for registry-only tools (`cosign`, `oras`,
++     `gh attestation verify --bundle-from-oci`);
++  2. with subject `oci://<registry>/<image>`, which `setup-jfrog-cli` attaches to the image in Artifactory as JFrog evidence.
++
++  Two attestations are needed because `actions/attest` can only push to a registry with a plain image name, while JFrog
++  only recognises an `oci://` subject. At the end of the job, the `setup-jfrog-cli` post step tries to create evidence
++  from every attestation, so it logs one expected warning for the first one.
++- **End of job:** `setup-jfrog-cli` publishes the build-info and creates the evidence.
  
  #### Docker Build Usage
  
@@ -847,7 +1007,7 @@ index 58b1c80..fb6c8aa 100644
      uses: e-CODEX/workflows/.github/workflows/docker-build-push.yaml@main
      with:
        image-name: 'my-application'
-@@ -210,28 +210,65 @@ jobs:
+@@ -210,28 +222,69 @@ jobs:
        registry: 'scm.ecodex.eu/docker'
  ```
  
@@ -909,13 +1069,17 @@ index 58b1c80..fb6c8aa 100644
 +### JFrog CLI publishing, SBOMs and attestations
 +
 +The Maven and Gradle publish workflows deploy with the JFrog CLI (`jf mvn deploy` / `jf gradle artifactoryPublish`),
-+authenticated with GitHub OIDC through `jfrog/setup-jfrog-cli`. The CycloneDX SBOM is deployed with the artifacts
-+(Maven: `cyclonedx-maven-plugin`, Gradle: uploaded next to the distribution as `<distribution>-cyclonedx.json`).
++authenticated with GitHub OIDC through `jfrog/setup-jfrog-cli`. Every step is commented in the workflow files. In short:
 +
-+The main artifact (`distribution-path`, the distribution zip) gets a GitHub build-provenance attestation and an SBOM
-+attestation, whose subject is the zip's path in Artifactory. At the end of the job `setup-jfrog-cli` publishes the
-+build-info (with git details) and attaches both attestations to the zip as JFrog evidence. JFrog evidence needs the
-+Evidence service; without it the post step only logs a warning.
++- **Deployment and build-info:** all artifacts and the resolved dependencies are recorded in the JFrog build-info
++  `<repository>` (releases) or `<repository>-snapshot`.
++- **SBOM:** the CycloneDX SBOM is deployed with the artifacts. Maven: attached by `cyclonedx-maven-plugin`. Gradle:
++  uploaded next to the distribution as `<distribution>-cyclonedx.json`.
++- **Attestations:** the main artifact (`distribution-path`, the distribution zip) gets a SLSA build-provenance
++  attestation and an SBOM attestation. Both are signed with Sigstore and stored in GitHub. Their subject is the zip's path
++  in Artifactory, which is looked up by sha256 because the deployed name differs from the local one.
++- **End of job:** `setup-jfrog-cli` adds the git details, publishes the build-info and attaches both attestations to
++  the zip as JFrog evidence. Evidence needs the JFrog Evidence service; without it the post step only logs a warning.
 +
 +Callers must grant `id-token: write` and `attestations: write` (and `contents: write` for dependency submission).
 +New inputs: `deploy-repo`, `distribution-path` (required), `sbom-path`. `maven-repo-id` is deprecated and ignored.
@@ -929,7 +1093,7 @@ index 58b1c80..fb6c8aa 100644
  
  #### Maven Snapshot Usage
  
-@@ -245,8 +282,9 @@ jobs:
+@@ -245,8 +298,9 @@ jobs:
      uses: e-CODEX/workflows/.github/workflows/maven-publish-snapshot.yaml@main
      with:
        java-version: 21
@@ -941,7 +1105,7 @@ index 58b1c80..fb6c8aa 100644
  ```
  
  It requires the following inputs:
-@@ -255,7 +293,9 @@ It requires the following inputs:
+@@ -255,7 +309,9 @@ It requires the following inputs:
  | ------------------ | ---------------------------------- | -------- | ------- |
  | `java-version`     | Java version to use for the build. | Yes      | 21      |
  | `maven-parameters` | Extra parameters to pass to Maven  | No       | -       |
@@ -952,7 +1116,7 @@ index 58b1c80..fb6c8aa 100644
  
  #### Maven Release Usage
  
-@@ -281,7 +321,8 @@ jobs:
+@@ -281,7 +337,8 @@ jobs:
      uses: e-CODEX/workflows/.github/workflows/maven-publish-release.yaml@main
      with:
        java-version: 21
@@ -962,7 +1126,7 @@ index 58b1c80..fb6c8aa 100644
  ```
  
  **Maven Validate Release Version:**
-@@ -307,7 +348,9 @@ It requires the following inputs:
+@@ -307,7 +364,9 @@ It requires the following inputs:
  | ------------------ | ---------------------------------- | -------- | ------- |
  | `java-version`     | Java version to use for the build | Yes      | 21      |
  | `maven-parameters` | Extra parameters to pass to Maven  | No       | -       |

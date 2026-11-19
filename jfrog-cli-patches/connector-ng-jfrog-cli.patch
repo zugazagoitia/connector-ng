@@ -1,39 +1,48 @@
-From b2999d429ffc1d46b5393043811fbceda9c466d0 Mon Sep 17 00:00:00 2001
+From 97e5aebc5c3f69930cc466fb865d9cc2f5199a4e Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
-Date: Thu, 19 Nov 2026 10:11:42 +0000
+Date: Thu, 19 Nov 2026 10:31:11 +0000
 Subject: [PATCH] ci: release with JFrog CLI and add docker image refresh
  workflow
 
-- publish-release / publish-snapshot: grant the permissions needed for OIDC,
-  attestations and artifact storage records, use the JFrog CLI based shared
-  workflows (deploy-repo libs-release / libs-snapshot).
-- docker-refresh: manual workflow rebuilding the image of a released tag with
-  fresh base images and overwriting the existing tag, to fix image
+- publish-release / publish-snapshot: least-privilege permissions per job
+  (required for OIDC and attestations); use the JFrog CLI based shared
+  workflows and attest the distribution zip.
+- docker-refresh: manual workflow that rebuilds the image of a released tag
+  with fresh base images and overwrites the existing tag, to fix image
   vulnerabilities without releasing new software.
-- Dockerfile: upgrade OS packages of the runtime image so refreshed images pick
-  up security fixes.
+- document what every workflow does and why.
+- Dockerfile: upgrade the OS packages of the runtime image so refreshed
+  images pick up security fixes.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_015o1T6BSTNddWikJrEPdP4m
 ---
- .github/workflows/docker-refresh.yaml   | 52 +++++++++++++++++++++++++
- .github/workflows/publish-release.yaml  | 21 +++++++++-
- .github/workflows/publish-snapshot.yaml | 17 +++++++-
- Dockerfile                              |  5 ++-
- 4 files changed, 90 insertions(+), 5 deletions(-)
+ .github/workflows/docker-refresh.yaml   | 62 +++++++++++++++++++++++++
+ .github/workflows/publish-release.yaml  | 32 ++++++++++++-
+ .github/workflows/publish-snapshot.yaml | 25 +++++++++-
+ Dockerfile                              |  7 ++-
+ 4 files changed, 121 insertions(+), 5 deletions(-)
  create mode 100644 .github/workflows/docker-refresh.yaml
 
 diff --git a/.github/workflows/docker-refresh.yaml b/.github/workflows/docker-refresh.yaml
 new file mode 100644
-index 00000000..e787645b
+index 00000000..27ed7c95
 --- /dev/null
 +++ b/.github/workflows/docker-refresh.yaml
-@@ -0,0 +1,52 @@
+@@ -0,0 +1,62 @@
 +name: Refresh Docker Image
-+
-+# Rebuilds the Docker image of an already released version from its git tag, with the newest base
-+# images and OS packages, and pushes it over the existing image tag in the e-CODEX Docker registry.
-+# Use it to fix image vulnerabilities without releasing a new version of the software.
++# Fixes vulnerabilities of a released Docker image without releasing a new version of the software.
++#
++# The released git tag is checked out (same application source as the release) and the image is rebuilt with
++# the newest base image and without layer cache, so OS packages and the JRE pick up their latest security
++# fixes. The result is pushed over the existing '<tag>' image tag in scm.ecodex.eu/docker, recorded in a new
++# JFrog build-info and attested like a release image.
++#
++# Floating tags are opt-in: tick 'floating-tags' only when refreshing the newest patch of a minor line
++# (moves '<major>.<minor>' and '<major>') and 'latest' only when refreshing the newest release, so that
++# refreshing an old release never takes these tags away from a newer one.
++#
++# Requires Delete/Overwrite permission on the Docker repository for the JFrog OIDC identity.
 +
 +on:
 +    workflow_dispatch:
@@ -60,8 +69,10 @@ index 00000000..e787645b
 +                options:
 +                    - production
 +
++# No default token permissions: the job gets only what it needs.
 +permissions: {}
 +
++# Never refresh the same tag twice in parallel (the last push would win unpredictably).
 +concurrency:
 +    group: docker-refresh-${{ inputs.tag }}
 +    cancel-in-progress: false
@@ -71,8 +82,8 @@ index 00000000..e787645b
 +        name: Rebuild and push the docker image ${{ inputs.tag }}
 +        permissions:
 +            contents: read
-+            id-token: write
-+            attestations: write
++            id-token: write     # GitHub OIDC: JFrog login and attestation signing
++            attestations: write # store the attestations in GitHub
 +        uses: e-CODEX/workflows/.github/workflows/docker-build-push.yaml@main
 +        with:
 +            image-name: connector-ng
@@ -82,14 +93,30 @@ index 00000000..e787645b
 +            latest: ${{ inputs.latest }}
 +            environment: ${{ inputs.environment }}
 diff --git a/.github/workflows/publish-release.yaml b/.github/workflows/publish-release.yaml
-index 2366b5cb..7a2ab3dd 100644
+index 2366b5cb..aaac019d 100644
 --- a/.github/workflows/publish-release.yaml
 +++ b/.github/workflows/publish-release.yaml
-@@ -10,29 +10,46 @@ on:
+@@ -1,4 +1,13 @@
+ name: Manual Release Workflow
++# Releases the version currently in the build file of the branch it is run on:
++#   1. check-version   - fails if the version is a -SNAPSHOT or its git tag already exists
++#   2. tag-version     - creates and pushes the git tag of the version
++#   3. publish         - builds the tag and deploys it to Artifactory with the JFrog CLI: artifacts, build-info,
++#                        CycloneDX SBOM, and provenance + SBOM attestations of the distribution zip
++#                        (stored in GitHub and as JFrog evidence)
++#   4. docker          - builds the tag's Docker image and pushes it to Artifactory with build-info, embedded
++#                        SBOM/provenance and a provenance attestation (in the registry, in GitHub and as JFrog evidence)
++# The shared workflows live in e-CODEX/workflows.
+ 
+ on:
+     workflow_dispatch:
+@@ -10,29 +19,48 @@ on:
                  type: choice
                  options:
                      - production
 +
++# No default token permissions: every job gets only what it needs. This is also required for the reusable
++# workflows to obtain 'id-token: write', which a caller without explicit permissions does not grant.
 +permissions: {}
 +
  jobs:
@@ -102,7 +129,7 @@ index 2366b5cb..7a2ab3dd 100644
          name: Tag the current release version
          needs: check-version
 +        permissions:
-+            contents: write
++            contents: write # push the release tag
          uses: e-CODEX/workflows/.github/workflows/gradle-tag-release-version.yaml@73ed78c2786df167cc8b35afc8381436a560d581
          with:
              environment: ${{ inputs.environment }}
@@ -111,9 +138,9 @@ index 2366b5cb..7a2ab3dd 100644
 -        uses: e-CODEX/workflows/.github/workflows/gradle-publish-release.yaml@73ed78c2786df167cc8b35afc8381436a560d581
          needs: tag-version
 +        permissions:
-+            contents: write          # dependency submission
-+            id-token: write          # OIDC to JFrog and Sigstore
-+            attestations: write
++            contents: write     # dependency submission
++            id-token: write     # GitHub OIDC: JFrog login and attestation signing
++            attestations: write # store the attestations in GitHub
 +        # TODO: pin to a commit SHA once the JFrog CLI changes are merged in e-CODEX/workflows
 +        uses: e-CODEX/workflows/.github/workflows/gradle-publish-release.yaml@main
          with:
@@ -129,20 +156,31 @@ index 2366b5cb..7a2ab3dd 100644
          needs: tag-version
 +        permissions:
 +            contents: read
-+            id-token: write
-+            attestations: write
++            id-token: write     # GitHub OIDC: JFrog login and attestation signing
++            attestations: write # store the attestations in GitHub
          uses: e-CODEX/workflows/.github/workflows/docker-build-push.yaml@main
          with:
              image-name: connector-ng
 diff --git a/.github/workflows/publish-snapshot.yaml b/.github/workflows/publish-snapshot.yaml
-index 7c2961ce..86e5933e 100644
+index 7c2961ce..6ad2f09d 100644
 --- a/.github/workflows/publish-snapshot.yaml
 +++ b/.github/workflows/publish-snapshot.yaml
-@@ -4,16 +4,29 @@ on:
+@@ -1,19 +1,40 @@
+ name: Publish Snapshot
++# On every push to develop:
++#   - publish: deploys the -SNAPSHOT to Artifactory with the JFrog CLI (artifacts, build-info, CycloneDX SBOM,
++#     provenance + SBOM attestations of the distribution zip, stored in GitHub and as JFrog evidence).
++#     Skipped automatically when the version is not a -SNAPSHOT.
++#   - docker: builds the image and pushes it as 'edge' and 'sha-<short sha>' to the snapshot Docker repository,
++#     with build-info, embedded SBOM/provenance and a provenance attestation.
+ 
+ on:
      push:
          branches:
              - develop
 +
++# No default token permissions: every job gets only what it needs (and 'id-token: write' must be granted
++# explicitly for the reusable workflows to log in to JFrog).
 +permissions: {}
 +
  jobs:
@@ -150,9 +188,9 @@ index 7c2961ce..86e5933e 100644
          name: Publish the snapshot
 -        uses: e-CODEX/workflows/.github/workflows/gradle-publish-snapshot.yaml@ae5d86c18f70e8a6971b80354219b330d67258a7
 +        permissions:
-+            contents: write          # dependency submission
-+            id-token: write          # OIDC to JFrog and Sigstore
-+            attestations: write
++            contents: write     # dependency submission
++            id-token: write     # GitHub OIDC: JFrog login and attestation signing
++            attestations: write # store the attestations in GitHub
 +        # TODO: pin to a commit SHA once the JFrog CLI changes are merged in e-CODEX/workflows
 +        uses: e-CODEX/workflows/.github/workflows/gradle-publish-snapshot.yaml@main
          with:
@@ -165,20 +203,22 @@ index 7c2961ce..86e5933e 100644
          name: Build and push the docker image
 +        permissions:
 +            contents: read
-+            id-token: write
-+            attestations: write
++            id-token: write     # GitHub OIDC: JFrog login and attestation signing
++            attestations: write # store the attestations in GitHub
          uses: e-CODEX/workflows/.github/workflows/docker-build-push.yaml@main
          with:
              image-name: connector-ng
 diff --git a/Dockerfile b/Dockerfile
-index d70c5c03..6a5ff537 100644
+index d70c5c03..3cc29d20 100644
 --- a/Dockerfile
 +++ b/Dockerfile
-@@ -17,7 +17,10 @@ ARG APP_FOLDER=/app
+@@ -17,7 +17,12 @@ ARG APP_FOLDER=/app
  
  WORKDIR ${APP_FOLDER}
  
 -RUN groupadd -g ${USER_GID} ${USERNAME} \
++# Upgrade the OS packages of the base image so that every build (and every image refresh, which runs
++# without cache) ships the latest security fixes
 +RUN apt-get update \
 +    && apt-get upgrade -y \
 +    && rm -rf /var/lib/apt/lists/* \
