@@ -1,4 +1,13 @@
 name: Manual Release Workflow
+# Releases the version currently in the build file of the branch it is run on:
+#   1. check-version   - fails if the version is a -SNAPSHOT or its git tag already exists
+#   2. tag-version     - creates and pushes the git tag of the version
+#   3. publish         - builds the tag and deploys it to Artifactory with the JFrog CLI: artifacts, build-info,
+#                        CycloneDX SBOM, and provenance + SBOM attestations of the distribution zip
+#                        (stored in GitHub and as JFrog evidence)
+#   4. docker          - builds the tag's Docker image and pushes it to Artifactory with build-info, embedded
+#                        SBOM/provenance and a provenance attestation (in the registry, in GitHub and as JFrog evidence)
+# The shared workflows live in e-CODEX/workflows.
 
 on:
     workflow_dispatch:
@@ -11,6 +20,8 @@ on:
                 options:
                     - production
 
+# No default token permissions: every job gets only what it needs. This is also required for the reusable
+# workflows to obtain 'id-token: write', which a caller without explicit permissions does not grant.
 permissions: {}
 
 jobs:
@@ -23,7 +34,7 @@ jobs:
         name: Tag the current release version
         needs: check-version
         permissions:
-            contents: write
+            contents: write # push the release tag
         uses: e-CODEX/workflows/.github/workflows/gradle-tag-release-version.yaml@73ed78c2786df167cc8b35afc8381436a560d581
         with:
             environment: ${{ inputs.environment }}
@@ -31,9 +42,9 @@ jobs:
         name: Publish the current release version
         needs: tag-version
         permissions:
-            contents: write          # dependency submission
-            id-token: write          # OIDC to JFrog and Sigstore
-            attestations: write
+            contents: write     # dependency submission
+            id-token: write     # GitHub OIDC: JFrog login and attestation signing
+            attestations: write # store the attestations in GitHub
         # TODO: pin to a commit SHA once the JFrog CLI changes are merged in e-CODEX/workflows
         uses: e-CODEX/workflows/.github/workflows/gradle-publish-release.yaml@main
         with:
@@ -48,8 +59,8 @@ jobs:
         needs: tag-version
         permissions:
             contents: read
-            id-token: write
-            attestations: write
+            id-token: write     # GitHub OIDC: JFrog login and attestation signing
+            attestations: write # store the attestations in GitHub
         uses: e-CODEX/workflows/.github/workflows/docker-build-push.yaml@main
         with:
             image-name: connector-ng

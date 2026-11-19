@@ -17,6 +17,8 @@ ARG APP_FOLDER=/app
 
 WORKDIR ${APP_FOLDER}
 
+# Upgrade the OS packages of the base image so that every build (and every image refresh, which runs
+# without cache) ships the latest security fixes
 RUN apt-get update \
     && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/* \
