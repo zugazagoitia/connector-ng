@@ -1,0 +1,53 @@
+name: Refresh Docker Image
+
+# Rebuilds the Docker image of an already released version from its git tag, with the newest base
+# images and OS packages, and pushes it over the existing image tag in the e-CODEX Docker registry.
+# Use it to fix image vulnerabilities without releasing a new version of the software.
+
+on:
+    workflow_dispatch:
+        inputs:
+            tag:
+                description: 'Released version (git tag) to rebuild, e.g. 7.1.0'
+                required: true
+                type: string
+            floating-tags:
+                description: 'Also move the <major>.<minor> and <major> tags (only for the newest patch of that line)'
+                required: false
+                default: false
+                type: boolean
+            latest:
+                description: "Also move the 'latest' tag (only for the newest release)"
+                required: false
+                default: false
+                type: boolean
+            environment:
+                description: 'Environment to deploy to'
+                required: true
+                default: 'production'
+                type: choice
+                options:
+                    - production
+
+permissions: {}
+
+concurrency:
+    group: docker-refresh-${{ inputs.tag }}
+    cancel-in-progress: false
+
+jobs:
+    refresh:
+        name: Rebuild and push the docker image ${{ inputs.tag }}
+        permissions:
+            contents: read
+            id-token: write
+            attestations: write
+            artifact-metadata: write
+        uses: e-CODEX/workflows/.github/workflows/docker-build-push.yaml@main
+        with:
+            image-name: connector-ng
+            tag: ${{ inputs.tag }}
+            refresh: true
+            floating-tags: ${{ inputs.floating-tags }}
+            latest: ${{ inputs.latest }}
+            environment: ${{ inputs.environment }}

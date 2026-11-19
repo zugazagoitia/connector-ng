@@ -10,29 +10,47 @@ on:
                 type: choice
                 options:
                     - production
+
+permissions: {}
+
 jobs:
     check-version:
         name: Check the current release version
+        permissions:
+            contents: read
         uses: e-CODEX/workflows/.github/workflows/gradle-validate-release-version.yaml@73ed78c2786df167cc8b35afc8381436a560d581
     tag-version:
         name: Tag the current release version
         needs: check-version
+        permissions:
+            contents: write
         uses: e-CODEX/workflows/.github/workflows/gradle-tag-release-version.yaml@73ed78c2786df167cc8b35afc8381436a560d581
         with:
             environment: ${{ inputs.environment }}
     publish:
         name: Publish the current release version
-        uses: e-CODEX/workflows/.github/workflows/gradle-publish-release.yaml@73ed78c2786df167cc8b35afc8381436a560d581
         needs: tag-version
+        permissions:
+            contents: write          # dependency submission
+            id-token: write          # OIDC to JFrog and Sigstore
+            attestations: write
+            artifact-metadata: write
+        # TODO: pin to a commit SHA once the JFrog CLI changes are merged in e-CODEX/workflows
+        uses: e-CODEX/workflows/.github/workflows/gradle-publish-release.yaml@main
         with:
             java-version: 21
-            maven-repo-id: 'releases'
+            deploy-repo: 'libs-release'
             gradle-parameters: '-Partifactory.repo.id=releases'
             tag: ${{ needs.tag-version.outputs.tag }}
             environment: ${{ inputs.environment }}
     docker:
         name: Build and push the docker image
         needs: tag-version
+        permissions:
+            contents: read
+            id-token: write
+            attestations: write
+            artifact-metadata: write
         uses: e-CODEX/workflows/.github/workflows/docker-build-push.yaml@main
         with:
             image-name: connector-ng
