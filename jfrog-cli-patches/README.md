@@ -4,7 +4,7 @@
 
 | Patch | Apply to | Base |
 |---|---|---|
-| `workflows-jfrog-cli.patch` | zugazagoitia/workflows | fork `main` merged with `e-CODEX/workflows` `main` (2188cc7) |
+| `workflows-jfrog-cli.patch` | zugazagoitia/workflows | `e-CODEX/workflows` `main` (2188cc7); apply on a branch created from `upstream/main` |
 | `connector-jfrog-cli.patch` | zugazagoitia/connector | `develop` (07ac39a, same as upstream) |
 | `connector-ng-jfrog-cli.patch` | zugazagoitia/connector-ng | `e-CODEX/connector-ng` `develop` (897cd755) |
 
@@ -168,7 +168,7 @@ git rm -rq --cached jfrog-cli-patches && rm -rf jfrog-cli-patches   # don't keep
 # (or download the zip from the branch on GitHub)
 
 # 1. sync the fork with upstream (or use GitHub's "Sync fork" button)
-#   workflows:    git fetch upstream && git checkout main    && git merge --no-edit upstream/main
+#   workflows:    git fetch upstream && git checkout -b feat/jfrog-cli-releases upstream/main   (then skip step 2's checkout)
 #   connector-ng: git fetch upstream && git checkout develop && git merge --ff-only upstream/develop
 #   connector:    already up to date
 #   (git remote add upstream https://github.com/e-CODEX/<repo>.git if needed)
