@@ -1,165 +1,33 @@
-From 70764b7563cec12fd9bbd6fa0970d55cf6f410cb Mon Sep 17 00:00:00 2001
+From 2c6cd7b0d9d3cb229bc99767257a87fb855fdc8e Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Thu, 19 Nov 2026 10:11:42 +0000
-Subject: [PATCH] feat(ci): publish with JFrog CLI, attest artifacts and
+Subject: [PATCH] feat(ci): publish with JFrog CLI, attest the distribution and
  refresh docker images
 
 - docker-build-push: record the image in a JFrog build-info
-  (jf rt build-docker-create), embed max-mode provenance next to the BuildKit
-  SBOM, attest with an oci:// subject so setup-jfrog-cli attaches the
-  attestation to the image in Artifactory as evidence.
+  (jf rt build-docker-create), add max-mode provenance next to the BuildKit
+  SBOM, attest with an oci:// subject so setup-jfrog-cli records the
+  attestation as JFrog evidence on the image.
 - docker-build-push: add 'refresh' mode to rebuild a released tag with fresh
   base images and no cache and overwrite its image tag, optionally moving the
   floating and latest tags.
-- maven/gradle publish: deploy with 'jf mvn' / 'jf gradle artifactoryPublish'
-  through OIDC, deploy the CycloneDX SBOM, publish build-info.
-- new jfrog-publish-attest action: publish build-info, attest every artifact of
-  the build-info (provenance + SBOM) and record them as JFrog evidence.
+- maven/gradle publish: deploy with 'jf mvn deploy' / 'jf gradle
+  artifactoryPublish' through OIDC, deploy the CycloneDX SBOM, attest the
+  distribution zip (provenance + SBOM); setup-jfrog-cli publishes the
+  build-info and records the attestations as JFrog evidence.
 - setup-jfrog-cli v5.3.5 with pinned JFrog CLI 2.133.0, actions pinned by SHA.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_015o1T6BSTNddWikJrEPdP4m
 ---
- .../actions/jfrog-publish-attest/action.yaml  | 124 ++++++++++++++++
- .github/workflows/docker-build-push.yaml      |  89 ++++++++----
- .github/workflows/gradle-publish-release.yaml | 128 +++++++++++++---
- .../workflows/gradle-publish-snapshot.yaml    | 137 +++++++++++++++---
- .github/workflows/maven-publish-release.yaml  | 129 +++++++++++++----
- .github/workflows/maven-publish-snapshot.yaml | 131 ++++++++++++-----
- README.md                                     | 101 +++++++++----
- 7 files changed, 670 insertions(+), 169 deletions(-)
- create mode 100644 .github/actions/jfrog-publish-attest/action.yaml
+ .github/workflows/docker-build-push.yaml      |  89 ++++++---
+ .github/workflows/gradle-publish-release.yaml |  84 ++++++--
+ .../workflows/gradle-publish-snapshot.yaml    | 183 +++++++++++-------
+ .github/workflows/maven-publish-release.yaml  |  94 ++++++---
+ .github/workflows/maven-publish-snapshot.yaml | 109 +++++++----
+ README.md                                     | 101 +++++++---
+ 6 files changed, 452 insertions(+), 208 deletions(-)
 
-diff --git a/.github/actions/jfrog-publish-attest/action.yaml b/.github/actions/jfrog-publish-attest/action.yaml
-new file mode 100644
-index 0000000..fa5272a
---- /dev/null
-+++ b/.github/actions/jfrog-publish-attest/action.yaml
-@@ -0,0 +1,124 @@
-+name: "JFrog: publish build-info, attest and record evidence"
-+description: >
-+  Finalises a JFrog CLI build: enriches and publishes the build-info, creates
-+  GitHub build-provenance and SBOM attestations for every artifact recorded in
-+  the build-info, attaches those attestations to the artifacts in Artifactory as
-+  JFrog evidence.
-+  Requires JFrog CLI to be configured by jfrog/setup-jfrog-cli earlier in the job,
-+  with JFROG_CLI_BUILD_NAME and JFROG_CLI_BUILD_NUMBER set, and the job permissions
-+  id-token: write and attestations: write.
-+
-+inputs:
-+  sbom-path:
-+    description: "Path to a JSON SBOM (CycloneDX or SPDX). When it exists an SBOM attestation is created as well."
-+    required: false
-+    default: ""
-+  attest:
-+    description: "Create GitHub build-provenance (and SBOM) attestations for the published artifacts."
-+    required: false
-+    default: "true"
-+  evidence:
-+    description: "Attach the attestations to the artifacts in Artifactory as JFrog evidence (requires the JFrog Evidence service / Enterprise+ license)."
-+    required: false
-+    default: "true"
-+  evidence-subject-filter:
-+    description: "Extended regular expression selecting which published artifacts receive JFrog evidence."
-+    required: false
-+    default: '\.(jar|war|ear|zip|tar\.gz)$'
-+
-+outputs:
-+  subjects-file:
-+    description: "Path to the sha256 checksums file of all the published artifacts (names are Artifactory repo paths)."
-+    value: ${{ steps.subjects.outputs.file }}
-+
-+runs:
-+  using: composite
-+  steps:
-+    - name: Publish build-info to Artifactory
-+      shell: bash
-+      run: |
-+        set -euo pipefail
-+        : "${JFROG_CLI_BUILD_NAME:?JFROG_CLI_BUILD_NAME must be set}"
-+        : "${JFROG_CLI_BUILD_NUMBER:?JFROG_CLI_BUILD_NUMBER must be set}"
-+        jf rt build-add-git
-+        jf rt build-collect-env
-+        jf rt build-publish
-+
-+    - name: Resolve the published artifacts from the build-info
-+      id: subjects
-+      shell: bash
-+      run: |
-+        set -euo pipefail
-+        out_dir="${RUNNER_TEMP}/jfrog-attest"
-+        mkdir -p "${out_dir}"
-+        query=$(jq -rn --arg n "${JFROG_CLI_BUILD_NAME}" --arg b "${JFROG_CLI_BUILD_NUMBER}" \
-+          '"items.find({\"artifact.module.build.name\":{\"$eq\":\($n|tojson)},\"artifact.module.build.number\":{\"$eq\":\($b|tojson)}}).include(\"repo\",\"path\",\"name\",\"sha256\")"')
-+        printf '%s' "${query}" > "${out_dir}/query.aql"
-+        jf rt curl --silent --fail -XPOST /api/search/aql -H "Content-Type: text/plain" -T "${out_dir}/query.aql" > "${out_dir}/artifacts.json"
-+        jq -r '.results[] | select(.sha256 != null) | "\(.sha256)  \(.repo)/\(if .path == "." then "" else .path + "/" end)\(.name)"' \
-+          "${out_dir}/artifacts.json" | sort -u > "${out_dir}/subjects.sha256"
-+        count=$(wc -l < "${out_dir}/subjects.sha256")
-+        if [ "${count}" -eq 0 ]; then
-+          echo "::error::No artifacts found in build ${JFROG_CLI_BUILD_NAME}/${JFROG_CLI_BUILD_NUMBER}"
-+          exit 1
-+        fi
-+        {
-+          echo "### Published artifacts (${count})"
-+          echo '```'
-+          cat "${out_dir}/subjects.sha256"
-+          echo '```'
-+        } >> "${GITHUB_STEP_SUMMARY}"
-+        echo "file=${out_dir}/subjects.sha256" >> "${GITHUB_OUTPUT}"
-+
-+    - name: Check SBOM
-+      id: sbom
-+      shell: bash
-+      env:
-+        SBOM_PATH: ${{ inputs.sbom-path }}
-+      run: |
-+        if [ -n "${SBOM_PATH}" ] && [ -f "${SBOM_PATH}" ]; then
-+          echo "present=true" >> "${GITHUB_OUTPUT}"
-+        else
-+          [ -n "${SBOM_PATH}" ] && echo "::warning::SBOM '${SBOM_PATH}' not found, skipping the SBOM attestation"
-+          echo "present=false" >> "${GITHUB_OUTPUT}"
-+        fi
-+
-+    - name: Attest build provenance
-+      id: provenance
-+      if: ${{ inputs.attest == 'true' }}
-+      uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-+      with:
-+        subject-checksums: ${{ steps.subjects.outputs.file }}
-+
-+    - name: Attest SBOM
-+      id: sbom-attestation
-+      if: ${{ inputs.attest == 'true' && steps.sbom.outputs.present == 'true' }}
-+      uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-+      with:
-+        subject-checksums: ${{ steps.subjects.outputs.file }}
-+        sbom-path: ${{ inputs.sbom-path }}
-+
-+    - name: Attach attestations as JFrog evidence
-+      if: ${{ inputs.attest == 'true' && inputs.evidence == 'true' }}
-+      shell: bash
-+      env:
-+        SUBJECTS: ${{ steps.subjects.outputs.file }}
-+        FILTER: ${{ inputs.evidence-subject-filter }}
-+        PROVENANCE_BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
-+        SBOM_BUNDLE: ${{ steps.sbom-attestation.outputs.bundle-path }}
-+      run: |
-+        set -uo pipefail
-+        failures=0
-+        while read -r _ subject; do
-+          [[ "${subject}" =~ ${FILTER} ]] || continue
-+          for bundle in "${PROVENANCE_BUNDLE}" "${SBOM_BUNDLE}"; do
-+            [ -n "${bundle}" ] && [ -f "${bundle}" ] || continue
-+            if ! jf evd create --sigstore-bundle "${bundle}" --subject-repo-path "${subject}"; then
-+              echo "::warning::Could not attach $(basename "${bundle}") to ${subject}"
-+              failures=$((failures + 1))
-+            fi
-+          done
-+        done < "${SUBJECTS}"
-+        if [ "${failures}" -gt 0 ]; then
-+          echo "::warning::${failures} evidence upload(s) failed. The attestations are still available in GitHub (gh attestation verify)."
-+        fi
 diff --git a/.github/workflows/docker-build-push.yaml b/.github/workflows/docker-build-push.yaml
 index 46aa9b4..6a6ba31 100644
 --- a/.github/workflows/docker-build-push.yaml
@@ -319,27 +187,23 @@ index 46aa9b4..6a6ba31 100644
 -          push-to-registry: true
 -    
 diff --git a/.github/workflows/gradle-publish-release.yaml b/.github/workflows/gradle-publish-release.yaml
-index c7f0ed7..15528b4 100644
+index c7f0ed7..9769e02 100644
 --- a/.github/workflows/gradle-publish-release.yaml
 +++ b/.github/workflows/gradle-publish-release.yaml
-@@ -1,4 +1,10 @@
+@@ -1,4 +1,7 @@
  name: "Publish Release to Maven Repository"
-+# Builds and deploys a Gradle release to Artifactory with the JFrog CLI ('jf gradle artifactoryPublish').
-+# - Authentication: GitHub OIDC (no stored secrets).
-+# - A JFrog build-info (artifacts, dependencies, git and environment) is published to Artifactory.
-+# - The CycloneDX SBOM is deployed next to the artifacts and recorded in the build-info.
-+# - GitHub build-provenance and SBOM attestations are created for every deployed artifact and
-+#   attached to them in Artifactory as JFrog evidence.
++# Deploys a Gradle release to Artifactory with the JFrog CLI (OIDC authentication).
++# The CycloneDX SBOM is deployed next to the distribution, and the distribution gets a GitHub provenance and SBOM
++# attestation. At the end of the job setup-jfrog-cli publishes the build-info and records the attestations as JFrog evidence.
  on:
      workflow_call:
          inputs:
-@@ -13,9 +19,30 @@ on:
+@@ -13,9 +16,24 @@ on:
                  type: string
                  default: ""
              maven-repo-id:
 -                description: "Maven repository ID"
--                required: true
-+                description: "Deprecated: deployment is now done by the JFrog CLI, use 'deploy-repo'. Kept for backward compatibility."
++                description: "Deprecated and ignored: the JFrog CLI deploys to 'deploy-repo'"
 +                required: false
 +                type: string
 +                default: ""
@@ -348,60 +212,38 @@ index c7f0ed7..15528b4 100644
 +                required: false
 +                type: string
 +                default: "libs-release"
-+            resolve-repo:
-+                description: "Artifactory repository to resolve dependencies from (empty: use the repositories declared by the build)"
-+                required: false
-+                type: string
-+                default: ""
++            distribution-path:
++                description: "Local path (glob) of the main artifact (distribution zip) to attest"
+                 required: true
+                 type: string
 +            sbom-path:
-+                description: "Path of the aggregated CycloneDX JSON SBOM produced by the build"
++                description: "Path of the CycloneDX JSON SBOM generated by the 'cyclonedxBom' task"
 +                required: false
 +                type: string
 +                default: "build/reports/cyclonedx/bom.json"
-+            sbom-task:
-+                description: "Gradle task generating the SBOM (empty to skip SBOM generation and upload)"
-+                required: false
-                 type: string
-+                default: "cyclonedxBom"
              tag:
                  description: 'The tag to checkout (optional)'
                  required: false
-@@ -25,54 +52,113 @@ on:
-                 required: false
-                 type: string
-                 default: "production"
-+            evidence:
-+                description: "Attach the attestations to the artifacts in Artifactory as JFrog evidence"
-+                required: false
-+                type: boolean
-+                default: true
- permissions:
-     contents: read
- jobs:
+@@ -31,40 +49,37 @@ jobs:
      publish:
          name: Publish Release to Maven Repository
          permissions:
 -            contents: write
--            attestations: write
++            contents: write # dependency submission
++            id-token: write # JFrog OIDC and attestations
+             attestations: write
 -            id-token: write
-+            contents: write          # dependency submission
-+            id-token: write          # GitHub OIDC -> JFrog and Sigstore
-+            attestations: write      # GitHub attestations
          runs-on: ubuntu-latest
          environment: ${{ inputs.environment }}
 +        env:
 +            JFROG_CLI_BUILD_NAME: ${{ github.event.repository.name }}
-+            JFROG_CLI_BUILD_NUMBER: ${{ inputs.tag && format('{0}-{1}.{2}', inputs.tag, github.run_number, github.run_attempt) || format('{0}.{1}', github.run_number, github.run_attempt) }}
-+            JFROG_CLI_AVOID_NEW_VERSION_WARNING: "true"
-+            JFROG_SERVER_ID: ecodex
          steps:
              -   name: Checkout repository
 -                if: ${{ !inputs.tag }}
 -                uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 +                uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 +                with:
-+                    ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || '' }}
-+                    persist-credentials: false
++                    ref: ${{ inputs.tag }}
  
              -   name: Install Graphviz
                  uses: e-CODEX/workflows/.github/actions/install-graphviz@main
@@ -425,209 +267,198 @@ index c7f0ed7..15528b4 100644
  
              -   name: Setup JFrog CLI
 -                uses: jfrog/setup-jfrog-cli@f748a0599171a192a2668afee8d0497f7c1069df # v4.5.6
+-                id: setup-jfrog-cli
 +                uses: jfrog/setup-jfrog-cli@4c2f06da03095113100534a16d58d8a252680949 # v5.3.5
-                 id: setup-jfrog-cli
                  env:
                      JF_URL: https://scm.ecodex.eu
                  with:
 +                    version: 2.133.0
                      oidc-provider-name: setup-jfrog
-+                    custom-server-id: ${{ env.JFROG_SERVER_ID }}
-+                    # Evidence is attached explicitly by jfrog-publish-attest, one subject per artifact
-+                    disable-auto-evidence-collection: true
  
              -   name: Submit Dependency Release to GitHub Advanced Security
-                 uses: mikepenz/gradle-dependency-submission@v1
+@@ -72,7 +87,38 @@ jobs:
  
--            -   name: Publish Release
-+            -   name: Configure JFrog CLI for Gradle
-+                env:
-+                    DEPLOY_REPO: ${{ inputs.deploy-repo }}
-+                    RESOLVE_REPO: ${{ inputs.resolve-repo }}
-+                run: |
-+                    set -euo pipefail
-+                    args=(--server-id-deploy="${JFROG_SERVER_ID}" --repo-deploy="${DEPLOY_REPO}"
-+                          --use-wrapper --uses-plugin=false --deploy-maven-desc=true --deploy-ivy-desc=false)
-+                    if [ -n "${RESOLVE_REPO}" ]; then
-+                        args+=(--server-id-resolve="${JFROG_SERVER_ID}" --repo-resolve="${RESOLVE_REPO}")
-+                    fi
-+                    jf gradle-config "${args[@]}"
-+
-+            -   name: Build and publish the release with JFrog CLI
+             -   name: Publish Release
                  env:
 -                    MAVEN_REPO_ID: ${{ inputs.maven-repo-id }}
 -                    MAVEN_REPO_USERNAME: ${{ steps.setup-jfrog-cli.outputs.oidc-user }}
 -                    MAVEN_REPO_PASSWORD: ${{ steps.setup-jfrog-cli.outputs.oidc-token }}
 -                run: ./gradlew publish ${{ inputs.gradle-parameters }}
-+                    GRADLE_PARAMETERS: ${{ inputs.gradle-parameters }}
-+                    SBOM_TASK: ${{ inputs.sbom-task }}
-+                # The JFrog Gradle extractor is applied through an init script, which is not configuration-cache compatible
-+                run: |
-+                    # shellcheck disable=SC2086 # SBOM_TASK and GRADLE_PARAMETERS are intentionally word-split
-+                    jf gradle clean ${SBOM_TASK} artifactoryPublish --no-configuration-cache ${GRADLE_PARAMETERS}
-+
-+            -   name: Deploy the SBOM next to the artifacts
-+                if: ${{ inputs.sbom-task != '' }}
-+                env:
 +                    DEPLOY_REPO: ${{ inputs.deploy-repo }}
++                    GRADLE_PARAMETERS: ${{ inputs.gradle-parameters }}
++                run: |
++                    jf gradle-config --repo-deploy="${DEPLOY_REPO}" --use-wrapper --deploy-ivy-desc=false
++                    # The JFrog Gradle extractor does not support the configuration cache
++                    jf gradle clean cyclonedxBom artifactoryPublish --no-configuration-cache ${GRADLE_PARAMETERS}
++
++            -   name: Deploy the SBOM next to the distribution
++                id: distribution
++                env:
++                    DISTRIBUTION: ${{ inputs.distribution-path }}
 +                    SBOM_PATH: ${{ inputs.sbom-path }}
 +                run: |
-+                    set -euo pipefail
-+                    if [ ! -f "${SBOM_PATH}" ]; then
-+                        echo "::error::SBOM '${SBOM_PATH}' was not generated"
-+                        exit 1
-+                    fi
-+                    props=$(./gradlew -q properties --no-configuration-cache)
-+                    group=$(sed -n 's/^group: //p' <<< "${props}")
-+                    name=$(sed -n 's/^name: //p' <<< "${props}")
-+                    version=$(sed -n 's/^version: //p' <<< "${props}")
-+                    target="${DEPLOY_REPO}/${group//.//}/${name}/${version}/${name}-${version}-cyclonedx"
-+                    jf rt upload "${SBOM_PATH}" "${target}.json" --flat --module="${group}:${name}-sbom:${version}"
-+                    xml="${SBOM_PATH%.json}.xml"
-+                    if [ -f "${xml}" ]; then
-+                        jf rt upload "${xml}" "${target}.xml" --flat --module="${group}:${name}-sbom:${version}"
-+                    fi
++                    zip=$(ls ${DISTRIBUTION})
++                    sha=$(sha256sum "${zip}" | cut -d' ' -f1)
++                    # Path of the deployed distribution in Artifactory, found by checksum
++                    target=$(jf rt curl -s -XPOST /api/search/aql -H "Content-Type: text/plain" \
++                      -d "items.find({\"sha256\":\"${sha}\"}).include(\"repo\",\"path\",\"name\")" \
++                      | jq -r '.results[0] // error("distribution not found in Artifactory") | "\(.repo)/\(.path)/\(.name)"')
++                    jf rt upload "${SBOM_PATH}" "${target%.zip}-cyclonedx.json" --flat
++                    echo "subject-name=${target}" >> "${GITHUB_OUTPUT}"
++                    echo "subject-digest=sha256:${sha}" >> "${GITHUB_OUTPUT}"
 +
-+            -   name: Publish build-info, attest and record evidence
-+                uses: e-CODEX/workflows/.github/actions/jfrog-publish-attest@main
++            -   name: Attest the distribution provenance
++                uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
 +                with:
++                    subject-name: ${{ steps.distribution.outputs.subject-name }}
++                    subject-digest: ${{ steps.distribution.outputs.subject-digest }}
++
++            -   name: Attest the distribution SBOM
++                uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
++                with:
++                    subject-name: ${{ steps.distribution.outputs.subject-name }}
++                    subject-digest: ${{ steps.distribution.outputs.subject-digest }}
 +                    sbom-path: ${{ inputs.sbom-path }}
-+                    evidence: ${{ inputs.evidence }}
-+
-+            -   name: Upload SBOM as workflow artifact
-+                uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-+                with:
-+                    name: sbom-${{ github.event.repository.name }}-${{ inputs.tag || github.sha }}
-+                    path: ${{ inputs.sbom-path }}
 diff --git a/.github/workflows/gradle-publish-snapshot.yaml b/.github/workflows/gradle-publish-snapshot.yaml
-index 23ffd36..6dd05de 100644
+index 23ffd36..5902d3d 100644
 --- a/.github/workflows/gradle-publish-snapshot.yaml
 +++ b/.github/workflows/gradle-publish-snapshot.yaml
-@@ -1,4 +1,6 @@
+@@ -1,77 +1,128 @@
  name: "Publish Snapshot to Maven Repository"
-+# Builds and deploys a Gradle -SNAPSHOT to Artifactory with the JFrog CLI ('jf gradle artifactoryPublish').
-+# Same supply-chain metadata as gradle-publish-release.yaml: build-info, SBOM, GitHub attestations and JFrog evidence.
++# Deploys a Gradle -SNAPSHOT to Artifactory with the JFrog CLI (OIDC authentication).
++# The CycloneDX SBOM is deployed next to the distribution, and the distribution gets a GitHub provenance and SBOM
++# attestation. At the end of the job setup-jfrog-cli publishes the build-info and records the attestations as JFrog evidence.
  on:
-   workflow_call:
-     inputs:
-@@ -13,10 +15,40 @@ on:
-         type: string
-         default: ""
-       maven-repo-id:
+-  workflow_call:
+-    inputs:
+-      java-version:
+-        description: "Java version to use for the build."
+-        required: true
+-        default: 21
+-        type: number
+-      gradle-parameters:
+-        description: "Extra parameters to pass to Gradle"
+-        required: false
+-        type: string
+-        default: ""
+-      maven-repo-id:
 -        description: "Maven repository ID"
 -        required: true
-+        description: "Deprecated: deployment is now done by the JFrog CLI, use 'deploy-repo'. Kept for backward compatibility."
-+        required: false
-         type: string
+-        type: string
 -
-+        default: ""
-+      deploy-repo:
-+        description: "Artifactory repository to deploy the snapshot to"
-+        required: false
-+        type: string
-+        default: "libs-snapshot"
-+      resolve-repo:
-+        description: "Artifactory repository to resolve dependencies from (empty: use the repositories declared by the build)"
-+        required: false
-+        type: string
-+        default: ""
-+      sbom-path:
-+        description: "Path of the aggregated CycloneDX JSON SBOM produced by the build"
-+        required: false
-+        type: string
-+        default: "build/reports/cyclonedx/bom.json"
-+      sbom-task:
-+        description: "Gradle task generating the SBOM (empty to skip SBOM generation and upload)"
-+        required: false
-+        type: string
-+        default: "cyclonedxBom"
-+      attest:
-+        description: "Create GitHub attestations for the snapshot artifacts"
-+        required: false
-+        type: boolean
-+        default: true
-+      evidence:
-+        description: "Attach the attestations to the artifacts in Artifactory as JFrog evidence"
-+        required: false
-+        type: boolean
-+        default: true
++    workflow_call:
++        inputs:
++            java-version:
++                description: "Java version to use for the build."
++                required: true
++                type: number
++                default: 21
++            gradle-parameters:
++                description: "Extra parameters to pass to Gradle"
++                required: false
++                type: string
++                default: ""
++            maven-repo-id:
++                description: "Deprecated and ignored: the JFrog CLI deploys to 'deploy-repo'"
++                required: false
++                type: string
++                default: ""
++            deploy-repo:
++                description: "Artifactory repository to deploy the snapshot to"
++                required: false
++                type: string
++                default: "libs-snapshot"
++            distribution-path:
++                description: "Local path (glob) of the main artifact (distribution zip) to attest"
++                required: true
++                type: string
++            sbom-path:
++                description: "Path of the CycloneDX JSON SBOM generated by the 'cyclonedxBom' task"
++                required: false
++                type: string
++                default: "build/reports/cyclonedx/bom.json"
  permissions:
-   contents: read
- 
-@@ -24,54 +56,111 @@ jobs:
-   publish-snapshot:
-     name: Publish Snapshot to Maven Repository
-     permissions:
+-  contents: read
+-
++    contents: read
+ jobs:
+-  publish-snapshot:
+-    name: Publish Snapshot to Maven Repository
+-    permissions:
 -      contents: write
 -      attestations: write
 -      id-token: write
-+      contents: write          # dependency submission
-+      id-token: write          # GitHub OIDC -> JFrog and Sigstore
-+      attestations: write      # GitHub attestations
-     runs-on: ubuntu-latest
-+    env:
-+      JFROG_CLI_BUILD_NAME: ${{ github.event.repository.name }}-snapshot
-+      JFROG_CLI_BUILD_NUMBER: ${{ format('{0}.{1}', github.run_number, github.run_attempt) }}
-+      JFROG_CLI_AVOID_NEW_VERSION_WARNING: "true"
-+      JFROG_SERVER_ID: ecodex
-     steps:
-       - name: Checkout code
+-    runs-on: ubuntu-latest
+-    steps:
+-      - name: Checkout code
 -        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-+        with:
-+          persist-credentials: false
++    publish:
++        name: Publish Snapshot to Maven Repository
++        permissions:
++            contents: write # dependency submission
++            id-token: write # JFrog OIDC and attestations
++            attestations: write
++        runs-on: ubuntu-latest
++        env:
++            JFROG_CLI_BUILD_NAME: ${{ github.event.repository.name }}-snapshot
++        steps:
++            -   name: Checkout repository
++                uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
  
-       - name: Install Graphviz
-         uses: e-CODEX/workflows/.github/actions/install-graphviz@main
+-      - name: Install Graphviz
+-        uses: e-CODEX/workflows/.github/actions/install-graphviz@main
++            -   name: Install Graphviz
++                uses: e-CODEX/workflows/.github/actions/install-graphviz@main
  
-       - name: Setup Java
+-      - name: Setup Java
 -        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
-+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
-         with:
-           distribution: 'temurin'
-           java-version: ${{ inputs.java-version }}
+-        with:
+-          distribution: 'temurin'
+-          java-version: ${{ inputs.java-version }}
++            -   name: Setup Java
++                uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
++                with:
++                    distribution: 'temurin'
++                    java-version: ${{ inputs.java-version }}
  
-       - name: Setup Gradle
+-      - name: Setup Gradle
 -        uses: gradle/actions/setup-gradle@06832c7b30a0129d7fb559bcc6e43d26f6374244 # v4.3.1
-+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
-+
-+      - name: Check if version is Snapshot
-+        id: check-version
-+        run: |
-+          VERSION=$(./gradlew properties -q | grep "^version:" | awk '{print $2}')
-+          if [[ "$VERSION" == *"-SNAPSHOT" ]]; then
-+            echo "Version $VERSION is a SNAPSHOT version."
-+            echo "snapshot=true" >> "$GITHUB_OUTPUT"
-+          else
-+            echo "Version $VERSION is a final version."
-+            echo "snapshot=false" >> "$GITHUB_OUTPUT"
-+          fi
++            -   name: Setup Gradle
++                uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
  
-       - name: Setup JFrog CLI
+-      - name: Setup JFrog CLI
 -        uses: jfrog/setup-jfrog-cli@f748a0599171a192a2668afee8d0497f7c1069df # v4.5.6
-+        if: ${{ steps.check-version.outputs.snapshot == 'true' }}
-+        uses: jfrog/setup-jfrog-cli@4c2f06da03095113100534a16d58d8a252680949 # v5.3.5
-         id: setup-jfrog-cli
-         env:
-           JF_URL: https://scm.ecodex.eu
-         with:
-+          version: 2.133.0
-           oidc-provider-name: setup-jfrog
-+          custom-server-id: ${{ env.JFROG_SERVER_ID }}
-+          disable-auto-evidence-collection: true
+-        id: setup-jfrog-cli
+-        env:
+-          JF_URL: https://scm.ecodex.eu
+-        with:
+-          oidc-provider-name: setup-jfrog
++            -   name: Check if version is Snapshot
++                id: check-version
++                run: |
++                    VERSION=$(./gradlew properties -q | grep "^version:" | awk '{print $2}')
++                    if [[ "$VERSION" == *"-SNAPSHOT" ]]; then
++                        echo "snapshot=true" >> "$GITHUB_OUTPUT"
++                    else
++                        echo "Version $VERSION is not a SNAPSHOT, nothing to publish."
++                        echo "snapshot=false" >> "$GITHUB_OUTPUT"
++                    fi
  
-       - name: Submit Dependency Snapshot to GitHub Advanced Security
-         uses: mikepenz/gradle-dependency-submission@v1
-         # Alternative: advanced-security/gradle-dependency-submission-action
+-      - name: Submit Dependency Snapshot to GitHub Advanced Security
+-        uses: mikepenz/gradle-dependency-submission@v1
+-        # Alternative: advanced-security/gradle-dependency-submission-action
++            -   name: Setup JFrog CLI
++                if: ${{ steps.check-version.outputs.snapshot == 'true' }}
++                uses: jfrog/setup-jfrog-cli@4c2f06da03095113100534a16d58d8a252680949 # v5.3.5
++                env:
++                    JF_URL: https://scm.ecodex.eu
++                with:
++                    version: 2.133.0
++                    oidc-provider-name: setup-jfrog
  
 -      - name: Check if version is Snapshot
 -        id: check-version
-+      - name: Configure JFrog CLI for Gradle
-+        if: ${{ steps.check-version.outputs.snapshot == 'true' }}
-+        env:
-+          DEPLOY_REPO: ${{ inputs.deploy-repo }}
-+          RESOLVE_REPO: ${{ inputs.resolve-repo }}
-         run: |
+-        run: |
 -          VERSION=$(./gradlew properties -q | grep "^version:" | awk '{print $2}')
 -          if [[ "$VERSION" == *"-SNAPSHOT" ]]; then
 -            echo "Version $VERSION is a SNAPSHOT version."
@@ -635,80 +466,77 @@ index 23ffd36..6dd05de 100644
 -          else
 -            echo "Version $VERSION is a final version."
 -            echo "snapshot=false" >> "$GITHUB_OUTPUT"
-+          set -euo pipefail
-+          args=(--server-id-deploy="${JFROG_SERVER_ID}" --repo-deploy="${DEPLOY_REPO}"
-+                --use-wrapper --uses-plugin=false --deploy-maven-desc=true --deploy-ivy-desc=false)
-+          if [ -n "${RESOLVE_REPO}" ]; then
-+            args+=(--server-id-resolve="${JFROG_SERVER_ID}" --repo-resolve="${RESOLVE_REPO}")
-           fi
-+          jf gradle-config "${args[@]}"
+-          fi
++            -   name: Submit Dependency Snapshot to GitHub Advanced Security
++                uses: mikepenz/gradle-dependency-submission@v1
  
 -      - name: Publish Snapshot
-+      - name: Build and publish the snapshot with JFrog CLI
-         if: ${{ steps.check-version.outputs.snapshot == 'true' }}
-         env:
+-        if: ${{ steps.check-version.outputs.snapshot == 'true' }}
+-        env:
 -          MAVEN_REPO_ID: ${{ inputs.maven-repo-id }}
 -          MAVEN_REPO_USERNAME: ${{ steps.setup-jfrog-cli.outputs.oidc-user }}
 -          MAVEN_REPO_PASSWORD: ${{ steps.setup-jfrog-cli.outputs.oidc-token }}
 -        run: ./gradlew publish ${{ inputs.gradle-parameters }}
-+          GRADLE_PARAMETERS: ${{ inputs.gradle-parameters }}
-+          SBOM_TASK: ${{ inputs.sbom-task }}
-+        # The JFrog Gradle extractor is applied through an init script, which is not configuration-cache compatible
-+        run: |
-+          # shellcheck disable=SC2086 # SBOM_TASK and GRADLE_PARAMETERS are intentionally word-split
-+          jf gradle clean ${SBOM_TASK} artifactoryPublish --no-configuration-cache ${GRADLE_PARAMETERS}
++            -   name: Publish Snapshot
++                if: ${{ steps.check-version.outputs.snapshot == 'true' }}
++                env:
++                    DEPLOY_REPO: ${{ inputs.deploy-repo }}
++                    GRADLE_PARAMETERS: ${{ inputs.gradle-parameters }}
++                run: |
++                    jf gradle-config --repo-deploy="${DEPLOY_REPO}" --use-wrapper --deploy-ivy-desc=false
++                    # The JFrog Gradle extractor does not support the configuration cache
++                    jf gradle clean cyclonedxBom artifactoryPublish --no-configuration-cache ${GRADLE_PARAMETERS}
 +
-+      - name: Deploy the SBOM next to the artifacts
-+        if: ${{ steps.check-version.outputs.snapshot == 'true' && inputs.sbom-task != '' }}
-+        env:
-+          DEPLOY_REPO: ${{ inputs.deploy-repo }}
-+          SBOM_PATH: ${{ inputs.sbom-path }}
-+        run: |
-+          set -euo pipefail
-+          if [ ! -f "${SBOM_PATH}" ]; then
-+            echo "::error::SBOM '${SBOM_PATH}' was not generated"
-+            exit 1
-+          fi
-+          props=$(./gradlew -q properties --no-configuration-cache)
-+          group=$(sed -n 's/^group: //p' <<< "${props}")
-+          name=$(sed -n 's/^name: //p' <<< "${props}")
-+          version=$(sed -n 's/^version: //p' <<< "${props}")
-+          target="${DEPLOY_REPO}/${group//.//}/${name}/${version}/${name}-${version}-cyclonedx"
-+          jf rt upload "${SBOM_PATH}" "${target}.json" --flat --module="${group}:${name}-sbom:${version}"
-+          xml="${SBOM_PATH%.json}.xml"
-+          if [ -f "${xml}" ]; then
-+            jf rt upload "${xml}" "${target}.xml" --flat --module="${group}:${name}-sbom:${version}"
-+          fi
++            -   name: Deploy the SBOM next to the distribution
++                if: ${{ steps.check-version.outputs.snapshot == 'true' }}
++                id: distribution
++                env:
++                    DISTRIBUTION: ${{ inputs.distribution-path }}
++                    SBOM_PATH: ${{ inputs.sbom-path }}
++                run: |
++                    zip=$(ls ${DISTRIBUTION})
++                    sha=$(sha256sum "${zip}" | cut -d' ' -f1)
++                    # Path of the deployed distribution in Artifactory, found by checksum
++                    target=$(jf rt curl -s -XPOST /api/search/aql -H "Content-Type: text/plain" \
++                      -d "items.find({\"sha256\":\"${sha}\"}).include(\"repo\",\"path\",\"name\")" \
++                      | jq -r '.results[0] // error("distribution not found in Artifactory") | "\(.repo)/\(.path)/\(.name)"')
++                    jf rt upload "${SBOM_PATH}" "${target%.zip}-cyclonedx.json" --flat
++                    echo "subject-name=${target}" >> "${GITHUB_OUTPUT}"
++                    echo "subject-digest=sha256:${sha}" >> "${GITHUB_OUTPUT}"
 +
-+      - name: Publish build-info, attest and record evidence
-+        if: ${{ steps.check-version.outputs.snapshot == 'true' }}
-+        uses: e-CODEX/workflows/.github/actions/jfrog-publish-attest@main
-+        with:
-+          sbom-path: ${{ inputs.sbom-path }}
-+          attest: ${{ inputs.attest }}
-+          evidence: ${{ inputs.evidence }}
++            -   name: Attest the distribution provenance
++                if: ${{ steps.check-version.outputs.snapshot == 'true' }}
++                uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
++                with:
++                    subject-name: ${{ steps.distribution.outputs.subject-name }}
++                    subject-digest: ${{ steps.distribution.outputs.subject-digest }}
++
++            -   name: Attest the distribution SBOM
++                if: ${{ steps.check-version.outputs.snapshot == 'true' }}
++                uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
++                with:
++                    subject-name: ${{ steps.distribution.outputs.subject-name }}
++                    subject-digest: ${{ steps.distribution.outputs.subject-digest }}
++                    sbom-path: ${{ inputs.sbom-path }}
 diff --git a/.github/workflows/maven-publish-release.yaml b/.github/workflows/maven-publish-release.yaml
-index 6388416..f523cb5 100644
+index 6388416..00a3e48 100644
 --- a/.github/workflows/maven-publish-release.yaml
 +++ b/.github/workflows/maven-publish-release.yaml
-@@ -1,4 +1,10 @@
+@@ -1,4 +1,8 @@
  name: "Publish Release to Maven Repository"
-+# Builds and deploys a Maven release to Artifactory with the JFrog CLI ('jf mvn deploy').
-+# - Authentication: GitHub OIDC (no stored secrets, no settings.xml credentials).
-+# - A JFrog build-info (artifacts, dependencies, git and environment) is published to Artifactory.
-+# - The CycloneDX SBOM attached by the cyclonedx-maven-plugin is deployed with the artifacts.
-+# - GitHub build-provenance and SBOM attestations are created for every deployed artifact and
-+#   attached to them in Artifactory as JFrog evidence.
++# Deploys a Maven release to Artifactory with the JFrog CLI (OIDC authentication).
++# The CycloneDX SBOM attached by the cyclonedx-maven-plugin is deployed with the artifacts, and the distribution gets a
++# GitHub provenance and SBOM attestation. At the end of the job setup-jfrog-cli publishes the build-info and records the
++# attestations as JFrog evidence.
  on:
    workflow_call:
      inputs:
-@@ -13,9 +19,35 @@ on:
+@@ -13,9 +17,24 @@ on:
          type: string
          default: ""
        maven-repo-id:
 -        description: "Maven repository ID"
--        required: true
-+        description: "Deprecated: deployment is now done by the JFrog CLI, use 'deploy-repo'. Kept for backward compatibility."
++        description: "Deprecated and ignored: the JFrog CLI deploys to 'deploy-repo'"
 +        required: false
 +        type: string
 +        default: ""
@@ -717,39 +545,19 @@ index 6388416..f523cb5 100644
 +        required: false
 +        type: string
 +        default: "ecodex-releases"
-+      deploy-snapshot-repo:
-+        description: "Artifactory repository used if the version is a -SNAPSHOT"
-+        required: false
-+        type: string
-+        default: "ecodex-snapshots"
-+      resolve-repo:
-+        description: "Artifactory release repository to resolve dependencies from (empty: use the repositories declared in the POM)"
-+        required: false
-+        type: string
-+        default: ""
-+      resolve-snapshot-repo:
-+        description: "Artifactory snapshot repository to resolve dependencies from (empty: use the repositories declared in the POM)"
-+        required: false
-+        type: string
-+        default: ""
-+      sbom-path:
-+        description: "Path of the aggregated CycloneDX JSON SBOM produced by the build"
-+        required: false
++      distribution-path:
++        description: "Local path (glob) of the main artifact (distribution zip) to attest"
+         required: true
          type: string
++      sbom-path:
++        description: "Path of the aggregated CycloneDX JSON SBOM"
++        required: false
++        type: string
 +        default: "target/bom.json"
        tag:
          description: 'The tag to checkout (optional)'
          required: false
-@@ -25,59 +57,94 @@ on:
-         required: false
-         type: string
-         default: "production"
--
-+      evidence:
-+        description: "Attach the attestations to the artifacts in Artifactory as JFrog evidence"
-+        required: false
-+        type: boolean
-+        default: true
+@@ -29,55 +48,72 @@ on:
  permissions:
    contents: read
  
@@ -761,16 +569,13 @@ index 6388416..f523cb5 100644
 -      contents: write
 -      attestations: write # Required for attestation
 -      id-token: write # Required for JFrog CLI setup
-+      contents: write          # dependency submission
-+      id-token: write          # GitHub OIDC -> JFrog and Sigstore
-+      attestations: write      # GitHub attestations
++      contents: write # dependency submission
++      id-token: write # JFrog OIDC and attestations
++      attestations: write
      runs-on: ubuntu-latest
      environment: ${{ inputs.environment }}
 +    env:
 +      JFROG_CLI_BUILD_NAME: ${{ github.event.repository.name }}
-+      JFROG_CLI_BUILD_NUMBER: ${{ inputs.tag && format('{0}-{1}.{2}', inputs.tag, github.run_number, github.run_attempt) || format('{0}.{1}', github.run_number, github.run_attempt) }}
-+      JFROG_CLI_AVOID_NEW_VERSION_WARNING: "true"
-+      JFROG_SERVER_ID: ecodex
      steps:
 -
        - name: Checkout repository
@@ -778,8 +583,7 @@ index 6388416..f523cb5 100644
 -        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 +        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 +        with:
-+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || '' }}
-+          persist-credentials: false
++          ref: ${{ inputs.tag }}
  
        - name: Install Graphviz
          uses: e-CODEX/workflows/.github/actions/install-graphviz@main
@@ -796,12 +600,11 @@ index 6388416..f523cb5 100644
          with:
            distribution: 'temurin'
            java-version: ${{ inputs.java-version }}
-+          cache: maven
  
        - name: Setup JFrog CLI
 -        uses: jfrog/setup-jfrog-cli@f748a0599171a192a2668afee8d0497f7c1069df # v4.5.6
+-        id: setup-jfrog-cli
 +        uses: jfrog/setup-jfrog-cli@4c2f06da03095113100534a16d58d8a252680949 # v5.3.5
-         id: setup-jfrog-cli
          env:
 -            JF_URL: https://scm.ecodex.eu
 -        with:
@@ -818,64 +621,55 @@ index 6388416..f523cb5 100644
 -            }]
 +          version: 2.133.0
 +          oidc-provider-name: setup-jfrog
-+          custom-server-id: ${{ env.JFROG_SERVER_ID }}
-+          # Evidence is attached explicitly by jfrog-publish-attest, one subject per artifact
-+          disable-auto-evidence-collection: true
  
        - name: Submit Dependency Release to GitHub Advanced Security
          uses: advanced-security/maven-dependency-submission-action@b275d12641ac2d2108b2cbb7598b154ad2f2cee8 # v5.0.0
  
--      - name: Publish Release
+       - name: Publish Release
 -        run: mvn -B -e deploy -DrepositoryId=${{ inputs.maven-repo-id }} ${{ inputs.maven-parameters }}
-+      - name: Configure JFrog CLI for Maven
 +        env:
 +          DEPLOY_REPO: ${{ inputs.deploy-repo }}
-+          DEPLOY_SNAPSHOT_REPO: ${{ inputs.deploy-snapshot-repo }}
-+          RESOLVE_REPO: ${{ inputs.resolve-repo }}
-+          RESOLVE_SNAPSHOT_REPO: ${{ inputs.resolve-snapshot-repo }}
-+        run: |
-+          set -euo pipefail
-+          args=(--server-id-deploy="${JFROG_SERVER_ID}"
-+                --repo-deploy-releases="${DEPLOY_REPO}"
-+                --repo-deploy-snapshots="${DEPLOY_SNAPSHOT_REPO}")
-+          if [ -n "${RESOLVE_REPO}" ]; then
-+            args+=(--server-id-resolve="${JFROG_SERVER_ID}"
-+                   --repo-resolve-releases="${RESOLVE_REPO}"
-+                   --repo-resolve-snapshots="${RESOLVE_SNAPSHOT_REPO:-${RESOLVE_REPO}}")
-+          fi
-+          jf mvn-config "${args[@]}"
-+
-+      - name: Build and deploy the release with JFrog CLI
-+        env:
 +          MAVEN_PARAMETERS: ${{ inputs.maven-parameters }}
 +        run: |
-+          # shellcheck disable=SC2086 # MAVEN_PARAMETERS is intentionally word-split
-+          jf mvn -B -e clean deploy ${MAVEN_PARAMETERS}
++          jf mvn-config --repo-deploy-releases="${DEPLOY_REPO}" --repo-deploy-snapshots="${DEPLOY_REPO}"
++          jf mvn -B -e deploy ${MAVEN_PARAMETERS}
 +
-+      - name: Publish build-info, attest and record evidence
-+        uses: e-CODEX/workflows/.github/actions/jfrog-publish-attest@main
++      - name: Locate the distribution in Artifactory
++        id: distribution
++        env:
++          DISTRIBUTION: ${{ inputs.distribution-path }}
++        run: |
++          sha=$(sha256sum $(ls ${DISTRIBUTION}) | cut -d' ' -f1)
++          subject=$(jf rt curl -s -XPOST /api/search/aql -H "Content-Type: text/plain" \
++            -d "items.find({\"sha256\":\"${sha}\"}).include(\"repo\",\"path\",\"name\")" \
++            | jq -r '.results[0] // error("distribution not found in Artifactory") | "\(.repo)/\(.path)/\(.name)"')
++          echo "subject-name=${subject}" >> "${GITHUB_OUTPUT}"
++          echo "subject-digest=sha256:${sha}" >> "${GITHUB_OUTPUT}"
++
++      - name: Attest the distribution provenance
++        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
 +        with:
++          subject-name: ${{ steps.distribution.outputs.subject-name }}
++          subject-digest: ${{ steps.distribution.outputs.subject-digest }}
++
++      - name: Attest the distribution SBOM
++        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
++        with:
++          subject-name: ${{ steps.distribution.outputs.subject-name }}
++          subject-digest: ${{ steps.distribution.outputs.subject-digest }}
 +          sbom-path: ${{ inputs.sbom-path }}
-+          evidence: ${{ inputs.evidence }}
-+
-+      - name: Upload SBOM as workflow artifact
-+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-+        with:
-+          name: sbom-${{ github.event.repository.name }}-${{ inputs.tag || github.sha }}
-+          path: ${{ inputs.sbom-path }}
-+          if-no-files-found: warn
 diff --git a/.github/workflows/maven-publish-snapshot.yaml b/.github/workflows/maven-publish-snapshot.yaml
-index 10566f5..31b4c7c 100644
+index 10566f5..7de5780 100644
 --- a/.github/workflows/maven-publish-snapshot.yaml
 +++ b/.github/workflows/maven-publish-snapshot.yaml
 @@ -1,4 +1,6 @@
  name: "Publish Snapshot to Maven Repository"
-+# Builds and deploys a Maven -SNAPSHOT to Artifactory with the JFrog CLI ('jf mvn deploy').
-+# Same supply-chain metadata as maven-publish-release.yaml: build-info, SBOM, GitHub attestations and JFrog evidence.
++# Deploys a Maven -SNAPSHOT to Artifactory with the JFrog CLI (OIDC authentication).
++# Same SBOM, attestations, build-info and JFrog evidence as maven-publish-release.yaml.
  on:
    workflow_call:
      inputs:
-@@ -10,56 +12,74 @@ on:
+@@ -10,71 +12,110 @@ on:
        maven-parameters:
          description: "Extra parameters to pass to Maven"
          required: false
@@ -884,42 +678,25 @@ index 10566f5..31b4c7c 100644
          default: ""
        maven-repo-id:
 -        description: "Maven repository ID"
--        required: true
-+        description: "Deprecated: deployment is now done by the JFrog CLI, use 'deploy-repo'. Kept for backward compatibility."
++        description: "Deprecated and ignored: the JFrog CLI deploys to 'deploy-repo'"
 +        required: false
-         type: string
--
++        type: string
 +        default: ""
 +      deploy-repo:
 +        description: "Artifactory repository to deploy the snapshot to"
 +        required: false
 +        type: string
 +        default: "ecodex-snapshots"
-+      resolve-repo:
-+        description: "Artifactory release repository to resolve dependencies from (empty: use the repositories declared in the POM)"
-+        required: false
-+        type: string
-+        default: ""
-+      resolve-snapshot-repo:
-+        description: "Artifactory snapshot repository to resolve dependencies from (empty: use the repositories declared in the POM)"
-+        required: false
-+        type: string
-+        default: ""
++      distribution-path:
++        description: "Local path (glob) of the main artifact (distribution zip) to attest"
+         required: true
+         type: string
 +      sbom-path:
-+        description: "Path of the aggregated CycloneDX JSON SBOM produced by the build"
++        description: "Path of the aggregated CycloneDX JSON SBOM"
 +        required: false
 +        type: string
 +        default: "target/bom.json"
-+      attest:
-+        description: "Create GitHub attestations for the snapshot artifacts"
-+        required: false
-+        type: boolean
-+        default: true
-+      evidence:
-+        description: "Attach the attestations to the artifacts in Artifactory as JFrog evidence"
-+        required: false
-+        type: boolean
-+        default: true
+ 
  permissions:
    contents: read
  
@@ -931,22 +708,17 @@ index 10566f5..31b4c7c 100644
 -      contents: write
 -      attestations: write # Required for attestation
 -      id-token: write # Required for JFrog CLI setup
-+      contents: write          # dependency submission
-+      id-token: write          # GitHub OIDC -> JFrog and Sigstore
-+      attestations: write      # GitHub attestations
++      contents: write # dependency submission
++      id-token: write # JFrog OIDC and attestations
++      attestations: write
      runs-on: ubuntu-latest
 +    env:
 +      JFROG_CLI_BUILD_NAME: ${{ github.event.repository.name }}-snapshot
-+      JFROG_CLI_BUILD_NUMBER: ${{ format('{0}.{1}', github.run_number, github.run_attempt) }}
-+      JFROG_CLI_AVOID_NEW_VERSION_WARNING: "true"
-+      JFROG_SERVER_ID: ecodex
      steps:
        - name: Checkout code
 -        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 -        
 +        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-+        with:
-+          persist-credentials: false
 +
        - name: Install Graphviz
          uses: e-CODEX/workflows/.github/actions/install-graphviz@main
@@ -957,7 +729,7 @@ index 10566f5..31b4c7c 100644
          with:
            distribution: 'temurin'
            java-version: ${{ inputs.java-version }}
--
+ 
 -      - name: Setup JFrog CLI
 -        uses: jfrog/setup-jfrog-cli@f748a0599171a192a2668afee8d0497f7c1069df # v4.5.6
 -        id: setup-jfrog-cli
@@ -977,66 +749,73 @@ index 10566f5..31b4c7c 100644
 -
 -      - name: Submit Dependency Snapshot to GitHub Advanced Security
 -        uses: advanced-security/maven-dependency-submission-action@b275d12641ac2d2108b2cbb7598b154ad2f2cee8 # v5.0.0
-+          cache: maven
- 
+-
        - name: Check if version is Snapshot
          id: check-version
-@@ -75,6 +95,51 @@ jobs:
+         run: |
+-          # Use Maven to extract the version from the pom.xml file
+           VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+-          # Check if the version is a snapshot
+           if [[ "$VERSION" == *"-SNAPSHOT" ]]; then
+-              echo "Version $VERSION is a SNAPSHOT version."
+               echo "snapshot=true" >> "$GITHUB_OUTPUT"
+           else
+-              echo "Version $VERSION is a final version."
++              echo "Version $VERSION is not a SNAPSHOT, nothing to publish."
                echo "snapshot=false" >> "$GITHUB_OUTPUT"
            fi
  
--      - name: Publish Snapshot
 +      - name: Setup JFrog CLI
 +        if: ${{ steps.check-version.outputs.snapshot == 'true' }}
 +        uses: jfrog/setup-jfrog-cli@4c2f06da03095113100534a16d58d8a252680949 # v5.3.5
-+        id: setup-jfrog-cli
 +        env:
 +          JF_URL: https://scm.ecodex.eu
 +        with:
 +          version: 2.133.0
 +          oidc-provider-name: setup-jfrog
-+          custom-server-id: ${{ env.JFROG_SERVER_ID }}
-+          disable-auto-evidence-collection: true
 +
 +      - name: Submit Dependency Snapshot to GitHub Advanced Security
 +        uses: advanced-security/maven-dependency-submission-action@b275d12641ac2d2108b2cbb7598b154ad2f2cee8 # v5.0.0
 +
-+      - name: Configure JFrog CLI for Maven
-+        if: ${{ steps.check-version.outputs.snapshot == 'true' }}
-+        env:
-+          DEPLOY_REPO: ${{ inputs.deploy-repo }}
-+          RESOLVE_REPO: ${{ inputs.resolve-repo }}
-+          RESOLVE_SNAPSHOT_REPO: ${{ inputs.resolve-snapshot-repo }}
-+        run: |
-+          set -euo pipefail
-+          args=(--server-id-deploy="${JFROG_SERVER_ID}"
-+                --repo-deploy-releases="${DEPLOY_REPO}"
-+                --repo-deploy-snapshots="${DEPLOY_REPO}")
-+          if [ -n "${RESOLVE_REPO}" ]; then
-+            args+=(--server-id-resolve="${JFROG_SERVER_ID}"
-+                   --repo-resolve-releases="${RESOLVE_REPO}"
-+                   --repo-resolve-snapshots="${RESOLVE_SNAPSHOT_REPO:-${RESOLVE_REPO}}")
-+          fi
-+          jf mvn-config "${args[@]}"
-+
-+      - name: Build and deploy the snapshot with JFrog CLI
-+        if: ${{ steps.check-version.outputs.snapshot == 'true' }}
-+        env:
-+          MAVEN_PARAMETERS: ${{ inputs.maven-parameters }}
-+        run: |
-+          # shellcheck disable=SC2086 # MAVEN_PARAMETERS is intentionally word-split
-+          jf mvn -B -e clean deploy ${MAVEN_PARAMETERS}
-+
-+      - name: Publish build-info, attest and record evidence
+       - name: Publish Snapshot
          if: ${{ steps.check-version.outputs.snapshot == 'true' }}
 -        run: mvn -B -e deploy -DrepositoryId=${{ inputs.maven-repo-id }} ${{ inputs.maven-parameters }}
-+        uses: e-CODEX/workflows/.github/actions/jfrog-publish-attest@main
++        env:
++          DEPLOY_REPO: ${{ inputs.deploy-repo }}
++          MAVEN_PARAMETERS: ${{ inputs.maven-parameters }}
++        run: |
++          jf mvn-config --repo-deploy-releases="${DEPLOY_REPO}" --repo-deploy-snapshots="${DEPLOY_REPO}"
++          jf mvn -B -e deploy ${MAVEN_PARAMETERS}
++
++      - name: Locate the distribution in Artifactory
++        if: ${{ steps.check-version.outputs.snapshot == 'true' }}
++        id: distribution
++        env:
++          DISTRIBUTION: ${{ inputs.distribution-path }}
++        run: |
++          sha=$(sha256sum $(ls ${DISTRIBUTION}) | cut -d' ' -f1)
++          subject=$(jf rt curl -s -XPOST /api/search/aql -H "Content-Type: text/plain" \
++            -d "items.find({\"sha256\":\"${sha}\"}).include(\"repo\",\"path\",\"name\")" \
++            | jq -r '.results[0] // error("distribution not found in Artifactory") | "\(.repo)/\(.path)/\(.name)"')
++          echo "subject-name=${subject}" >> "${GITHUB_OUTPUT}"
++          echo "subject-digest=sha256:${sha}" >> "${GITHUB_OUTPUT}"
++
++      - name: Attest the distribution provenance
++        if: ${{ steps.check-version.outputs.snapshot == 'true' }}
++        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
 +        with:
++          subject-name: ${{ steps.distribution.outputs.subject-name }}
++          subject-digest: ${{ steps.distribution.outputs.subject-digest }}
++
++      - name: Attest the distribution SBOM
++        if: ${{ steps.check-version.outputs.snapshot == 'true' }}
++        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
++        with:
++          subject-name: ${{ steps.distribution.outputs.subject-name }}
++          subject-digest: ${{ steps.distribution.outputs.subject-digest }}
 +          sbom-path: ${{ inputs.sbom-path }}
-+          attest: ${{ inputs.attest }}
-+          evidence: ${{ inputs.evidence }}
 diff --git a/README.md b/README.md
-index 58b1c80..e2d7fc2 100644
+index 58b1c80..fb6c8aa 100644
 --- a/README.md
 +++ b/README.md
 @@ -189,20 +189,20 @@ It requires the following inputs:
@@ -1068,7 +847,7 @@ index 58b1c80..e2d7fc2 100644
      uses: e-CODEX/workflows/.github/workflows/docker-build-push.yaml@main
      with:
        image-name: 'my-application'
-@@ -210,28 +210,69 @@ jobs:
+@@ -210,28 +210,65 @@ jobs:
        registry: 'scm.ecodex.eu/docker'
  ```
  
@@ -1082,9 +861,6 @@ index 58b1c80..e2d7fc2 100644
 +| `refresh`       | Rebuild the released `tag` with fresh base images and no cache, overwriting its image | No       | false                  |
 +| `floating-tags` | Refresh only: also move `<major>.<minor>` and `<major>`                               | No       | false                  |
 +| `latest`        | Refresh only: also move `latest`                                                      | No       | false                  |
-+
-+> [!NOTE]
-+> The workflow generates the tags `edge` (develop), `latest` + `1.2.3`, `1.2`, `1` (releases) and the short SHA.
  
 -| Name          | Description                                      | Required | Default                |
 -| ------------- | ------------------------------------------------ | -------- | ---------------------- |
@@ -1092,20 +868,23 @@ index 58b1c80..e2d7fc2 100644
 -| `tag`         | The tag to checkout (optional)                   | No       | -                      |
 -| `environment` | Deployment environment                           | No       | 'development'          |
 -| `registry`    | Docker registry to push images to               | No       | 'scm.ecodex.eu/docker' |
-+#### Refreshing a released image (security fixes without a new release)
++> [!NOTE]
++> The workflow generates the tags `edge` (develop), `latest` + `1.2.3`, `1.2`, `1` (releases) and the short SHA.
  
 -> [!IMPORTANT]
 -> This workflow requires OIDC authentication to be configured for the JFrog registry.
-+With `refresh: true` the image of the released `tag` is rebuilt from that git tag with `--pull --no-cache`
-+(newest base image and OS packages, same application source) and pushed over the existing `1.2.3` tag.
-+`1.2`, `1` and `latest` are only moved when `floating-tags` / `latest` are set, so an old release line never takes
-+over the tags of a newer one. The OIDC identity needs *Delete/Overwrite* permission on the Docker repository.
++#### Refreshing a released image (security fixes without a new release)
  
 -> [!NOTE]
 -> The workflow automatically generates different tags:
 -> - `edge` for pushes to develop branch
 -> - `latest`, semantic version tags (e.g., `1.2.3`, `1.2`, `1`) for version tags
 -> - Short SHA for all pushes
++With `refresh: true` the image of the released `tag` is rebuilt from that git tag with `--pull --no-cache`
++(newest base image and OS packages, same application source) and pushed over the existing `1.2.3` tag.
++`1.2`, `1` and `latest` are only moved when `floating-tags` / `latest` are set, so an old release line never takes
++over the tags of a newer one. The OIDC identity needs *Delete/Overwrite* permission on the Docker repository.
++
 +```yaml
 +on:
 +  workflow_dispatch:
@@ -1129,21 +908,17 @@ index 58b1c80..e2d7fc2 100644
 +
 +### JFrog CLI publishing, SBOMs and attestations
 +
-+The Maven and Gradle publish workflows deploy with the JFrog CLI (`jf mvn deploy` / `jf gradle artifactoryPublish`)
-+using GitHub OIDC (`jfrog/setup-jfrog-cli`, pinned JFrog CLI version), then the
-+[`jfrog-publish-attest`](.github/actions/jfrog-publish-attest/action.yaml) action:
++The Maven and Gradle publish workflows deploy with the JFrog CLI (`jf mvn deploy` / `jf gradle artifactoryPublish`),
++authenticated with GitHub OIDC through `jfrog/setup-jfrog-cli`. The CycloneDX SBOM is deployed with the artifacts
++(Maven: `cyclonedx-maven-plugin`, Gradle: uploaded next to the distribution as `<distribution>-cyclonedx.json`).
 +
-+1. adds git and environment details and publishes the build-info (`jf rt build-publish`);
-+2. lists every artifact of the build-info (AQL) and creates a GitHub build-provenance attestation and a
-+   CycloneDX SBOM attestation for all of them (subject names are the Artifactory paths);
-+3. attaches both attestations to the deployed artifacts as JFrog evidence (`jf evd create --sigstore-bundle`).
++The main artifact (`distribution-path`, the distribution zip) gets a GitHub build-provenance attestation and an SBOM
++attestation, whose subject is the zip's path in Artifactory. At the end of the job `setup-jfrog-cli` publishes the
++build-info (with git details) and attaches both attestations to the zip as JFrog evidence. JFrog evidence needs the
++Evidence service; without it the post step only logs a warning.
 +
-+The CycloneDX SBOM is deployed next to the artifacts (Maven: attached by `cyclonedx-maven-plugin`; Gradle:
-+uploaded as `<name>-<version>-cyclonedx.json`) and is part of the build-info. Callers must grant
-+`id-token: write` and `attestations: write` (and `contents: write` for dependency submission). Attestations can be verified with `gh attestation verify <file> --repo <owner>/<repo>`.
-+
-+New inputs: `deploy-repo`, `resolve-repo` (empty: keep the build's own repositories), `sbom-path`,
-+`sbom-task` (Gradle), `evidence`. `maven-repo-id` is deprecated and ignored.
++Callers must grant `id-token: write` and `attestations: write` (and `contents: write` for dependency submission).
++New inputs: `deploy-repo`, `distribution-path` (required), `sbom-path`. `maven-repo-id` is deprecated and ignored.
  
  ### Maven Snapshot Publish to Repository
  
@@ -1154,7 +929,7 @@ index 58b1c80..e2d7fc2 100644
  
  #### Maven Snapshot Usage
  
-@@ -245,8 +286,8 @@ jobs:
+@@ -245,8 +282,9 @@ jobs:
      uses: e-CODEX/workflows/.github/workflows/maven-publish-snapshot.yaml@main
      with:
        java-version: 21
@@ -1162,34 +937,38 @@ index 58b1c80..e2d7fc2 100644
 -      maven-repo-id: 'artifactory'
 +      maven-parameters: '-Pproduction'
 +      deploy-repo: 'ecodex-snapshots'
++      distribution-path: 'domibusConnectorDistribution/target/domibusConnector.zip'
  ```
  
  It requires the following inputs:
-@@ -255,7 +296,8 @@ It requires the following inputs:
+@@ -255,7 +293,9 @@ It requires the following inputs:
  | ------------------ | ---------------------------------- | -------- | ------- |
  | `java-version`     | Java version to use for the build. | Yes      | 21      |
  | `maven-parameters` | Extra parameters to pass to Maven  | No       | -       |
 -| `maven-repo-id`    | Maven repository ID                | Yes      | -       |
 +| `deploy-repo`      | Artifactory deployment repository  | No       | 'ecodex-snapshots' |
++| `distribution-path` | Local path of the distribution zip to attest | Yes | - |
 +| `maven-repo-id`    | Deprecated, ignored                | No       | -       |
  
  #### Maven Release Usage
  
-@@ -281,7 +323,7 @@ jobs:
+@@ -281,7 +321,8 @@ jobs:
      uses: e-CODEX/workflows/.github/workflows/maven-publish-release.yaml@main
      with:
        java-version: 21
 -      maven-repo-id: 'releases'
 +      deploy-repo: 'ecodex-releases'
++      distribution-path: 'domibusConnectorDistribution/target/domibusConnector.zip'
  ```
  
  **Maven Validate Release Version:**
-@@ -307,7 +349,8 @@ It requires the following inputs:
+@@ -307,7 +348,9 @@ It requires the following inputs:
  | ------------------ | ---------------------------------- | -------- | ------- |
  | `java-version`     | Java version to use for the build | Yes      | 21      |
  | `maven-parameters` | Extra parameters to pass to Maven  | No       | -       |
 -| `maven-repo-id`    | Maven repository ID                | Yes      | -       |
 +| `deploy-repo`      | Artifactory deployment repository  | No       | 'ecodex-snapshots' |
++| `distribution-path` | Local path of the distribution zip to attest | Yes | - |
 +| `maven-repo-id`    | Deprecated, ignored                | No       | -       |
  
  ### CTP Automated Testing

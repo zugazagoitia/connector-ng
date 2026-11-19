@@ -1,4 +1,4 @@
-From dccf1eda12e94e0a73028ea623332640c057844b Mon Sep 17 00:00:00 2001
+From b2999d429ffc1d46b5393043811fbceda9c466d0 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Thu, 19 Nov 2026 10:11:42 +0000
 Subject: [PATCH] ci: release with JFrog CLI and add docker image refresh
@@ -17,10 +17,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_015o1T6BSTNddWikJrEPdP4m
 ---
  .github/workflows/docker-refresh.yaml   | 52 +++++++++++++++++++++++++
- .github/workflows/publish-release.yaml  | 20 +++++++++-
- .github/workflows/publish-snapshot.yaml | 16 +++++++-
+ .github/workflows/publish-release.yaml  | 21 +++++++++-
+ .github/workflows/publish-snapshot.yaml | 17 +++++++-
  Dockerfile                              |  5 ++-
- 4 files changed, 88 insertions(+), 5 deletions(-)
+ 4 files changed, 90 insertions(+), 5 deletions(-)
  create mode 100644 .github/workflows/docker-refresh.yaml
 
 diff --git a/.github/workflows/docker-refresh.yaml b/.github/workflows/docker-refresh.yaml
@@ -82,10 +82,10 @@ index 00000000..e787645b
 +            latest: ${{ inputs.latest }}
 +            environment: ${{ inputs.environment }}
 diff --git a/.github/workflows/publish-release.yaml b/.github/workflows/publish-release.yaml
-index 2366b5cb..7fd96c69 100644
+index 2366b5cb..7a2ab3dd 100644
 --- a/.github/workflows/publish-release.yaml
 +++ b/.github/workflows/publish-release.yaml
-@@ -10,29 +10,45 @@ on:
+@@ -10,29 +10,46 @@ on:
                  type: choice
                  options:
                      - production
@@ -120,6 +120,7 @@ index 2366b5cb..7fd96c69 100644
              java-version: 21
 -            maven-repo-id: 'releases'
 +            deploy-repo: 'libs-release'
++            distribution-path: 'connector-distribution/build/connector-distribution-*.zip'
              gradle-parameters: '-Partifactory.repo.id=releases'
              tag: ${{ needs.tag-version.outputs.tag }}
              environment: ${{ inputs.environment }}
@@ -134,10 +135,10 @@ index 2366b5cb..7fd96c69 100644
          with:
              image-name: connector-ng
 diff --git a/.github/workflows/publish-snapshot.yaml b/.github/workflows/publish-snapshot.yaml
-index 7c2961ce..2e5e0e9a 100644
+index 7c2961ce..86e5933e 100644
 --- a/.github/workflows/publish-snapshot.yaml
 +++ b/.github/workflows/publish-snapshot.yaml
-@@ -4,16 +4,28 @@ on:
+@@ -4,16 +4,29 @@ on:
      push:
          branches:
              - develop
@@ -158,6 +159,7 @@ index 7c2961ce..2e5e0e9a 100644
              java-version: 21
 -            maven-repo-id: 'artifactory'
 +            deploy-repo: 'libs-snapshot'
++            distribution-path: 'connector-distribution/build/connector-distribution-*.zip'
              gradle-parameters: '-Partifactory.repo.id=artifactory'
      docker:
          name: Build and push the docker image

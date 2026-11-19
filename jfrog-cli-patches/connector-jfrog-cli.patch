@@ -1,4 +1,4 @@
-From 60eb26ab70d71e1c9a7c2516f33689f014edd470 Mon Sep 17 00:00:00 2001
+From 614bb1062871fd4779ae5225e6e6f581910c5ff2 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Thu, 19 Nov 2026 10:11:42 +0000
 Subject: [PATCH] ci: release with JFrog CLI and add docker image refresh
@@ -15,9 +15,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_015o1T6BSTNddWikJrEPdP4m
 ---
  .github/workflows/docker-refresh.yaml   | 52 +++++++++++++++++++++++++
- .github/workflows/publish-release.yaml  | 22 +++++++++--
- .github/workflows/publish-snapshot.yaml | 17 +++++++-
- 3 files changed, 87 insertions(+), 4 deletions(-)
+ .github/workflows/publish-release.yaml  | 23 +++++++++--
+ .github/workflows/publish-snapshot.yaml | 18 ++++++++-
+ 3 files changed, 89 insertions(+), 4 deletions(-)
  create mode 100644 .github/workflows/docker-refresh.yaml
 
 diff --git a/.github/workflows/docker-refresh.yaml b/.github/workflows/docker-refresh.yaml
@@ -79,10 +79,10 @@ index 0000000..4f4dc43
 +      latest: ${{ inputs.latest }}
 +      environment: ${{ inputs.environment }}
 diff --git a/.github/workflows/publish-release.yaml b/.github/workflows/publish-release.yaml
-index 067adda..ff0ceb6 100644
+index 067adda..3dafdfb 100644
 --- a/.github/workflows/publish-release.yaml
 +++ b/.github/workflows/publish-release.yaml
-@@ -10,29 +10,45 @@ on:
+@@ -10,29 +10,46 @@ on:
          type: choice
          options:
            - production
@@ -116,6 +116,7 @@ index 067adda..ff0ceb6 100644
        java-version: 21
 -      maven-repo-id: 'releases'
 +      deploy-repo: 'ecodex-releases'
++      distribution-path: 'domibusConnectorDistribution/target/domibusConnector.zip'
        maven-parameters: '-P production,oracle'
        tag: ${{ needs.tag-version.outputs.tag }}
        environment: ${{ inputs.environment }}
@@ -132,10 +133,10 @@ index 067adda..ff0ceb6 100644
        image-name: connector
        tag: ${{ needs.tag-version.outputs.tag }}
 diff --git a/.github/workflows/publish-snapshot.yaml b/.github/workflows/publish-snapshot.yaml
-index b405c69..6ffe0dd 100644
+index b405c69..3b3370e 100644
 --- a/.github/workflows/publish-snapshot.yaml
 +++ b/.github/workflows/publish-snapshot.yaml
-@@ -1,15 +1,30 @@
+@@ -1,15 +1,31 @@
 +name: Publish Snapshot
 +
  on:
@@ -157,6 +158,7 @@ index b405c69..6ffe0dd 100644
        java-version: 21
 -      maven-repo-id: 'snapshots'
 +      deploy-repo: 'ecodex-snapshots'
++      distribution-path: 'domibusConnectorDistribution/target/domibusConnector.zip'
        maven-parameters: '-Pproduction'
    docker:
 +    name: Build and push the docker image

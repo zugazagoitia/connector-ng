@@ -19,9 +19,10 @@ format.
     image in Artifactory as evidence. `setup-jfrog-cli` also publishes the build-info at the end of the job;
   - a `refresh` mode (see below).
 - `maven-publish-*.yaml` / `gradle-publish-*.yaml`: these deploy with `jf mvn deploy` / `jf gradle artifactoryPublish`
-  (OIDC, no settings.xml credentials) and publish the build-info. The CycloneDX SBOM is deployed with the artifacts.
-  Every artifact gets a GitHub provenance attestation and an SBOM attestation, recorded in Artifactory as JFrog evidence.
-  The new action `.github/actions/jfrog-publish-attest` does this.
+  (OIDC, no settings.xml credentials). The CycloneDX SBOM is deployed with the artifacts (Maven: cyclonedx plugin;
+  Gradle: uploaded next to the zip as `<zip>-cyclonedx.json`). The distribution zip (new required input
+  `distribution-path`) gets a GitHub provenance attestation and an SBOM attestation. `setup-jfrog-cli` publishes the
+  build-info and records both attestations as JFrog evidence on the zip at the end of the job.
 - `setup-jfrog-cli` v5.3.5 with the JFrog CLI pinned to 2.133.0. All actions are pinned by SHA.
 
 **connector / connector-ng**
@@ -77,12 +78,20 @@ grep -rl 'e-CODEX/workflows/' .github | xargs sed -i 's#e-CODEX/workflows/#zugaz
   - Deploy on `libs-release`/`libs-snapshot` (connector-ng), `ecodex-releases`/`ecodex-snapshots` (connector) and the docker repos;
   - **Delete/Overwrite on the docker repos**, because a refresh overwrites a tag;
   - permission to publish build-info and to annotate (evidence).
-- JFrog evidence needs the Evidence service (Enterprise+). Without it the evidence steps only warn; `evidence: false`
-  skips them in the Maven/Gradle workflows. GitHub attestations are created either way.
+- JFrog evidence needs the Evidence service (Enterprise+). Without it `setup-jfrog-cli` only logs a warning at the end
+  of the job. GitHub attestations are created either way.
+
+## Docker attestation: where it is stored
+
+Before, the GitHub attestation was also pushed into the Docker registry as an OCI "referrer" of the image, so
+registry-only tools (`cosign`, `oras`, `gh attestation verify --bundle-from-oci`) could find it. Now it is stored in
+GitHub's attestation store (`gh attestation verify oci://<image>@<digest> --repo <owner>/<repo>`) and as JFrog evidence
+on the image in Artifactory. The image still embeds BuildKit's own SBOM and provenance. `actions/attest` cannot push a
+subject named `oci://...`, which is the name JFrog's automatic evidence needs. Doing both would take a second
+attestation step with `push-to-registry: true`.
 
 ## Not run end-to-end
 
 These patches have not been run against scm.ecodex.eu. Check these on the first runs:
 - `jf gradle` with Gradle 9.8. It runs with `--no-configuration-cache`; the snapshot workflow on `develop` will show it first.
-- JFrog evidence for Maven/Gradle attaches one multi-subject attestation to each artifact.
 - Overwriting a docker tag needs the permission listed above.
