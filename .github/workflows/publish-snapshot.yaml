@@ -14,7 +14,6 @@ jobs:
             contents: write          # dependency submission
             id-token: write          # OIDC to JFrog and Sigstore
             attestations: write
-            artifact-metadata: write
         # TODO: pin to a commit SHA once the JFrog CLI changes are merged in e-CODEX/workflows
         uses: e-CODEX/workflows/.github/workflows/gradle-publish-snapshot.yaml@main
         with:
@@ -27,7 +26,6 @@ jobs:
             contents: read
             id-token: write
             attestations: write
-            artifact-metadata: write
         uses: e-CODEX/workflows/.github/workflows/docker-build-push.yaml@main
         with:
             image-name: connector-ng

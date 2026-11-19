@@ -42,7 +42,6 @@ jobs:
             contents: read
             id-token: write
             attestations: write
-            artifact-metadata: write
         uses: e-CODEX/workflows/.github/workflows/docker-build-push.yaml@main
         with:
             image-name: connector-ng
