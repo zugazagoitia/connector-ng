@@ -19,6 +19,7 @@ jobs:
         with:
             java-version: 21
             deploy-repo: 'libs-snapshot'
+            distribution-path: 'connector-distribution/build/connector-distribution-*.zip'
             gradle-parameters: '-Partifactory.repo.id=artifactory'
     docker:
         name: Build and push the docker image

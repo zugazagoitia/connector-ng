@@ -39,6 +39,7 @@ jobs:
         with:
             java-version: 21
             deploy-repo: 'libs-release'
+            distribution-path: 'connector-distribution/build/connector-distribution-*.zip'
             gradle-parameters: '-Partifactory.repo.id=releases'
             tag: ${{ needs.tag-version.outputs.tag }}
             environment: ${{ inputs.environment }}
