@@ -1,0 +1,172 @@
+From 60eb26ab70d71e1c9a7c2516f33689f014edd470 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 19 Nov 2026 10:11:42 +0000
+Subject: [PATCH] ci: release with JFrog CLI and add docker image refresh
+ workflow
+
+- publish-release / publish-snapshot: grant the permissions needed for OIDC,
+  attestations and artifact storage records, deploy with the JFrog CLI based
+  shared workflows.
+- docker-refresh: manual workflow rebuilding the image of a released tag with
+  fresh base images and overwriting the existing tag, to fix image
+  vulnerabilities without releasing new software.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_015o1T6BSTNddWikJrEPdP4m
+---
+ .github/workflows/docker-refresh.yaml   | 52 +++++++++++++++++++++++++
+ .github/workflows/publish-release.yaml  | 22 +++++++++--
+ .github/workflows/publish-snapshot.yaml | 17 +++++++-
+ 3 files changed, 87 insertions(+), 4 deletions(-)
+ create mode 100644 .github/workflows/docker-refresh.yaml
+
+diff --git a/.github/workflows/docker-refresh.yaml b/.github/workflows/docker-refresh.yaml
+new file mode 100644
+index 0000000..4f4dc43
+--- /dev/null
++++ b/.github/workflows/docker-refresh.yaml
+@@ -0,0 +1,52 @@
++name: Refresh Docker Image
++
++# Rebuilds the Docker image of an already released version from its git tag, with the newest base
++# images and OS packages, and pushes it over the existing image tag in the e-CODEX Docker registry.
++# Use it to fix image vulnerabilities without releasing a new version of the software.
++
++on:
++  workflow_dispatch:
++    inputs:
++      tag:
++        description: 'Released version (git tag) to rebuild, e.g. 7.1.0'
++        required: true
++        type: string
++      floating-tags:
++        description: 'Also move the <major>.<minor> and <major> tags (only for the newest patch of that line)'
++        required: false
++        default: false
++        type: boolean
++      latest:
++        description: "Also move the 'latest' tag (only for the newest release)"
++        required: false
++        default: false
++        type: boolean
++      environment:
++        description: 'Environment to deploy to'
++        required: true
++        default: 'production'
++        type: choice
++        options:
++          - production
++
++permissions: {}
++
++concurrency:
++  group: docker-refresh-${{ inputs.tag }}
++  cancel-in-progress: false
++
++jobs:
++  refresh:
++    name: Rebuild and push the docker image ${{ inputs.tag }}
++    permissions:
++      contents: read
++      id-token: write
++      attestations: write
++    uses: e-CODEX/workflows/.github/workflows/docker-build-push.yaml@main
++    with:
++      image-name: connector
++      tag: ${{ inputs.tag }}
++      refresh: true
++      floating-tags: ${{ inputs.floating-tags }}
++      latest: ${{ inputs.latest }}
++      environment: ${{ inputs.environment }}
+diff --git a/.github/workflows/publish-release.yaml b/.github/workflows/publish-release.yaml
+index 067adda..ff0ceb6 100644
+--- a/.github/workflows/publish-release.yaml
++++ b/.github/workflows/publish-release.yaml
+@@ -10,29 +10,45 @@ on:
+         type: choice
+         options:
+           - production
++
++permissions: {}
++
+ jobs:
+   check-version:
+     name: Check the current release version
++    permissions:
++      contents: read
+     uses: e-CODEX/workflows/.github/workflows/maven-validate-release-version.yaml@main
+   tag-version:
+     name: Tag the current release version
+     needs: check-version
++    permissions:
++      contents: write
+     uses: e-CODEX/workflows/.github/workflows/maven-tag-release-version.yaml@main
+     with:
+       environment: ${{ inputs.environment }}
+   publish-version:
+     name: Publish the current release version
+-    uses: e-CODEX/workflows/.github/workflows/maven-publish-release.yaml@main
+     needs: tag-version
++    permissions:
++      contents: write          # dependency submission
++      id-token: write          # OIDC to JFrog and Sigstore
++      attestations: write
++    uses: e-CODEX/workflows/.github/workflows/maven-publish-release.yaml@main
+     with:
+       java-version: 21
+-      maven-repo-id: 'releases'
++      deploy-repo: 'ecodex-releases'
+       maven-parameters: '-P production,oracle'
+       tag: ${{ needs.tag-version.outputs.tag }}
+       environment: ${{ inputs.environment }}
+   publish-docker:
+-    uses: e-CODEX/workflows/.github/workflows/docker-build-push.yaml@main
++    name: Build and push the docker image
+     needs: tag-version
++    permissions:
++      contents: read
++      id-token: write
++      attestations: write
++    uses: e-CODEX/workflows/.github/workflows/docker-build-push.yaml@main
+     with:
+       image-name: connector
+       tag: ${{ needs.tag-version.outputs.tag }}
+diff --git a/.github/workflows/publish-snapshot.yaml b/.github/workflows/publish-snapshot.yaml
+index b405c69..6ffe0dd 100644
+--- a/.github/workflows/publish-snapshot.yaml
++++ b/.github/workflows/publish-snapshot.yaml
+@@ -1,15 +1,30 @@
++name: Publish Snapshot
++
+ on:
+   push:
+     branches:
+       - develop
++
++permissions: {}
++
+ jobs:
+   publish:
++    name: Publish the snapshot
++    permissions:
++      contents: write          # dependency submission
++      id-token: write          # OIDC to JFrog and Sigstore
++      attestations: write
+     uses: e-CODEX/workflows/.github/workflows/maven-publish-snapshot.yaml@main
+     with:
+       java-version: 21
+-      maven-repo-id: 'snapshots'
++      deploy-repo: 'ecodex-snapshots'
+       maven-parameters: '-Pproduction'
+   docker:
++    name: Build and push the docker image
++    permissions:
++      contents: read
++      id-token: write
++      attestations: write
+     uses: e-CODEX/workflows/.github/workflows/docker-build-push.yaml@main
+     with:
+       image-name: connector
+-- 
+2.43.0
+
